@@ -138,3 +138,15 @@ To be honest, I tried publishing the app to the [F-Droid](https://f-droid.org) a
 ... And I keep failing and failing.
 
 So, [I need your help](https://www.pavelchcepsat.cz/2026/09/02/a-cry-for-help-with-f-droid/)
+
+### Submitting issues
+I am trying to make the [Issues](https://github.com/pavel-janicek/fp-client/issues) tab as single source of truth of known issues with this app.
+
+Best is to check there and see if any open issue resembles yours. If none do, read next chaprer "Before submitting" to see what I would like you to do.
+
+You can also reach me at [FitPub Uers Matrix channel](https://matrix.to/#/#fitpub-users:matrix.org)
+
+### Before submitting issue
+Please check, that your app is running at the latest release.
+
+And until I reach at least one official approaval from some stores, also please try this on your phone: Settings - Appliicatons - FP Client - Delete data
