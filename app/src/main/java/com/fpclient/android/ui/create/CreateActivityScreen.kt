@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.create
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +42,7 @@ fun CreateActivityScreen(
     appViewModel: AppViewModel,
     onDone: () -> Unit,
     onCancel: () -> Unit,
+    sharedUri: Uri? = null,
 ) {
     val vm: CreateViewModel = viewModel(factory = CreateViewModel.factory(container))
     val ui by vm.ui.collectAsState()
@@ -81,7 +83,9 @@ fun CreateActivityScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            if (mode == 0) UploadForm(ui = ui, vm = vm) else ManualForm(vm = vm)
+            // A file shared into the app lands on the upload form pre-selected; the
+            // segmented control still lets the user switch to manual entry.
+            if (mode == 0) UploadForm(ui = ui, vm = vm, sharedUri = sharedUri) else ManualForm(vm = vm)
         }
     }
 }
