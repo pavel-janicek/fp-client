@@ -1,15 +1,20 @@
 package com.fpclient.android.ui.timeline
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,9 +27,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -177,13 +187,45 @@ fun TimelineScreen(
     val tab by vm.tab.collectAsState()
     val search by vm.search.collectAsState()
     val serverUrl = ui.serverUrl
+    var searchVisible by rememberSaveable { mutableStateOf(false) }
+
+    // Re-fetch when an activity was created locally so the fresh entry shows up right
+    // away instead of looking like the save "didn't stick".
+    val activitiesVersion by container.activitiesVersion.collectAsState()
+    LaunchedEffect(activitiesVersion) {
+        if (activitiesVersion > 0) vm.refresh()
+    }
 
     Scaffold(
         modifier = modifier,
+        // The parent scaffold already pads this screen above the bottom navigation bar;
+        // re-applying the system bar insets here doubled the bottom space ("empty screen").
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("FP Client") },
                 actions = {
+                    // Toggles the "Search activities" input; sits left of the reload icon.
+                    IconButton(
+                        onClick = {
+                            if (searchVisible) {
+                                searchVisible = false
+                                // Closing the search clears the filter so the feed is not
+                                // left narrowed with no visible reason.
+                                if (search.isNotBlank()) {
+                                    vm.setSearch("")
+                                    vm.submitSearch()
+                                }
+                            } else {
+                                searchVisible = true
+                            }
+                        },
+                    ) {
+                        Icon(
+                            if (searchVisible) Icons.Filled.Close else Icons.Filled.Search,
+                            contentDescription = if (searchVisible) "Close search" else "Search activities",
+                        )
+                    }
                     // Show a spinner while a refresh is in flight so the button gives feedback.
                     IconButton(onClick = { vm.refresh() }) {
                         if (ui.isRefreshing) {
@@ -222,15 +264,19 @@ fun TimelineScreen(
                     )
                 }
             }
-            OutlinedTextField(
-                value = search,
-                onValueChange = vm::setSearch,
-                label = { Text("Search activities") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-            )
+            if (searchVisible) {
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = vm::setSearch,
+                    label = { Text("Search activities") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { vm.submitSearch() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
             androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = ui.isRefreshing,
                 onRefresh = vm::refresh,

@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: Release 1.3.5
-Current app version: **`1.3.5`** (`versionCode` 28)
+Assessment date: 2026-08-25 · Last updated: Release 1.3.6
+Current app version: **`1.3.6`** (`versionCode` 29)
 
 ## Current state
 
@@ -53,8 +53,8 @@ The roadmap is grouped into three release gates:
 | Gate | Contents | Ships as |
 |---|---|---|
 | Core finalization | Iterations 1–6 | **v1.0** |
-| On-device recording ("Record" feature) | Iteration 7 | **v2.0** |
-| Wear OS companion app | Iteration 8 | **v3.0** |
+| Multilingual support + on-device recording ("Record" feature) | Iterations 7–8 | **v2.0** |
+| Wear OS companion app | Iteration 9 | **v3.0** |
 
 Pre-1.0 policy: each completed roadmap iteration bumps the app to
 `0.<N>.0` (`versionName`) and increments `versionCode` by one, so every
@@ -98,8 +98,9 @@ Progress ledger (kept up to date per iteration):
 | **1.3.2** | F-Droid submission — reproducibility fix: the reference binary previously pinned to the pre-merge `Release-1.3` commit failed F-Droid's byte-compare (only `META-INF/version-control-info.textproto` differed). Cut as a fresh release built from the merged `main` commit so the uploaded `app-release.apk` matches the F-Droid buildserver output exactly. No user-facing changes. | ✅ done |
 | **1.3.4** | **API compatibility update for FitPub `main` (post 1.3.2):** web/consumer endpoints migrated under `/api/web/` (auth, timeline, activities, likes/comments, users, analytics, notifications, privacy-zones, heatmap, batch-import, push `vapid-key`); the session JWT is now delivered and read only as the `JWT_TOKEN` HttpOnly cookie — `Authorization: Bearer <token>` is no longer accepted, so the app now authenticates via cookie + CSRF instead of a bearer header; CSRF protection now enforced on every mutating call (`X-XSRF-TOKEN` header + `XSRF-TOKEN` cookie, primed via a registration-status GET). Removed the deprecated `GET /api/activities/{id}/track` endpoint; the activity-detail map now sources its polyline segments from the `simplifiedTrack` field embedded in `ActivityDTO`. Published federation routes (`GET /api/activities/{id}`, `GET /api/activities/{id}/image`) are preserved. Bump versionCode 27 / versionName 1.3.4; `FP-Client/1.3.4` user-agent. | ✅ done |
 | **1.3.5** | **GUI overhaul:** "Change instance" promoted to a full `OutlinedButton` on the login screen for better visibility; comment composer on the activity-detail screen no longer hidden by the soft keyboard (body uses `imePadding()` + the composer's text field reports focus so the `LazyColumn` scrolls it into view); timeline feed switches (Following / Public / My activities) restyled as a floating `ScrollableTabRow` matching the analytics tab; usernames across timeline cards and follow lists now carry the full federated `@username@instance` handle (stored in DTOs via `ActorHandle.full`) so remote actors keep their home instance; activity-detail author card opens a profile search by the full handle; timeline reload button wired to `refresh()` plus pull-to-refresh gesture via `PullToRefreshBox`. Bump versionCode 28 / versionName 1.3.5; `FP-Client/1.3.5` user-agent. | ✅ done |
-| **2.0** | + Iteration 7 — record workouts on-device and share | ⬜ |
-| **3.0** | + Iteration 8 — FitPub Wear companion app | ⬜ |
+| **1.3.6** | **Usability & F-Droid readiness:** all mutating API calls fixed against `403 Forbidden` when the CSRF token went stale — the session interceptor now primes the token from the public `/login` page, caches it per instance and retries a rejected call once with a fresh token; manual entry's date field is a Material3 date picker instead of a typed `YYYY-MM-DD` string; show/hide password toggles on the login screen, and the change-password dialog fields are now masked (they were plain text) with the same toggles; file upload button shows the picked file's real display name (via `OpenableColumns.DISPLAY_NAME`) instead of a cryptic content-URI id like `msf:2323`; the app registers for `ACTION_SEND`/`ACTION_VIEW` of GPX/FIT track files so sharing a file from a file manager opens the upload form with the file pre-selected; timeline search moved from a permanent input field to a toggleable icon left of the reload button (with a working IME "Search" action) and the doubled bottom inset on the timeline tab is fixed. `VERSION_CHECKLIST.md` extended with the F-Droid/fastlane procedures (per-versionCode changelog, unsigned-build check). Bump versionCode 29 / versionName 1.3.6; `FP-Client/1.3.6` user-agent. | ✅ done |
+| **2.0** | + Iterations 7+8 — community-driven translations; record workouts on-device and share | ⬜ |
+| **3.0** | + Iteration 9 — FitPub Wear companion app | ⬜ |
 
 ## Roadmap — one prompt per iteration
 
@@ -185,9 +186,101 @@ Progress ledger (kept up to date per iteration):
 > Retrofit/osmdroid; add release signing config (via env vars); bump
 > versionName/versionCode; final lint cleanup; produce a signed release APK."
 
-> 🚩 Release gate: this iteration ships as **v2.0** (everything through Iteration 6 was v1.0).
+> 🚩 Release gate: this and the following iteration ship as **v2.0** (everything through Iteration 6 was v1.0).
 
-### Iteration 7 — On-device activity recording ("Record" feature)
+### Iteration 7 — Multilingual support (community-driven translations)
+Goal: make every user-visible word in the app translatable and let the FitPub
+community translate it without ever touching code. Chosen platform: **Weblate**
+(open source, self-hostable, free hosting for free-software projects, native
+GitHub integration) — it matches this project's F-Droid / de-googled audience,
+and the same workflow also translates the Google Play and F-Droid listings via
+the existing `fastlane/metadata/android/` directory.
+
+Suggested split into sub-steps (one prompt each if done iteratively):
+
+**7a — String externalization audit**
+> "Make the app fully localizable: sweep every screen (Compose `Text`,
+> `contentDescription`, dialogs, snackbars, notification texts — including the
+> future TrackRecordingService notification from Iteration 8, `ErrorMessages.kt`,
+> activity-type labels, permission rationales) and move every user-visible
+> literal into `res/values/strings.xml`, replacing in code with
+> `stringResource(R.string.…)` / `pluralStringResource` in composables and
+> `context.getString(...)` in ViewModels/services. Never build sentences by
+> concatenating translated fragments — use positional formatted arguments
+> (`%1$s`) so word order can differ per language, and `<plurals>` for anything
+> countable (activities, comments, followers, kilometers). Add per-app language
+> selection working on all supported APIs: `localeConfig` (locales_config.xml) +
+> native `LocaleManager` on API 33+, backported via
+> `AppCompatDelegate.setApplicationLocales` (appcompat 1.6) below, exposed as
+> Settings → Appearance → Language with a 'System default' entry. Turn lint
+> `MissingTranslation`/`ExtraTranslation` into errors, and verify no screen
+> regresses with Android pseudolocales (en-XA, ar-XB) before considering the
+> audit done."
+
+**7b — Weblate project & component setup**
+> "Set up a community translation workflow on Weblate (self-hosted, or the free
+> for free-software hosted.weblate.org / translate.codeberg.org): create project
+> 'FP Client' with two components — (1) 'Android app' translating
+> `app/src/main/res/values/strings.xml` across `values-<lang>/` directories,
+> and (2) 'Store metadata' translating
+> `fastlane/metadata/android/en-US/` (title.txt, short_description.txt,
+> full_description.txt, changelogs/) across per-locale metadata directories.
+> Configure the Weblate↔GitHub sync so translator commits land via a
+> `translations` branch reviewed before merge; enable translation memory, a
+> glossary for FitPub-specific terms (activity, boost, federation, instance,
+> privacy zone, kudos), and the 'needs editing' review workflow so a change to
+> the English source automatically flags affected translations for rework."
+
+**7c — CI & sync guardrails**
+> "Add GitHub Actions guardrails so translations can never break the build: a
+> lint step failing on hardcoded strings or missing-source translations; a
+> placeholder-consistency script asserting every locale keeps the same `%1$s`-style
+> arguments and plural categories as the English source; and a scheduled job that
+> pulls completed Weblate translations (via its REST API or a git pull of the
+> translations branch), builds the app, and opens a PR when new strings arrive.
+> `values/strings.xml` (English) is the single source of truth and is only ever
+> changed through normal code PRs — translator files under `values-*/` are
+> written exclusively by the Weblate sync. Add a CI pseudolocale build to catch
+> layout overflow early, plus a longest-string smoke check (German/Dutch
+> typically the worst case for expansion)."
+
+**7d — Culturalization beyond strings**
+> "Audit the non-string side of localization: dates/times rendered via localized
+> `java.time` formatters rather than hardcoded patterns; decouple the units
+> preference (km/mi in Format.kt / Settings) from the device locale — an athlete
+> may want imperial units in a German UI and vice versa, so units must remain an
+> independent setting; make layouts tolerate text expansion (wrapping instead of
+> truncation, no fixed-width labels, autotexts sized for the longest locale); use
+> `start`/`end` (never `left`/`right`) and AutoMirrored icons so RTL languages
+> mirror correctly; keep map tiles and osmdroid language-neutral; document in the
+> README which languages ship and how the build consumes translations."
+
+**7e — Launch & community call**
+> "Seed Weblate with 2–3 languages translated by the maintainer (e.g. Czech and
+> German, matching the project's audience) so new translators see a working
+> example instead of an empty project; add a 'Help translate FP Client' entry to
+> Settings → About linking to the Weblate project, and a README section with
+> translator instructions (join Weblate, claim a language, review workflow);
+> ship localized fastlane changelogs and store listings from the next release
+> onward; announce the call for language maintainers in the FitPub Matrix room
+> and GitHub Discussions. Record the shipped locale list in PLAN.md."
+
+Notes:
+- Why Weblate and not Crowdin / Transifex / POEditor: those are free for OSS but
+  proprietary; Weblate is AGPL, self-hostable, and its VCS-native workflow means
+  translations arrive as ordinary git commits — no proprietary tooling anywhere in
+  the F-Droid build-from-source pipeline.
+- Keep the translation surface small and sustainable: prefer reusing existing
+  strings over one-off variants, and keep `full_description.txt` short — every
+  extra word is a word a volunteer must translate and re-review forever.
+- English source strings carry developer-readable `comments` (the `<!-- … -->`
+  above each string) explaining context and length constraints — translators see
+  these in Weblate; a string without context WILL be mistranslated.
+- This iteration deliberately precedes Iteration 8 so the recording UI and its
+  foreground-service notification are born translatable rather than retrofitted.
+
+
+### Iteration 8 — On-device activity recording ("Record" feature)
 Goal: start an exercise inside the app, record the track with the phone's GPS
 while the screen is off / app is backgrounded, then review and share the
 resulting activity to the configured FitPub instance. This is a new feature
@@ -195,7 +288,7 @@ resulting activity to the configured FitPub instance. This is a new feature
 
 Suggested split into sub-steps (one prompt each if done iteratively):
 
-**7a — Permissions & service skeleton**
+**8a — Permissions & service skeleton**
 > "Add location-recording groundwork: manifest entries for ACCESS_FINE_LOCATION
 > (+ COARSE), FOREGROUND_SERVICE, FOREGROUND_SERVICE_LOCATION, POST_NOTIFICATIONS
 > (API 33+), and a declared foreground Service with
@@ -205,7 +298,7 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > ongoing notification (elapsed time, pause & stop actions). Verify the service
 > survives backgrounding and process death restarts into the right state."
 
-**7b — Tracking engine**
+**8b — Tracking engine**
 > "Implement GPS tracking inside TrackRecordingService using Android framework
 > LocationManager (the project deliberately avoids Google Play services; revisit
 > only if needed): requestUpdates with ~1–3 s interval / ~2 m min distance,
@@ -216,7 +309,7 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > (elapsed time, distance via haversine sum, current pace, elevation gain with
 > smoothing). Add unit tests for distance/elevation math."
 
-**7c — Recording UI**
+**8c — Recording UI**
 > "Build the Record flow in Compose: entry point from a 'Record' button next to
 > the + on Timeline/Me (new Route RECORD); pre-start screen with activity type
 > picker (reuse ActivityTypes); live recording screen with big elapsed timer,
@@ -225,7 +318,7 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > toggle. Wire UI to the service StateFlow; handle 'recording in progress' state
 > app-wide (e.g., banner + guard against starting a second session)."
 
-**7d — Save & share to FitPub**
+**8d — Save & share to FitPub**
 > "On stop: assemble the recorded session into a GPX 1.1 file (trk/trkseg/trkpt
 > with ele + time; separate trkseg per paused segment) stored in app-private
 > storage; show a post-workout summary screen (stats + mini-map) where the user
@@ -235,7 +328,7 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > offer navigation to the created ActivityDetail. Confirm privacy zones are
 > applied server-side as with any uploaded track."
 
-**7e — Polish & edge cases**
+**8e — Polish & edge cases**
 > "Handle battery/Doze behavior (foreground service exemption check, guidance to
 > disable battery optimization), GPS-off prompts, no-fix handling (warn when no
 > point captured for N minutes), discard confirmation dialog, low-storage
@@ -250,7 +343,7 @@ Notes:
 
 > 🚩 Release gate: this iteration ships as **v3.0**.
 
-### Iteration 8 — Wear OS companion app ("FitPub Wear")
+### Iteration 9 — Wear OS companion app ("FitPub Wear")
 Goal: a Wear OS companion module so athletes can leave the phone at home,
 start/record a workout from the wrist using the watch's internal monitors
 (GPS, heart rate, step counter), and have it shared to their FitPub
@@ -260,7 +353,7 @@ the sign-in authority and the upload relay.
 
 Suggested split into sub-steps (one prompt each if done iteratively):
 
-**8a — Module & project scaffolding**
+**9a — Module & project scaffolding**
 > "Create a :wear Wear OS module (build.gradle.kts with com.android.application +
 > wearApp wiring in :app via wearApp/unstable bundled dependency, wear_app.xml
 > pairing metadata, minSdk matching Wear OS 3+ = API 26–30 target latest),
@@ -270,7 +363,7 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > Keep the module independent of :app code except a small :core-shared set or
 > duplicated DTOs — decide and document which."
 
-**8b — Phone↔watch sign-in handshake**
+**9b — Phone↔watch sign-in handshake**
 > "Implement sign-in relay from the mobile app using the Android Data Layer:
 > CapabilityClient advertising 'fitpub_phone' capability, MessageClient handshake
 > when the watch requests credentials, phone responds with serverUrl + bearer
@@ -280,19 +373,19 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > Add 'device signed in as @user' state UI on the watch and a revoke/sign-out
 > path both directions; handle no-phone-paired and stale-token states."
 
-**8c — Watch sensor recording engine**
+**9c — Watch sensor recording engine**
 > "Build WorkoutRecordingService on the watch: a foreground service (location +
 > bodySensors + activityRecognition types) capturing GPS (onboard GNSS via
 > FusedLocationProvider or LocationManager — decide per minSdk/target), heart
 > rate (Health Services androidx.health:health-services-client on Wear OS 3+
 > with SensorManager TYPE_HEART_RATE fallback), step counter/detector, and
-> elapsed time; same state machine semantics as Iteration 7b (recording ⇄
+> elapsed time; same state machine semantics as Iteration 8b (recording ⇄
 > paused → stopped), incremental persistence to survive process death, live
 > StateFlow of HR/distance/pace/steps. Declare BODY_SENSORS (runtime),
 > ACTIVITY_RECOGNITION, location permissions; add availability detection
 > (no-GPS watches degrade gracefully to HR+steps+time)."
 
-**8d — On-watch recording UX**
+**9d — On-watch recording UX**
 > "Compose-for-Wear recording screens optimized for glanceability: big live HR
 > (color-coded zones) + duration + distance on one swipeable screen, map-less
 > by default (save battery; optional breadcrumb view later); start flow with
@@ -301,7 +394,7 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > recents tray; optional Tile ('Start workout') and complication. Handle
 > always-on/ambient rendering with burn-in protection."
 
-**8e — Sync & share to FitPub**
+**9e — Sync & share to FitPub**
 > "Post-workout sync: serialize the recorded session (GPX 1.1 for the track +
 > JSON sidecar or FIT fields for HR series/steps) on the watch; attempt direct
 > multipart upload from the watch when it has connectivity (Wi-Fi/BLE-to-phone/
@@ -312,18 +405,18 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > watch and in the phone app (e.g., banner on Timeline). End-to-end test:
 > record on watch offline → phone comes online → activity appears in FitPub web."
 
-**8f — Hardening & docs**
+**9f — Hardening & docs**
 > "Battery profiling (target: >1h continuous GPS+HR recording), sensor accuracy
 > validation against a reference device, round/chin-offset layout QA on multiple
 > form factors, permission-denial and unpaired-phone flows, README section for
 > the Wear app (pairing, sign-in, what's recorded), and CI build for :wear."
 
 Notes:
-- Reuses concepts and formats from Iteration 7 (state machine, GPX writer,
-  upload plumbing) — implement 7 first; the watch module duplicates rather than
+- Reuses concepts and formats from Iteration 8 (state machine, GPX writer,
+  upload plumbing) — implement 8 first; the watch module duplicates rather than
   shares the tracking engine initially because :wear can't depend on Androidx
   ViewModel/service classes compiled for phone-only APIs without care.
-- Dependency decisions to make explicitly in 8a/8c: Data Layer (play-services-wear)
+- Dependency decisions to make explicitly in 9a/9c: Data Layer (play-services-wear)
   requires Play Services on BOTH devices — acceptable default, but document a
   degoogle'd fallback (direct watch→instance HTTP sign-in via a short-lived
   pairing code shown on the phone) as a stretch goal.

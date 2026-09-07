@@ -11,6 +11,7 @@ import com.fpclient.android.data.repository.PrivacyZoneRepository
 import com.fpclient.android.data.repository.TimelineRepository
 import com.fpclient.android.data.repository.UserRepository
 import com.fpclient.android.data.session.SessionStore
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Hand-rolled service locator (plain object graph) shared across the app. It deliberately
@@ -19,6 +20,12 @@ import com.fpclient.android.data.session.SessionStore
 class AppContainer(context: Context) {
 
     val sessionStore: SessionStore by lazy { SessionStore(context) }
+
+    /**
+     * Bumped whenever the local user creates an activity so list screens (timeline,
+     * profile) can re-fetch instead of showing a stale list that "lost" the entry.
+     */
+    val activitiesVersion = MutableStateFlow(0)
 
     private val apiClient: ApiClient by lazy { ApiClient(context, sessionStore) }
 

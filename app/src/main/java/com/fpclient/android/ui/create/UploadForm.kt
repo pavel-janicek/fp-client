@@ -1,6 +1,8 @@
 package com.fpclient.android.ui.create
 
+import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +20,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -30,18 +32,24 @@ import com.fpclient.android.data.dto.ActivityVisibilities
 import com.fpclient.android.util.TextLimits
 
 @Composable
-fun UploadForm(ui: CreateViewModel.UiState, vm: CreateViewModel) {
+fun UploadForm(ui: CreateViewModel.UiState, vm: CreateViewModel, sharedUri: Uri? = null) {
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var visibility by rememberSaveable { mutableStateOf(ActivityVisibilities.PUBLIC) }
     var pickedName by rememberSaveable { mutableStateOf<String?>(null) }
-    var pickedUri by remember { mutableStateOf<Uri?>(null) }
+    var pickedUri by rememberSaveable { mutableStateOf<Uri?>(sharedUri) }
     val context = LocalContext.current
+
+    // File arriving through the share sheet / "Open with": pre-select it and resolve
+    // its display name for the button label.
+    LaunchedEffect(sharedUri) {
+        if (sharedUri != null) pickedName = resolveDisplayName(context, sharedUri) ?: "File selected"
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             pickedUri = uri
-            pickedName = uri.lastPathSegment?.substringAfterLast('/')
+            pickedName = resolveDisplayName(context, uri) ?: "File selected"
         }
     }
 
@@ -86,4 +94,24 @@ fun UploadForm(ui: CreateViewModel.UiState, vm: CreateViewModel) {
     ) {
         Text(if (ui.busy) "Uploading…" else "Upload activity")
     }
+}
+
+/** Resolves the picked document's display name through the system picker. Content URIs
+ * otherwise expose cryptic internal ids (e.g. "msf:2323") as their last path segment,
+ * which is meaningless to the user. */
+private fun resolveDisplayName(context: Context, uri: Uri): String? = runCatching {
+    context.contentResolver
+        .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { cursor ->
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index >= 0 && cursor.moveToFirst() && !cursor.isNull(index)) {
+                cursor.getString(index).ifBlank { null }
+            } else {
+                null
+            }
+        }
+}.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { name ->
+    // Ignore internal-id-looking segments ("msf:2323", "raw%3A123"); fall back to a
+    // neutral label instead of showing them.
+    name.isNotBlank() && !name.contains(':') && !name.contains("%3A", ignoreCase = true)
 }

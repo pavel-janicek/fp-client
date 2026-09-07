@@ -12,6 +12,14 @@ and follow other athletes.
 
 Built with Kotlin and Jetpack Compose (Material 3).
 
+## 📥 Installation (Google Play Store)
+At this time, the application is in closed beta testing on Google Play Store. Here is how to obtain the app using the store:
+
+1. Become member of [FP Client Google Group](https://groups.google.com/g/fp-client)
+2. Click on the web [to become a tester](https://play.google.com/apps/testing/com.fpclient.android)
+3. Download the app from [Play Store](https://play.google.com/store/apps/details?id=com.fpclient.android)
+4. Use the app actively; it will help me make the app officially available to all Google Play users
+
 ## API compatibility
 
 This client is tested against the **FitPub** `main` branch (snapshot as of 2026-09-01), the
@@ -122,19 +130,21 @@ agent in iterative sessions (see `PLAN.md` for the iteration plan).
 **3. Open the downloaded APK** from your Downloads folder.  
 **4. Confirm installation** and launch the app.
 
-**⚠️ Install at your own risk.** No guarantees, no warranties, no crying if your phone decides to rebel.
 
-## 📥 Installation (Google Play Store)
-At this time, the application is in closed beta testing on Google Play Store. Here is how to obtain the app using the store:
-
-1. Become member of [FP Client Google Group](https://groups.google.com/g/fp-client)
-2. Click on the web [to become a tester](https://play.google.com/apps/testing/com.fpclient.android)
-3. Download the app from [Play Store](https://play.google.com/store/apps/details?id=com.fpclient.android)
-4. Use the app actively; it will help me make the app officially available to all Google Play users
 
 ## And what about other stores?
-To be honest, I tried publishing the app to the [F-Droid](https://f-droid.org) app store.
+Release 1.3.5 is deemed "good enough" by the F-Droid people and [Merge request)(https://gitlab.com/fdroid/fdroiddata/-/merge_requests/47394) is ready to be tested
 
-... And I keep failing and failing.
+You can [help testing it)(https://gitlab.com/fdroid/wiki/-/wikis/Internal/Reviewing-new-apps)
 
-So, [I need your help](https://www.pavelchcepsat.cz/2026/09/02/a-cry-for-help-with-f-droid/)
+### Submitting issues
+I am trying to make the [Issues](https://github.com/pavel-janicek/fp-client/issues) tab as single source of truth of known issues with this app.
+
+Best is to check there and see if any open issue resembles yours. If none do, read next chaprer "Before submitting" to see what I would like you to do.
+
+You can also reach me at [FitPub Uers Matrix channel](https://matrix.to/#/#fitpub-users:matrix.org)
+
+### Before submitting issue
+Please check, that your app is running at the latest release.
+
+And until I reach at least one official approaval from some stores, also please try this on your phone: Settings - Appliicatons - FP Client - Delete data

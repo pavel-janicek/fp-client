@@ -1,9 +1,12 @@
 package com.fpclient.android
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.core.content.IntentCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +46,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = FitPubApplication.container(this)
+        // Only on a fresh launch — on recreation the same intent would re-trigger the share flow.
+        val sharedFileUri = if (savedInstanceState == null) extractSharedFileUri(intent) else null
         setContent {
             FPClientTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -53,11 +58,19 @@ class MainActivity : ComponentActivity() {
                         }
                         !state.configured -> ServerSetupRoute(container)
                         !state.loggedIn && !state.guest -> AuthFlowRoute(container, appViewModel)
-                        else -> MainAppRoute(container, appViewModel)
+                        else -> MainAppRoute(container, appViewModel, sharedFileUri)
                     }
                 }
             }
         }
+    }
+
+    /** File shared into the app (share sheet: ACTION_SEND + EXTRA_STREAM) or opened via
+     * "Open with" (ACTION_VIEW with a content URI); null for a normal launch. */
+    private fun extractSharedFileUri(intent: Intent?): Uri? = when (intent?.action) {
+        Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+        Intent.ACTION_VIEW -> intent.data
+        else -> null
     }
 }
 
@@ -167,16 +180,28 @@ private fun RegisterRoute(container: AppContainer, onBack: () -> Unit) {
 }
 
 @Composable
-private fun MainAppRoute(container: AppContainer, appViewModel: AppViewModel) {
+private fun MainAppRoute(
+    container: AppContainer,
+    appViewModel: AppViewModel,
+    sharedFileUri: Uri? = null,
+) {
     val navController = rememberNavController()
-    FitPubNavGraph(navController = navController, container = container, appViewModel = appViewModel)
+    FitPubNavGraph(navController = navController, container = container, appViewModel = appViewModel, sharedFileUri = sharedFileUri)
 }
 @Composable
 private fun FitPubNavGraph(
     navController: NavHostController,
     container: AppContainer,
     appViewModel: AppViewModel,
+    sharedFileUri: Uri? = null,
 ) {
+    // A file arrived through the share sheet / "Open with": open the upload form with
+    // that file pre-selected once, right after the main screen is up.
+    if (sharedFileUri != null) {
+        LaunchedEffect(sharedFileUri) {
+            navController.navigate(Routes.createWithSharedUri(sharedFileUri.toString()))
+        }
+    }
     NavHost(navController = navController, startDestination = Routes.MAIN) {
         composable(Routes.MAIN) {
             com.fpclient.android.ui.main.MainScaffold(
@@ -222,10 +247,12 @@ private fun FitPubNavGraph(
                 onOpenFollowing = { u -> navController.navigate(Routes.followList(u, "following")) },
             )
         }
-        composable(Routes.CREATE) {
+        composable(Routes.CREATE) { entry ->
+            val sharedUri = entry.arguments?.getString("sharedUri")?.let { Uri.parse(it) }
             com.fpclient.android.ui.create.CreateActivityScreen(
                 container = container,
                 appViewModel = appViewModel,
+                sharedUri = sharedUri,
                 onDone = { navController.popBackStack() },
                 onCancel = { navController.popBackStack() },
             )

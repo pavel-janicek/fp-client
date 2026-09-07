@@ -26,6 +26,12 @@ import okhttp3.MediaType.Companion.toMediaType
  *    FitPub 1.3 the JWT is neither in the response body nor accepted as a Bearer header)
  *    and echoes the `XSRF-TOKEN` cookie plus `X-XSRF-TOKEN` header Spring's CSRF
  *    protection requires on every mutating call.
+ *
+ * CSRF tokens are minted by the server only on requests that actually render the token
+ * (Spring Security defers the token, so plain JSON API GETs never emit the cookie). The
+ * client therefore primes its token with a throwaway GET of the public `/login` page,
+ * keeps one token per configured instance, and retries a mutating call once with a fresh
+ * token if the server answers `403 Forbidden` (stale or missing CSRF proof).
  */
 class ApiClient(
     context: Context,
@@ -43,6 +49,12 @@ class ApiClient(
     private fun resolveUrl(rawUrl: String): String =
         rawUrl.ifBlank { "https://fitpub.invalid" }
 
+    /** CSRF tokens per configured instance (scheme+host+port), so switching servers never
+     * reuses a token minted by another instance. */
+    private val csrfTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private fun csrfKey(base: HttpUrl): String = "${base.scheme}://${base.host}:${base.port}"
+
     /** Reads the current session and rewrites the outgoing URL + (re)attaches the session
      * JWT cookie and CSRF token. Also captures the latest `XSRF-TOKEN` from each response so
      * the next mutating call is allowed through. */
@@ -51,22 +63,50 @@ class ApiClient(
         val original = chain.request()
         val originalUrl = original.url
         val base = resolveUrl(session.serverUrl).toHttpUrlOrNull() ?: originalUrl
-
-        val newUrl: HttpUrl = originalUrl.newBuilder()
-            .scheme(base.scheme)
-            .host(base.host)
-            .port(base.port)
-            .build()
+        val key = csrfKey(base)
 
         val method = original.method
         val mutating = method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE"
 
-        // Mutating requests need a CSRF token; prime one with a throwaway GET if the jar is empty.
-        var token = csrfToken
+        // Mutating requests need a CSRF token; prime one with a throwaway GET if we have none.
+        var token: String? = csrfTokens[key]
         if (token == null && mutating) {
             token = primeCsrfToken(base)
-            if (token != null) csrfToken = token
+            if (token != null) csrfTokens[key] = token
         }
+
+        var response = chain.proceed(signed(original, base, session, token, mutating))
+        token = captureCsrfToken(key, response, token)
+
+        if (mutating && response.code == 403) {
+            // A 403 on a mutating call almost always means the CSRF proof was missing or
+            // stale (e.g. the instance rotated its cookie or the token was primed before
+            // the server restarted). Re-prime with a fresh token and retry exactly once;
+            // genuine authorization failures fail again and surface as before.
+            val fresh = primeCsrfToken(base)
+            if (fresh != null && fresh != token) {
+                csrfTokens[key] = fresh
+                response.close()
+                response = chain.proceed(signed(original, base, session, fresh, mutating))
+                captureCsrfToken(key, response, fresh)
+            }
+        }
+        response
+    }
+
+    /** Builds the request for [base] with session JWT + CSRF double-submit proof attached. */
+    private fun signed(
+        original: Request,
+        base: HttpUrl,
+        session: Session,
+        token: String?,
+        mutating: Boolean,
+    ): Request {
+        val newUrl = original.url.newBuilder()
+            .scheme(base.scheme)
+            .host(base.host)
+            .port(base.port)
+            .build()
 
         val builder = original.newBuilder()
             .url(newUrl)
@@ -82,17 +122,26 @@ class ApiClient(
         if (cookieParts.isNotEmpty()) {
             builder.header("Cookie", cookieParts.joinToString("; "))
         }
-
-        val response = chain.proceed(builder.build())
-        response.headers.values("Set-Cookie").forEach { raw ->
-            val (name, value) = parseCookie(raw) ?: return@forEach
-            if (name == "XSRF-TOKEN" && value.isNotBlank()) csrfToken = value
-        }
-        response
+        return builder.build()
     }
 
-    /** Plain client with no interceptors — used only for the CSRF priming GET so it can't recurse. */
+    /** Stores any `XSRF-TOKEN` rotation from the response and returns the newest token. */
+    private fun captureCsrfToken(key: String, response: okhttp3.Response, current: String?): String? {
+        var token = current
+        response.headers.values("Set-Cookie").forEach { raw ->
+            val (name, value) = parseCookie(raw) ?: return@forEach
+            if (name == "XSRF-TOKEN" && value.isNotBlank()) {
+                token = value
+                csrfTokens[key] = value
+            }
+        }
+        return token
+    }
+
+    /** Plain client with no interceptors and no redirects — used only for the CSRF priming
+     * GET so it can't recurse, and so the `Set-Cookie` of the primed response is visible. */
     private val plainClient: OkHttpClient = OkHttpClient.Builder()
+        .followRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
@@ -112,18 +161,16 @@ class ApiClient(
             .build()
     }
 
-    /** Issues a throwaway GET against the anonymous registration-status endpoint just to
-     * mint an `XSRF-TOKEN` cookie that the caller can echo back on a mutating request. */
+    /** Issues a throwaway GET of the public `/login` page to mint an `XSRF-TOKEN` cookie
+     * that the caller can echo back on a mutating request. JSON API GETs do not render the
+     * CSRF token, so Spring never emits the cookie for them — the login page does. */
     private fun primeCsrfToken(base: HttpUrl): String? {
         val url = base.newBuilder()
-            .addPathSegment("api")
-            .addPathSegment("web")
-            .addPathSegment("auth")
-            .addPathSegment("registration-status")
+            .addPathSegment("login")
             .build()
         val request = Request.Builder()
             .url(url)
-            .header("Accept", "application/json")
+            .header("Accept", "text/html")
             .header("User-Agent", "FP-Client/${BuildConfig.VERSION_NAME}")
             .get()
             .build()
@@ -164,8 +211,4 @@ class ApiClient(
     }
 
     private val isDebug: Boolean get() = BuildConfig.DEBUG
-
-    private companion object {
-        @Volatile private var csrfToken: String? = null
-    }
 }
