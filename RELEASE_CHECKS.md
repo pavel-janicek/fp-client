@@ -11,7 +11,7 @@ minute. For the in-app version-propagation details, see `VERSION_CHECKLIST.md`.
 ## 2. Bump the version
 
 - [ ] `app/build.gradle.kts` — `versionCode` +1 (29 for 1.3.6), `versionName` set
-- [ ] Walk through `VERSION_CHECKLIST.md` (sections 1–3)
+- [ ] Walk through `VERSION_CHECKLIST.md` (sections 1–4, incl. the F-Droid/fastlane items)
 - [ ] Commit the bump to `main` — this commit is what you will tag
 
 ## 3. Build the release APK
