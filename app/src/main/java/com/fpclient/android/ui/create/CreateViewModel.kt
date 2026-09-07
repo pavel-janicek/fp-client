@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 
 class CreateViewModel(
     private val activities: ActivityRepository,
+    private val activitiesVersion: MutableStateFlow<Int>,
 ) : ViewModel() {
 
     data class UiState(
@@ -70,7 +71,10 @@ class CreateViewModel(
         viewModelScope.launch {
             _ui.value = UiState(busy = true)
             when (val r = activities.uploadFile(context, uri, title, description, visibility)) {
-                is ApiResult.Success -> _ui.value = UiState(done = true)
+                is ApiResult.Success -> {
+                    activitiesVersion.value += 1
+                    _ui.value = UiState(done = true)
+                }
                 is ApiResult.Error -> _ui.value = UiState(error = r.message)
             }
         }
@@ -80,7 +84,10 @@ class CreateViewModel(
         viewModelScope.launch {
             _ui.value = UiState(busy = true)
             when (val r = activities.createManual(request)) {
-                is ApiResult.Success -> _ui.value = UiState(done = true)
+                is ApiResult.Success -> {
+                    activitiesVersion.value += 1
+                    _ui.value = UiState(done = true)
+                }
                 is ApiResult.Error -> _ui.value = UiState(error = r.message)
             }
         }
@@ -88,7 +95,7 @@ class CreateViewModel(
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { CreateViewModel(container.activityRepository) }
+            initializer { CreateViewModel(container.activityRepository, container.activitiesVersion) }
         }
     }
 }

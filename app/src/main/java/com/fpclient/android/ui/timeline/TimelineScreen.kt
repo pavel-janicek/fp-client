@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -177,6 +178,13 @@ fun TimelineScreen(
     val tab by vm.tab.collectAsState()
     val search by vm.search.collectAsState()
     val serverUrl = ui.serverUrl
+
+    // Re-fetch when an activity was created locally so the fresh entry shows up right
+    // away instead of looking like the save "didn't stick".
+    val activitiesVersion by container.activitiesVersion.collectAsState()
+    LaunchedEffect(activitiesVersion) {
+        if (activitiesVersion > 0) vm.refresh()
+    }
 
     Scaffold(
         modifier = modifier,
