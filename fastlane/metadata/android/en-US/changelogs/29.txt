@@ -1,0 +1,7 @@
+Stability and usability (release 1.3.6):
+- Fix: creating an activity manually no longer fails with "Forbidden" when the server-side security token goes stale.
+- Manual entry: the date is now chosen from a calendar picker instead of typed as YYYY-MM-DD.
+- Login and change-password screens: show/hide password toggle; the change-password fields are now masked when hidden.
+- Upload: the button shows the picked file's real name instead of a cryptic internal id like "msf:2323".
+- Share to FP Client: GPX/FIT files can be shared straight from a file manager — the app opens the upload form with the file pre-selected.
+- Timeline: the search field is now a toggleable icon next to the reload button, and the empty strip at the bottom is gone.
