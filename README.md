@@ -133,9 +133,9 @@ agent in iterative sessions (see `PLAN.md` for the iteration plan).
 
 
 ## And what about other stores?
-Release 1.3.5 is deemed "good enough" by the F-Droid people and [Merge request)(https://gitlab.com/fdroid/fdroiddata/-/merge_requests/47394) is ready to be tested
+Release 1.3.5 is deemed "good enough" by the F-Droid people and [Merge request](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/47394) is ready to be tested
 
-You can [help testing it)(https://gitlab.com/fdroid/wiki/-/wikis/Internal/Reviewing-new-apps)
+You can [help testing it](https://gitlab.com/fdroid/wiki/-/wikis/Internal/Reviewing-new-apps)
 
 ### Submitting issues
 I am trying to make the [Issues](https://github.com/pavel-janicek/fp-client/issues) tab as single source of truth of known issues with this app.
