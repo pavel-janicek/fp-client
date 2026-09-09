@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.fpclient.android.data.dto.ActivityDto
 import com.fpclient.android.data.dto.ActivityUpdateRequest
+import com.fpclient.android.data.dto.BoostDto
 import com.fpclient.android.data.dto.CommentCreateRequest
 import com.fpclient.android.data.dto.CommentDto
 import com.fpclient.android.data.dto.LikeDto
@@ -192,6 +193,42 @@ class ActivityRepository(
     suspend fun unreact(activityId: String): ApiResult<Unit> {
         return try {
             val response = api.unreact(activityId)
+            if (response.isSuccessful) ApiResult.Success(Unit)
+            else ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    // --- Boosts ---
+
+    suspend fun boosts(activityId: String): ApiResult<List<BoostDto>> {
+        return try {
+            val response = api.boosts(activityId)
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            ApiResult.Success(response.body() ?: emptyList())
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    suspend fun boost(activityId: String): ApiResult<BoostDto> {
+        return try {
+            val response = api.boost(activityId)
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            ApiResult.Success(response.body() ?: error("Empty boost response"))
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    suspend fun unboost(activityId: String): ApiResult<Unit> {
+        return try {
+            val response = api.unboost(activityId)
             if (response.isSuccessful) ApiResult.Success(Unit)
             else ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
         } catch (e: Exception) {

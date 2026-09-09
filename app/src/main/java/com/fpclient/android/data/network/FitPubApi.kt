@@ -6,6 +6,7 @@ import com.fpclient.android.data.dto.ActivityUpdateRequest
 import com.fpclient.android.data.dto.AuthResponse
 import com.fpclient.android.data.dto.BatchImportJobDto
 import com.fpclient.android.data.dto.BatchImportJobPageDto
+import com.fpclient.android.data.dto.BoostDto
 import com.fpclient.android.data.dto.ChangePasswordRequest
 import com.fpclient.android.data.dto.CommentCreateRequest
 import com.fpclient.android.data.dto.CommentDto
@@ -172,6 +173,16 @@ interface FitPubApi {
 
     @DELETE("api/web/activities/{activityId}/likes")
     suspend fun unreact(@Path("activityId") activityId: String): Response<Unit>
+
+    // Boosts (ActivityPub announces)
+    @GET("api/web/activities/{activityId}/boosts")
+    suspend fun boosts(@Path("activityId") activityId: String): Response<List<BoostDto>>
+
+    @POST("api/web/activities/{activityId}/boosts")
+    suspend fun boost(@Path("activityId") activityId: String): Response<BoostDto>
+
+    @DELETE("api/web/activities/{activityId}/boosts")
+    suspend fun unboost(@Path("activityId") activityId: String): Response<Unit>
 
     @GET("api/web/activities/{activityId}/comments")
     suspend fun comments(

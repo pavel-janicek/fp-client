@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,6 +87,7 @@ internal fun DetailBody(
         }
         item { TrackMap(segments = viewModel.trackSegments(), hasTrack = ui.activity?.simplifiedTrack != null) }
         item { ReactionRow(activityId = activityId, viewModel = viewModel, ui = ui) }
+        item { BoostRow(activityId = activityId, viewModel = viewModel, ui = ui, onOpenProfile = onOpenProfile) }
         item {
             CommentComposer(
                 activityId = activityId,
@@ -97,6 +99,74 @@ internal fun DetailBody(
                     }
                 },
             )
+        }
+    }
+}
+
+/** Boosts (announces) of the activity: who boosted it, with a Boost/Unboost toggle when allowed. */
+@Composable
+private fun BoostRow(
+    activityId: String,
+    viewModel: ActivityDetailViewModel,
+    ui: ActivityDetailViewModel.UiState,
+    onOpenProfile: (String) -> Unit,
+) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Boosts (${ui.boosts.size})", style = MaterialTheme.typography.titleSmall)
+            if (ui.activity?.boostEligible == true) {
+                Spacer(Modifier.weight(1f))
+                val boosted = ui.activity?.boostedByCurrentUser == true
+                FilterChip(
+                    selected = boosted,
+                    enabled = !ui.boostBusy,
+                    onClick = { viewModel.toggleBoost(activityId) },
+                    label = { Text(if (boosted) "Boosted" else "Boost") },
+                )
+            }
+        }
+        if (ui.boosts.isEmpty()) {
+            Text(
+                "No boosts yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        } else {
+            ui.boosts.forEach { b ->
+                val handle = b.fullHandle
+                androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (!handle.isNullOrBlank()) Modifier.clickable { onOpenProfile(handle) } else Modifier)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        com.fpclient.android.ui.components.UserAvatar(
+                            avatarUrl = b.avatarUrl,
+                            displayName = b.displayName ?: b.fullHandle,
+                            serverUrl = ui.serverUrl,
+                            size = 28,
+                        )
+                        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                            Text(b.displayName ?: b.fullHandle ?: "Athlete", style = MaterialTheme.typography.labelLarge)
+                            if (!handle.isNullOrBlank()) {
+                                Text(
+                                    handle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Text(
+                            Format.relative(b.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
     }
 }
