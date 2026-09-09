@@ -1,5 +1,6 @@
 package com.fpclient.android.data.network
 
+import com.fpclient.android.BuildConfig
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -32,21 +33,32 @@ class UpdateCheckerTest {
             """{"tag_name":"$tag","html_url":"https://github.com/pavel-janicek/fp-client/releases/tag/$tag","published_at":"2026-09-07T19:08:07Z"}""",
         )
 
+    /** The running version as a release tag, e.g. `1.3.7` -> `Release_1.3.7`. */
+    private fun currentTag(): String = "Release_${BuildConfig.VERSION_NAME}"
+
+    /** A release tag one patch above the running version, so the test never depends on the bumped version. */
+    private fun newerTag(): String {
+        val parts = BuildConfig.VERSION_NAME.split('.').toMutableList()
+        parts[parts.size - 1] = ((parts.last().toIntOrNull() ?: 0) + 1).toString()
+        return "Release_" + parts.joinToString(".")
+    }
+
     @Test
     fun newerRelease_isReportedAsUpdateWithParsedFields() = runTest {
-        server.enqueue(release("Release_1.3.7"))
+        val tag = newerTag()
+        server.enqueue(release(tag))
         val result = UpdateChecker.check(latestUrl())
         assertTrue(result is ApiResult.Success)
         val data = (result as ApiResult.Success<UpdateCheckResult>).data
         assertTrue(data.updateAvailable)
-        assertEquals("Release_1.3.7", data.latestVersion)
-        assertEquals("https://github.com/pavel-janicek/fp-client/releases/tag/Release_1.3.7", data.releaseUrl)
+        assertEquals(tag, data.latestVersion)
+        assertEquals("https://github.com/pavel-janicek/fp-client/releases/tag/$tag", data.releaseUrl)
         assertEquals("2026-09-07T19:08:07Z", data.publishedAt)
     }
 
     @Test
     fun sameVersion_isNotAnUpdate() = runTest {
-        server.enqueue(release("Release_1.3.6"))
+        server.enqueue(release(currentTag()))
         val result = UpdateChecker.check(latestUrl())
         assertTrue(result is ApiResult.Success)
         assertFalse((result as ApiResult.Success<UpdateCheckResult>).data.updateAvailable)
