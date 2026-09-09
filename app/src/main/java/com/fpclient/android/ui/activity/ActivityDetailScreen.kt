@@ -103,13 +103,18 @@ fun ActivityDetailScreen(
             ui.loading -> LoadingIndicator(Modifier.padding(padding))
             ui.error != null -> {
                 // Federated (remote) activities return 404 — the server only exposes
-                // local activities via GET /api/activities/{id}. Show a clear explanation
-                // and a Back button instead of a useless Retry.
+                // local activities via GET /api/activities/{id}. Show a neutral
+                // informational state (not a red error) with a Back button instead of
+                // a useless Retry: the limitation is FitPub federation, not the app.
                 if (ui.errorStatusCode == 404 && ui.activity == null) {
                     ErrorState(
-                        message = "Current API compatibility does not allow showing this activity.\nFederated activities from other instances cannot be loaded.",
+                        message = "Activity not accessible yet\n\n" +
+                            "This activity lives on a different FitPub server.\n" +
+                            "FitPub is gradually adding federation features, and viewing activity details across servers isn't supported at the moment.\n\n" +
+                            "It's not an app error — the feature will appear once FitPub enables it.",
                         onRetry = onBack,
                         buttonLabel = "Back",
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(padding),
                     )
                 } else {

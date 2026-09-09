@@ -42,6 +42,7 @@ fun ErrorState(
     modifier: Modifier = Modifier,
     onRetry: (() -> Unit)? = null,
     buttonLabel: String = "Retry",
+    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.error,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(24.dp),
@@ -51,7 +52,7 @@ fun ErrorState(
         Text(
             text = message ?: "Something went wrong",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
+            color = color,
             textAlign = TextAlign.Center,
         )
         if (onRetry != null) {
