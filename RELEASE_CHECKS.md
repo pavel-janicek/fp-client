@@ -3,18 +3,26 @@
 Step-by-step release procedure. Run every step in order; each takes about a
 minute. For the in-app version-propagation details, see `VERSION_CHECKLIST.md`.
 
-## 1. Merge the PR
-
-- [ ] CI green (tests, lint) and PR reviewed
-- [ ] Merge into `main` and `git switch main && git pull`
-
-## 2. Bump the version
+## 1. Bump the version
 
 - [ ] `app/build.gradle.kts` — `versionCode` +1 (29 for 1.3.6), `versionName` set
 - [ ] Walk through `VERSION_CHECKLIST.md` (sections 1–4, incl. the F-Droid/fastlane items)
 - [ ] Commit the bump to `main` — this commit is what you will tag
 
-## 3. Build the release APK
+
+## 2. Merge the PR
+
+- [ ] CI green (tests, lint) and PR reviewed
+- [ ] Merge into `main` and `git switch main && git pull`
+
+## 3. Tag and release
+
+- [ ] Tag: `git tag Release_1.3.6 && git push origin main Release_1.3.6`
+- [ ] GitHub → Releases → "Draft a new release" → choose the tag
+- [ ] Attach **`app-release.apk`** (F-Droid verification needs this exact name) and the `.aab`
+- [ ] Publish with release notes
+
+## 4. Build the release APK
 
 The GitHub CI only builds a debug APK, so the release APK is built locally:
 
@@ -26,20 +34,13 @@ export KEYSTORE_PATH=/path/to/keystore.jks KEYSTORE_PASSWORD=... KEY_ALIAS=... K
 
 - [ ] APK exists and is signed (no "unsigned" in the filename)
 
-## 4. Tag and release
-
-- [ ] Tag: `git tag Release_1.3.6 && git push origin main Release_1.3.6`
-- [ ] GitHub → Releases → "Draft a new release" → choose the tag
-- [ ] Attach **`app-release.apk`** (F-Droid verification needs this exact name) and the `.aab`
-- [ ] Publish with release notes
-
 ## 5. Verify the APK was built from the right commit
 
 The APK records the git commit it was built from. Unzip it back out and compare
 against the tag you just pushed:
 
 ```bash
-unzip -p app/build/outputs/apk/release/app-release.apk META-INF/version-control-info.textproto
+unzip -p unzip -p app/build/outputs/apk/release/app-release.apk META-INF/version-control-info.textproto/
 ```
 
 You should see:

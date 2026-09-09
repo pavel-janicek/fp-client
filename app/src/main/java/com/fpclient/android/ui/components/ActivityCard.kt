@@ -103,7 +103,16 @@ fun ActivityCard(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 MetricItem("Distance", Format.distance(activity.totalDistance, unitSystem))
                 MetricItem("Time", Format.duration(activity.movingTimeSeconds ?: activity.totalDurationSeconds))
-                MetricItem("Pace", Format.pace(activity.metrics?.averagePaceSeconds, unitSystem))
+                MetricItem(
+                    "Pace",
+                    Format.pace(
+                        activity.metrics?.averagePaceSeconds,
+                        activity.metrics?.averageSpeed,
+                        activity.movingTimeSeconds ?: activity.totalDurationSeconds,
+                        activity.totalDistance,
+                        unitSystem,
+                    ),
+                )
                 MetricItem("Elev.", Format.elevation(activity.elevationGain, unitSystem))
             }
             val reactions = activity.reactionCounts

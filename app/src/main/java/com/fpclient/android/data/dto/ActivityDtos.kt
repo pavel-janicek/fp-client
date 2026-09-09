@@ -52,6 +52,12 @@ data class ActivityDto(
     val likedByCurrentUser: Boolean? = null,
     val reactionCounts: Map<String, Long>? = null,
     val currentUserReaction: String? = null,
+    /** Number of boosts (ActivityPub announces) of this activity. */
+    val boostsCount: Long? = null,
+    /** True when the signed-in user has boosted this activity. */
+    val boostedByCurrentUser: Boolean? = null,
+    /** True when the signed-in user is allowed to boost this activity. */
+    val boostEligible: Boolean? = null,
     val privacyZones: List<PrivacyZonePreviewDto>? = null,
 ) {
     val resolvedUsername: String?
@@ -65,6 +71,26 @@ data class ActivityDto(
     /** Full `@username@host` handle so remote authors keep their home instance. */
     val fullHandle: String?
         get() = com.fpclient.android.util.ActorHandle.full(resolvedUsername, actorUri)
+}
+
+/** A single boost (repost/announce) of an activity by an actor. Mirrors the server's BoostDTO. */
+@Serializable
+data class BoostDto(
+    val id: String? = null,
+    val activityId: String? = null,
+    val actorUri: String? = null,
+    val displayName: String? = null,
+    val avatarUrl: String? = null,
+    val createdAt: String? = null,
+    val local: Boolean = true,
+) {
+
+    /** Full `@username@host` handle so remote boosters keep their home instance. */
+    val fullHandle: String?
+        get() = com.fpclient.android.util.ActorHandle.full(
+            actorUri?.substringAfterLast('/')?.substringBefore('?'),
+            actorUri,
+        )
 }
 
 @Serializable

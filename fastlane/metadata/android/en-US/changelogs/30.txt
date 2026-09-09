@@ -1,0 +1,3 @@
+Pace and boosts (release 1.3.7):
+- Timeline: activities without a stored pace (e.g. Trek hikes) now show a Pace computed from the activity's speed and distance — the same value as on the detail screen.
+- Activity detail: new Boosts section — see who boosted the activity and boost it yourself when your instance allows it; boosters link to their profiles.

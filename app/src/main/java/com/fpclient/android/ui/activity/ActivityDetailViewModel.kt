@@ -35,6 +35,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fpclient.android.AppContainer
 import com.fpclient.android.data.dto.ActivityUpdateRequest
+import com.fpclient.android.data.dto.BoostDto
 import com.fpclient.android.data.dto.CommentDto
 import com.fpclient.android.data.dto.LikeDto
 import com.fpclient.android.data.dto.ReactionPalette
@@ -59,6 +60,9 @@ class ActivityDetailViewModel(
         val activity: com.fpclient.android.data.dto.ActivityDto? = null,
         val likes: List<LikeDto> = emptyList(),
         val comments: List<CommentDto> = emptyList(),
+        /** Who boosted the activity, newest first. */
+        val boosts: List<BoostDto> = emptyList(),
+        val boostBusy: Boolean = false,
         /** Follow relationship with the activity's owner; null for own activities or while loading. */
         val followStatus: com.fpclient.android.data.dto.FollowStatusDto? = null,
         val followBusy: Boolean = false,
@@ -79,6 +83,7 @@ class ActivityDetailViewModel(
                     _ui.value = _ui.value.copy(loading = false, activity = r.data)
                     loadComments(activityId)
                     loadLikes(activityId)
+                    loadBoosts(activityId)
                     loadFollowStatus()
                 }
                 is ApiResult.Error -> _ui.value = _ui.value.copy(loading = false, error = r.message, errorStatusCode = r.statusCode)
@@ -135,6 +140,27 @@ class ActivityDetailViewModel(
         when (val l = activities.likes(id)) {
             is ApiResult.Success -> _ui.value = _ui.value.copy(likes = l.data)
             else -> Unit
+        }
+    }
+
+    private suspend fun loadBoosts(id: String) {
+        when (val b = activities.boosts(id)) {
+            is ApiResult.Success -> _ui.value = _ui.value.copy(boosts = b.data)
+            else -> Unit
+        }
+    }
+
+    /** Boosts (unboosts) the activity, then re-fetches authoritative detail + boost list. */
+    fun toggleBoost(activityId: String) {
+        val activity = _ui.value.activity ?: return
+        val boosting = activity.boostedByCurrentUser != true
+        viewModelScope.launch {
+            _ui.value = _ui.value.copy(boostBusy = true)
+            val result = if (boosting) activities.boost(activityId) else activities.unboost(activityId)
+            when (result) {
+                is ApiResult.Success -> load(activityId)
+                is ApiResult.Error -> _ui.value = _ui.value.copy(boostBusy = false, error = result.message)
+            }
         }
     }
 
