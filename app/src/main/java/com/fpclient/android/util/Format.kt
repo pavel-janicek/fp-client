@@ -44,10 +44,34 @@ object Format {
     }
 
     /** Pace from seconds per km to "5:30 /km" (or /mi). */
-    fun pace(secondsPerKm: Long?, unitSystem: String?): String {
-        if (secondsPerKm == null) return "—"
+    fun pace(secondsPerKm: Long?, unitSystem: String?): String =
+        pace(secondsPerKm, null, null, null, unitSystem)
+
+    /**
+     * Pace to "5:30 /km" (or /mi). The server usually sends `metrics.averagePaceSeconds`,
+     * but the timeline feed omits it for some activity types (e.g. Hikes) while still
+     * sending `averageSpeed`; the web app derives the pace itself in that case. So the
+     * value is resolved from, in order:
+     *  1. the server-provided seconds per km,
+     *  2. average speed in km/h (`3600 / speed` — the same moving-time derivation the
+     *     server uses to store `averagePaceSeconds`),
+     *  3. duration over distance (`duration seconds / km` — the web app's own formula).
+     */
+    fun pace(
+        secondsPerKm: Long?,
+        averageSpeedKmh: Double?,
+        durationSeconds: Long?,
+        distanceMeters: Double?,
+        unitSystem: String?,
+    ): String {
+        val resolved = secondsPerKm
+            ?: averageSpeedKmh?.takeIf { speed -> speed > 0 }?.let { speed -> (3600.0 / speed).toLong() }
+            ?: durationSeconds?.takeIf { time -> time > 0 }?.let { time ->
+                distanceMeters?.takeIf { d -> d > 0 }?.let { d -> (time / (d / 1000.0)).toLong() }
+            }
+        if (resolved == null) return "—"
         val factor = if (unitSystem == "IMPERIAL") 1.609344 else 1.0
-        val secondsPerUnit = (secondsPerKm * factor).toLong()
+        val secondsPerUnit = (resolved * factor).toLong()
         val s = secondsPerUnit % 60
         val m = secondsPerUnit / 60
         if (m >= 100) return "—"

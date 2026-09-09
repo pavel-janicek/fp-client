@@ -31,7 +31,26 @@ class UtilityTest {
         assertEquals("0.93 mi", Format.distance(1500.0, "IMPERIAL"))
         assertEquals("1:01:05", Format.duration(3665))
         assertEquals("5:30 /km", Format.pace(330, "METRIC"))
+        assertEquals("8:51 /mi", Format.pace(330, "IMPERIAL"))
         assertEquals("22.4 mph", Format.speedKmh(36.0, "IMPERIAL"))
+    }
+
+    @Test
+    fun format_paceFallsBackToAverageSpeed() {
+        // Timeline feed omits averagePaceSeconds for Hikes but sends averageSpeed (km/h);
+        // 3600 / 3.95 = 911 s/km — the same value the detail endpoint reports.
+        assertEquals("15:11 /km", Format.pace(null, 3.95, null, null, "METRIC"))
+        // Server-provided pace wins over the derived value.
+        assertEquals("15:11 /km", Format.pace(911, 3.95, null, null, "METRIC"))
+    }
+
+    @Test
+    fun format_paceFallsBackToDurationOverDistance() {
+        // Web app's own formula: duration seconds / distance km.
+        assertEquals("15:45 /km", Format.pace(null, null, 2294, 2426.65, "METRIC"))
+        // Imperial conversion is exercised by the primary path (Format.pace(330, "IMPERIAL") above).
+        assertEquals("—", Format.pace(null, null, 2294, 0.0, "METRIC"))
+        assertEquals("—", Format.pace(null, null, null, 2426.65, "METRIC"))
     }
 
     @Test

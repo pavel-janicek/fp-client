@@ -63,7 +63,13 @@ internal fun DetailBody(
                 listOf(
                     "Distance" to Format.distance(activity.totalDistance, unitSystem),
                     "Time" to Format.duration(activity.totalDurationSeconds),
-                    "Pace" to Format.pace(activity.metrics?.averagePaceSeconds, unitSystem),
+                    "Pace" to Format.pace(
+                        activity.metrics?.averagePaceSeconds,
+                        activity.metrics?.averageSpeed,
+                        activity.metrics?.movingTimeSeconds ?: activity.totalDurationSeconds,
+                        activity.totalDistance,
+                        unitSystem,
+                    ),
                     "Elev" to Format.elevation(activity.metrics?.totalAscent ?: activity.elevationGain, unitSystem),
                 ),
             )
