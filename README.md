@@ -57,7 +57,13 @@ The [issue tracker](https://github.com/pavel-janicek/fitpub-android/issues) is t
 source of truth for known problems.
 
 1. Check whether an open issue already resembles yours.
-2. Make sure you are running the latest release.
+2. Make sure you are running the latest release — open the app, go to
+   **Settings** and tap **Check for updates** in the *Updates* card (or open
+   **Settings → About this app → Updates**). If a newer version is available,
+   update via your app store (Google Play or F-Droid — the app shows direct
+   links) and confirm your problem still exists before filing an issue.
+   The version you are on is shown in **Settings → About this app**;
+   please include it in your report.
 3. Still broken? Try Settings → Applications → FP Client → *Delete data*, then retry,
    and file a new issue. You can also reach me in the
    [FitPub users Matrix channel](https://matrix.to/#/#fitpub-users:matrix.org).
