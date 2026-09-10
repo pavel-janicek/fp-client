@@ -61,6 +61,7 @@ class SessionStore(private val context: Context) {
         val DISPLAY_NAME = stringPreferencesKey("display_name")
         val EMAIL = stringPreferencesKey("email")
         val GUEST = booleanPreferencesKey("guest")
+        val UNIT_SYSTEM = stringPreferencesKey("unit_system")
     }
 
     private val tokenFlow: Flow<String> = context.fitPubDataStore.data.map {
@@ -79,6 +80,17 @@ class SessionStore(private val context: Context) {
             email = prefs[Keys.EMAIL] ?: "",
             guest = prefs[Keys.GUEST] ?: false,
         )
+    }
+
+    /** Persisted unit-system choice ("METRIC"/"IMPERIAL"); blank until the user picks
+     *  one in Settings, so the unit system saved on the server profile can still seed it. */
+    val unitSystem: Flow<String> = context.fitPubDataStore.data.map { prefs ->
+        prefs[Keys.UNIT_SYSTEM] ?: ""
+    }
+
+    /** Persists the unit system the user picked in Settings (device-level preference). */
+    suspend fun setUnitSystem(system: String) {
+        context.fitPubDataStore.edit { it[Keys.UNIT_SYSTEM] = system }
     }
 
     suspend fun setServerUrl(rawUrl: String) {

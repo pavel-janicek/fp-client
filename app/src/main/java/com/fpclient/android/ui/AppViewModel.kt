@@ -19,11 +19,14 @@ import kotlinx.coroutines.launch
 
 /** Shared app state: session + unit preference used for formatting across screens. */
 class AppViewModel(
-    sessionStore: SessionStore,
+    private val sessionStore: SessionStore,
 ) : ViewModel() {
 
-    private val _unitSystem = MutableStateFlow(UnitSystems.METRIC)
-    val unitSystem: StateFlow<String> = _unitSystem.asStateFlow()
+    /** Unit system explicitly picked in Settings during this session — wins over everything. */
+    private val _manualUnit = MutableStateFlow<String?>(null)
+
+    /** Unit system advertised by the user's server profile (seed only, see [onProfileLoaded]). */
+    private val _serverUnit = MutableStateFlow<String?>(null)
 
     private val _profile = MutableStateFlow<UserDto?>(null)
     val profile: StateFlow<UserDto?> = _profile.asStateFlow()
@@ -36,11 +39,28 @@ class AppViewModel(
         }
     }
 
+    /**
+     * Effective unit system used for formatting across all screens. Priority:
+     * 1. the choice made in Settings during this session ([setUnitSystem]),
+     * 2. the choice persisted on this device (survives restarts),
+     * 3. the unit system saved on the user's server profile,
+     * 4. METRIC.
+     */
+    val unitSystem: StateFlow<String> = combine(
+        sessionStore.unitSystem,
+        _manualUnit,
+        _serverUnit,
+    ) { persisted, manual, server ->
+        manual
+            ?: persisted.takeIf { it.isNotBlank() }
+            ?: server
+            ?: UnitSystems.METRIC
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, UnitSystems.METRIC)
+
     val uiState: StateFlow<AppUiState> = combine(
         sessionStore.session,
-        _unitSystem,
         _loaded,
-    ) { session, _, isLoaded ->
+    ) { session, isLoaded ->
         AppUiState(
             loaded = isLoaded,
             configured = session.isConfigured,
@@ -52,13 +72,35 @@ class AppViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppUiState())
 
+    /**
+     * Seeds the unit system from the server profile. This must never overwrite the
+     * user's manual choice: profile loads happen constantly (every visit to the
+     * profile screen — e.g. when pressing Back from Settings — re-loads the profile),
+     * and re-applying the server value here silently reverted the user's switch,
+     * which made metric/imperial appear unswitchable.
+     */
     fun onProfileLoaded(user: UserDto) {
         _profile.value = user
-        user.unitSystem?.let { _unitSystem.value = it }
+        _serverUnit.value = user.unitSystem
     }
 
+    /**
+     * Called after the user saved their profile in Edit Profile. The saved unit
+     * system is an explicit user action, so it becomes authoritative and is
+     * persisted locally too, keeping Settings and formatting in sync.
+     */
+    fun onProfileSaved(user: UserDto) {
+        _profile.value = user
+        user.unitSystem?.let { system ->
+            _manualUnit.value = system
+            viewModelScope.launch { sessionStore.setUnitSystem(system) }
+        }
+    }
+
+    /** Manual unit-system switch from Settings: applied immediately and persisted on device. */
     fun setUnitSystem(system: String) {
-        _unitSystem.value = system
+        _manualUnit.value = system
+        viewModelScope.launch { sessionStore.setUnitSystem(system) }
     }
 
     companion object {

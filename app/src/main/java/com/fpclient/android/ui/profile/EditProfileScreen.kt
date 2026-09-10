@@ -74,7 +74,9 @@ fun EditProfileScreen(
     if (ui.done) {
         val saved = ui.saved
         if (saved != null) {
-            appViewModel.onProfileLoaded(saved)
+            // Explicit user action — the saved unit system becomes authoritative
+            // (applied everywhere and persisted on device).
+            appViewModel.onProfileSaved(saved)
         }
         onDone()
         return
