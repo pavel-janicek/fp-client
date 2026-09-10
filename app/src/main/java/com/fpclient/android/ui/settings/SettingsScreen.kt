@@ -129,6 +129,7 @@ fun SettingsScreen(
                     }
                 }
             }
+            UpdateCheckCard()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text("About", style = MaterialTheme.typography.titleSmall)
