@@ -40,7 +40,7 @@ The APK records the git commit it was built from. Unzip it back out and compare
 against the tag you just pushed:
 
 ```bash
-unzip -p unzip -p app/build/outputs/apk/release/app-release.apk META-INF/version-control-info.textproto/
+unzip -p app-release.apk META-INF/version-control-info.textproto
 ```
 
 You should see:

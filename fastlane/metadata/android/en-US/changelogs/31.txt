@@ -1,0 +1,4 @@
+Updates, units and a bigger map (release 1.3.8):
+- Settings: "Check for updates" now lives directly in Settings — previously it was hidden on the About screen only.
+- Fix: the metric/imperial switch now sticks — the choice no longer reverted when leaving Settings, and it survives app restarts.
+- Activity detail: new button to enlarge the route map to full screen.
