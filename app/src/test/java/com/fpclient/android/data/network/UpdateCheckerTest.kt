@@ -107,4 +107,20 @@ class UpdateCheckerTest {
         assertFalse(UpdateVersions.isNewer("garbage", "1.3.6"))
         assertTrue(UpdateVersions.isNewer("1.3.6-rc2", "1.3.6"))
     }
+
+    /**
+     * Regression coverage for the double-digit patch releases: a plain string
+     * comparison would rank "1.3.10" below "1.3.9" and stop reporting updates.
+     * The numeric-component comparison must keep the whole chain ordered.
+     */
+    @Test
+    fun versionOrdering_handlesDoubleDigitPatchReleases() {
+        assertTrue(UpdateVersions.isNewer("Release_1.3.10", "1.3.8"))
+        assertTrue(UpdateVersions.isNewer("Release_1.3.10", "1.3.9"))
+        assertTrue(UpdateVersions.isNewer("Release_1.3.11", "1.3.10"))
+        // Equal or older versions must never be reported as an update.
+        assertFalse(UpdateVersions.isNewer("Release_1.3.10", "1.3.10"))
+        assertFalse(UpdateVersions.isNewer("Release_1.3.9", "1.3.10"))
+        assertFalse(UpdateVersions.isNewer("Release_1.3.8", "1.3.10"))
+    }
 }
