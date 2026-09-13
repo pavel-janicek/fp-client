@@ -1,5 +1,8 @@
 package com.fpclient.android.ui.activity
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +16,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,9 +38,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.viewinterop.AndroidView
@@ -43,12 +50,16 @@ import com.fpclient.android.AppContainer
 import com.fpclient.android.data.dto.ActivityUpdateRequest
 import com.fpclient.android.data.dto.ActivityVisibilities
 import com.fpclient.android.data.dto.ReactionPalette
+import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.ui.components.ErrorState
 import com.fpclient.android.ui.components.LoadingIndicator
 import com.fpclient.android.ui.components.StatRow
 import com.fpclient.android.util.Format
 import com.fpclient.android.util.TextLimits
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.views.MapView
@@ -73,6 +84,38 @@ fun ActivityDetailScreen(
     var editTitle by remember { mutableStateOf("") }
     var editDescription by remember { mutableStateOf("") }
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var downloading by remember { mutableStateOf(false) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+
+    // Lets the user pick where to store the GPX file (Storage Access Framework);
+    // the bytes are fetched from the instance only after a location is chosen.
+    val saveRouteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/gpx+xml"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            downloading = true
+            vm.downloadRoute { result ->
+                when (result) {
+                    is ApiResult.Success -> {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                context.contentResolver.openOutputStream(uri)?.use { it.write(result.data) }
+                                    ?: error("Couldn't open the chosen file for writing")
+                            }
+                        } catch (e: Exception) {
+                            downloadError = "Couldn't save the GPX file: ${e.message}"
+                        }
+                    }
+                    is ApiResult.Error -> downloadError = result.message ?: "Couldn't download the route."
+                }
+                downloading = false
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -83,6 +126,24 @@ fun ActivityDetailScreen(
                     }
                 },
                 actions = {
+                    if (ui.activity != null) {
+                        IconButton(onClick = {
+                            val text = vm.shareText() ?: return@IconButton
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share activity"))
+                        }) {
+                            Icon(Icons.Filled.Share, contentDescription = "Share activity")
+                        }
+                        IconButton(
+                            onClick = { saveRouteLauncher.launch("fitpub-route-$activityId.gpx") },
+                            enabled = !downloading,
+                        ) {
+                            Icon(Icons.Filled.Download, contentDescription = "Download route as GPX")
+                        }
+                    }
                     if (ui.isOwnActivity) {
                         IconButton(onClick = {
                             editTitle = ui.activity?.title.orEmpty()
@@ -193,6 +254,16 @@ fun ActivityDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+    downloadError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { downloadError = null },
+            title = { Text("Route download failed") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { downloadError = null }) { Text("OK") }
             },
         )
     }

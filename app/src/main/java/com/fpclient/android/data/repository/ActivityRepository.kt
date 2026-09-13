@@ -236,6 +236,29 @@ class ActivityRepository(
         }
     }
 
+    suspend fun downloadRoute(id: String, format: String = "gpx"): ApiResult<ByteArray> {
+        return try {
+            val response = api.activityRoute(id, format)
+            if (!response.isSuccessful) {
+                // The route endpoint answers with empty bodies, so map the known
+                // codes to friendly text instead of a bare "HTTP 401".
+                val message = when (response.code()) {
+                    401 -> "Sign in to download the route."
+                    403 -> "The route of this activity is not downloadable for you."
+                    404 -> "Activity not found."
+                    422 -> "This activity has no downloadable route."
+                    else -> ErrorMessages.extract(response.errorBody()?.string())
+                }
+                return ApiResult.Error(message, response.code())
+            }
+            val bytes = response.body()?.bytes()
+            if (bytes == null || bytes.isEmpty()) ApiResult.Error("The route file was empty.")
+            else ApiResult.Success(bytes)
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
     private suspend fun copyUriToCache(context: Context, uri: Uri): File? {
         return try {
             val resolver = context.contentResolver
