@@ -40,6 +40,8 @@ import com.fpclient.android.data.dto.CommentDto
 import com.fpclient.android.data.dto.LikeDto
 import com.fpclient.android.data.dto.ReactionPalette
 import com.fpclient.android.data.network.ApiResult
+import com.fpclient.android.util.Format
+import com.fpclient.android.util.ShareLinks
 import com.fpclient.android.util.TrackParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -215,6 +217,36 @@ class ActivityDetailViewModel(
         _ui.value.activity?.let {
             TrackParser.fromGeometry(it.simplifiedTrack?.type, it.simplifiedTrack?.coordinates)
         } ?: emptyList()
+
+    /** Web URL of the activity on the instance (`{server}/activities/{id}`), for sharing. */
+    fun publicActivityUrl(): String? {
+        val activity = _ui.value.activity ?: return null
+        val id = activity.id ?: return null
+        return ShareLinks.publicActivityUrl(_ui.value.serverUrl, id)
+    }
+
+    /**
+     * Share text for the activity: "I just finished: {name} check it out at: {public link}".
+     * Falls back to the capitalized activity type when no title is set.
+     */
+    fun shareText(): String? {
+        val activity = _ui.value.activity ?: return null
+        val id = activity.id ?: return null
+        val name = activity.title?.takeIf { it.isNotBlank() }
+            ?: Format.uppercaseFirst(activity.activityType)
+        return ShareLinks.activityShareText(name, _ui.value.serverUrl, id)
+    }
+
+    /**
+     * Fetches the activity route file (default GPX, same as the web version's
+     * download) and hands the bytes to [onResult] on the main thread.
+     */
+    fun downloadRoute(format: String = "gpx", onResult: suspend (ApiResult<ByteArray>) -> Unit) {
+        val id = _ui.value.activity?.id ?: return
+        viewModelScope.launch {
+            onResult(activities.downloadRoute(id, format))
+        }
+    }
 
     companion object {
         fun factory(container: AppContainer, appViewModel: com.fpclient.android.ui.AppViewModel): ViewModelProvider.Factory = viewModelFactory {
