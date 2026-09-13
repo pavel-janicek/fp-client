@@ -145,17 +145,18 @@ fun TrackMap(segments: List<List<org.osmdroid.util.GeoPoint>>, hasTrack: Boolean
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
-                    ) {
-                        IconButton(onClick = { expanded = false }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close enlarged map")
-                        }
-                        Text("Route", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    }
+                Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
                     MapCanvas(segments = segments, modifier = Modifier.fillMaxSize())
+                    // Same translucent tonal button, same top-right corner as the
+                    // "Enlarge map" button — the familiar affordance closes the view.
+                    FilledTonalIconButton(
+                        onClick = { expanded = false },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close enlarged map")
+                    }
                 }
             }
         }
