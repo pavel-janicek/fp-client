@@ -25,7 +25,9 @@ import okhttp3.MediaType.Companion.toMediaType
  *  - A session interceptor authenticates via the `JWT_TOKEN` cookie the server sets (since
  *    FitPub 1.3 the JWT is neither in the response body nor accepted as a Bearer header)
  *    and echoes the `XSRF-TOKEN` cookie plus `X-XSRF-TOKEN` header Spring's CSRF
- *    protection requires on every mutating call.
+ *    protection requires on every mutating call. A `401` on a request that carried the
+ *    stored JWT means the server permanently rejects that credential, so the stored
+ *    session is cleared (the app returns to the login screen).
  *
  * CSRF tokens are minted by the server only on requests that actually render the token
  * (Spring Security defers the token, so plain JSON API GETs never emit the cookie). The
@@ -90,6 +92,18 @@ class ApiClient(
                 response = chain.proceed(signed(original, base, session, fresh, mutating))
                 captureCsrfToken(key, response, fresh)
             }
+        }
+
+        if (response.code == 401 && session.isLoggedIn) {
+            // A 401 on a request that carried the stored JWT means the server no longer
+            // accepts this credential and never will again — the token is expired
+            // (fixed-lifetime JWTs), was issued before the `authenticationVersion` claim
+            // became mandatory (FitPub #474 rejects such tokens), or the instance rotated
+            // its signing secret. The server clears its cookie; drop the stored session
+            // locally as well so the app returns to the login screen instead of looping
+            // on "Unauthorized" forever. Requests without a token (guests, failed logins)
+            // are unaffected.
+            runBlocking { sessionStore.logout() }
         }
         response
     }

@@ -34,6 +34,22 @@ keys are ignored) — that additive policy is unchanged.
   and echoes both on every mutating call.
 * **Debug endpoints removed:** obsolete `/api/**` debug/admin endpoints were dropped; the app never used them.
 
+### 1.3.9 — authentication-version claim (stale stored sessions rejected)
+
+FitPub commit `cb6acc84` (#474, "authenticate users statelessly on every HTTP request") makes
+the JWT carry an `authenticationVersion` claim that the server checks against the user's
+`passwordHashVersion` on every request. `JwtTokenProvider.getClaims` now **rejects any token
+without that claim** — so JWTs issued by earlier server versions are permanently invalid, and
+the server answers `401` and clears its cookie.
+
+The client's login flow is unaffected (the login contract is unchanged), but a stored token
+from before the server update loops on "Unauthorized". The app therefore treats a `401` on a
+request that carried the stored JWT as "this credential is permanently dead": the session
+interceptor clears the stored session (same as a logout) so the app returns to the login
+screen and a fresh login mints a valid token. This also covers expired fixed-lifetime JWTs
+and instances that rotate their signing secret — previously those left the user stranded
+on "Unauthorized" errors.
+
 ### Pre-1.3.4 behavior the app already adapted to
 
 The server now **enforces** text length limits it previously accepted silently — activity
