@@ -12,10 +12,12 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
@@ -113,5 +115,19 @@ class ApiClientTest {
         val secondPost = server.takeRequest()
         assertEquals("POST", secondPost.method)
         assertEquals("tok-1", secondPost.getHeader("X-XSRF-TOKEN"))
+    }
+
+    @Test
+    fun unauthorizedResponse_clearsTheStoredSession() = runTest {
+        // The server (FitPub #474) rejects JWTs without the `authenticationVersion` claim
+        // and clears its cookie — a stored stale token can never recover. The interceptor
+        // must drop the local session so the app returns to the login screen.
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"Unauthorized"}"""))
+
+        val response = apiClient.api.getActivity("8f2b6f9e-1")
+
+        assertFalse(response.isSuccessful)
+        assertEquals(401, response.code())
+        verify(sessionStore).logout()
     }
 }
