@@ -17,6 +17,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val BATCH_IMPORT = "batch_import"
+    const val RECORD = "record"
     const val FOLLOW_LIST = "follow_list/{username}/{type}"
 
     fun activityDetail(activityId: String) = "activity/$activityId"

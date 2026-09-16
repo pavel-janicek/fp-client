@@ -273,6 +273,7 @@ private fun FitPubNavGraph(
                 onOpenPrivacyZones = { navController.navigate(Routes.PRIVACY_ZONES) },
                 onChangeInstance = { navController.navigate(Routes.SERVER_SETUP) },
                 onOpenBatchImport = { navController.navigate(Routes.BATCH_IMPORT) },
+                onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
             )
         }
@@ -284,6 +285,11 @@ private fun FitPubNavGraph(
         composable(Routes.BATCH_IMPORT) {
             com.fpclient.android.ui.settings.BatchImportScreen(
                 container = container,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.RECORD) {
+            com.fpclient.android.ui.record.RecordScreen(
                 onBack = { navController.popBackStack() },
             )
         }
