@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: Release 1.4.0
-Current app version: **`1.4.0`** (`versionCode` 33)
+Assessment date: 2026-08-25 · Last updated: 2.0 scaffolding (tracking engine on `feature/tracking-engine`)
+Current released app version: **`1.4.0`** (`versionCode` 33)
 
 ## Current state
 
@@ -66,6 +66,16 @@ post-1.0 minor/patch releases (1.1, 1.1.1, 1.2, …) track incremental
 hardening, renames, and platform-targeting work — recorded here and set
 in `app/build.gradle.kts` at each release.
 
+Release-process policy for v2.0: **no interim minor releases between gates.**
+Work towards 2.0 proceeds one roadmap feature per iteration, landed directly on
+the `Release-2.0` branch (the ledger below only records *shipped* versions —
+in-flight 2.0 scaffolding is noted inside the 2.0 row, not as phantom 1.x
+entries). After the last feature lands, `Release-2.0` enters a polish phase
+(final UI pass, lint, docs, versionName/versionCode bump); while it is
+polishing, any urgent fixes for the shipped 1.4 line are made on
+`Release-1.4` and merged into `Release-2.0` when applicable. Everything
+accumulated ships together as **v2.0**.
+
 Progress ledger (kept up to date per iteration):
 
 | Version | Milestone | Status |
@@ -104,7 +114,7 @@ Progress ledger (kept up to date per iteration):
 | **1.3.9** | **Share & route download:** activity detail gains a **Share** button in the top bar that opens the Android share sheet with the text "I just finished: {activity} check it out at: {instance}/activities/{id}" (title falls back to the capitalized activity type; link built via new `ShareLinks` helper from the configured instance URL); a **Download** button saves the route as a GPX file through the system file picker (`CreateDocument`, `application/gpx+xml`, suggested name `fitpub-route-{id}.gpx`), wired to the existing `GET /api/web/activities/{id}/route?format=gpx` endpoint with friendly error mapping (401/403/404/422); the enlarged full-screen map now closes via the same translucent top-right button that opened it (system Back still works) instead of a separate header row. Bump versionCode 32 / versionName 1.3.9; `FP-Client/1.3.9` user-agent. | ✅ done |
 | **1.4.0** | **Self-healing sessions:** realigned with FitPub `main` after commit `cb6acc84` (#474) made the JWT carry a mandatory `authenticationVersion` claim — the server now rejects (401 + cookie clear) any token issued before that change, so existing app installs looped on "Unauthorized". The session interceptor now treats a `401` on a request that carried the stored JWT as a permanently dead credential and clears the stored session (as a logout does), so the app returns to the login screen and a fresh sign-in mints a valid token; guests and failed logins are unaffected. This also covers expired fixed-lifetime JWTs and instances rotating their signing secret, which previously stranded users on "Unauthorized" the same way. `docs/API-COMPATIBILITY.md` documents the server change. Bump versionCode 33 / versionName 1.4.0; `FP-Client/1.4.0` user-agent. | ✅ done |
 | **1.4.1** | **Follow / Request-to-follow fixes:** the Follow button "did nothing" because the client's `FollowStatusDto` expected `canUnfollow`/`isFollowRequestPending` flags that the server's `GET /{username}/follow-status` never sends (it answers `{"isFollowing", "status": "NONE|PENDING|ACCEPTED|REJECTED"}`) — the dropped `status` string made `toggleFollow` compute "already following" for complete strangers and send the **unfollow** call (400 "Not following this user"), with the error invisible on the profile body. The DTO now carries `status` plus derived `isAccepted`/`isPending` flags every follow button branches on, and follow errors are surfaced under the profile Follow button. "Request to follow" failed with "user not found" for same-instance users reached via their full `@user@host` handle (follower lists always navigate with the full handle): the server classifies any `user@host` path segment as federated and routes it into WebFinger discovery instead of the local follow. New `ActorHandle.normalizeToUsername()` collapses same-instance handles to the plain local username before follow/unfollow/follow-status calls (genuinely remote handles pass through), `discover-remote`'s `local: true` is honored as authoritative locality, and the ProfileScreen buttons no longer stay permanently disabled when a follow-status fetch fails. Unit tests pin the DTO parsing against the real server payload and the handle normalization. | ✅ done |
-| **2.0** | + Iterations 7+8 — community-driven translations; record workouts on-device and share | ⬜ |
+| **2.0** | + Iterations 7+8 — community-driven translations; record workouts on-device and share. **Groundwork already landed on `feature/tracking-engine`** (Iteration 8b): `TrackRecordingService` records real GPS fixes with the framework `LocationManager` (no Play services, per project policy), `requestLocationUpdates(GPS_PROVIDER, 2 s, 2 m)`, fixes with accuracy > 20 m discarded, GPS detached while paused; every accepted fix is append-flushed to `files/recordings/track-<sessionStart>.jsonl` (single source of truth — live stats rebuilt by replaying the file on START_STICKY restore); live state via `TrackRecordingBus.stats` StateFlow (distance via haversine, elevation gain with 3-fix smoothing + 3 m hysteresis, point count, derived pace); groundwork Record screen shows live stats (full recording UI = 8c, GPX export = 8d); unit tests pin haversine/elevation/pace math and the crash-safe JSONL store. Still pending for 2.0: Iteration 7 (translations), 8a/8c/8d, then 2.0 polish. | ⬜ scaffolding |
 | **3.0** | + Iteration 9 — FitPub Wear companion app | ⬜ |
 
 ## Roadmap — one prompt per iteration

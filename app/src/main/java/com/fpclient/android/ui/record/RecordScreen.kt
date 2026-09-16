@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fpclient.android.recording.RecordingState
+import com.fpclient.android.recording.TrackMath
 import com.fpclient.android.recording.TrackRecordingBus
 import com.fpclient.android.recording.TrackRecordingController
 import com.fpclient.android.util.Format
@@ -64,6 +65,7 @@ fun RecordScreen(onBack: () -> Unit) {
 private fun RecordControls(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val session by TrackRecordingBus.session.collectAsState()
+    val stats by TrackRecordingBus.stats.collectAsState()
 
     // Wall-clock "now" that ticks while a session exists, so the elapsed label advances
     // without the snapshot itself changing every second.
@@ -95,6 +97,17 @@ private fun RecordControls(modifier: Modifier = Modifier) {
                 Format.duration(s.elapsedAt(now) / 1000),
                 style = MaterialTheme.typography.displayMedium,
             )
+            // Live track totals from the GPS engine (Iteration 8b); the full stats layout
+            // is Iteration 8c. Pace derives moving time over distance, metric for now.
+            Text(Format.distanceShort(stats.distanceM), style = MaterialTheme.typography.headlineSmall)
+            if (stats.hasFixes) {
+                Text(
+                    "Pace ${Format.pace(TrackMath.paceSecondsPerKm(s.movingMsAt(now), stats.distanceM), null)}" +
+                        " · ↑${stats.elevationGainM.toInt()} m",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             when (s.state) {
                 RecordingState.RECORDING -> Button(
                     onClick = { TrackRecordingController.pause(context) },
