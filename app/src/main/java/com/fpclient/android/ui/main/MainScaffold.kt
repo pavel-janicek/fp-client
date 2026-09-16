@@ -42,6 +42,7 @@ import com.fpclient.android.ui.navigation.Routes
 import com.fpclient.android.ui.notifications.NotificationsTabContent
 import com.fpclient.android.ui.notifications.NotificationsViewModel
 import com.fpclient.android.ui.profile.ProfileScreen
+import com.fpclient.android.ui.record.RecordingBanner
 import com.fpclient.android.ui.timeline.TimelineScreen
 import kotlinx.coroutines.launch
 
@@ -53,6 +54,7 @@ fun MainScaffold(
     onOpenActivity: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenCreate: () -> Unit,
+    onOpenRecord: () -> Unit = {},
     onOpenEditProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenFollowers: (String) -> Unit = {},
@@ -100,8 +102,14 @@ fun MainScaffold(
             }
         },
     ) { padding ->
-        val modifier = Modifier.padding(padding)
-        when (Routes.BottomTab.valueOf(selectedTab)) {
+        Column(
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) {
+            // App-wide "recording in progress" banner (Iteration 8c): visible above
+            // every tab while a GPS session runs; tapping it opens the live screen.
+            RecordingBanner(onOpen = onOpenRecord)
+            val modifier = Modifier.weight(1f).fillMaxWidth()
+            when (Routes.BottomTab.valueOf(selectedTab)) {
             Routes.BottomTab.TIMELINE -> TimelineScreen(
                 container = container,
                 unitSystem = unitSystem,
@@ -159,10 +167,12 @@ fun MainScaffold(
                     onOpenSettings = onOpenSettings,
                     modifier = modifier,
                     onOpenCreate = onOpenCreate,
+                    onOpenRecord = onOpenRecord,
                     onOpenFollowers = onOpenFollowers,
                     onOpenFollowing = onOpenFollowing,
                 )
             }
+        }
         }
     }
 }

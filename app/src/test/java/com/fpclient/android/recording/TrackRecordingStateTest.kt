@@ -117,4 +117,25 @@ class TrackRecordingStateTest {
         val map = mapOf("state" to "NOT_A_STATE", "started_at" to 1L, "accumulated_ms" to 0L, "last_resume_at" to -1L)
         assertNull(TrackRecordingStateStore.deserialize(map))
     }
+
+    @Test
+    fun `activity type chosen on the pre-start screen survives the round trip`() {
+        val s = TrackSessionSnapshot(RecordingState.RECORDING, 1_000_000L, 0L, 1_000_000L, "RIDE")
+        val restored = TrackRecordingStateStore.deserialize(TrackRecordingStateStore.serialize(s))!!
+        assertEquals("RIDE", restored.activityType)
+    }
+
+    @Test
+    fun `pre-8c persisted sessions restore with the default activity type`() {
+        // A session persisted by an older build carries no activity_type key; it must
+        // still restore (8a/8b compatibility) with the fallback label.
+        val legacy = mapOf(
+            "state" to "RECORDING",
+            "started_at" to 1L,
+            "accumulated_ms" to 0L,
+            "last_resume_at" to -1L,
+        )
+        val restored = TrackRecordingStateStore.deserialize(legacy)!!
+        assertEquals(TrackSessionSnapshot.DEFAULT_ACTIVITY_TYPE, restored.activityType)
+    }
 }

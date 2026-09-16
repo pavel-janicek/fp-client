@@ -25,6 +25,13 @@ data class TrackSessionSnapshot(
     val accumulatedMs: Long,
     /** Epoch ms of the last resume; null while paused (no segment is running). */
     val lastResumeAtEpochMs: Long?,
+    /**
+     * Activity type chosen on the Record pre-start screen (a member of
+     * [com.fpclient.android.data.dto.ActivityTypes.ALL], e.g. "RUN"). Persisted with the
+     * session so a process-death restore keeps the label, and Iteration 8d can preselect
+     * it for the uploaded activity.
+     */
+    val activityType: String = DEFAULT_ACTIVITY_TYPE,
 ) {
     /** Total elapsed time since the session started (includes paused stretches). */
     fun elapsedAt(nowMs: Long): Long = (nowMs - startedAtEpochMs).coerceAtLeast(0L)
@@ -33,6 +40,11 @@ data class TrackSessionSnapshot(
     fun movingMsAt(nowMs: Long): Long {
         val running = lastResumeAtEpochMs?.let { (nowMs - it).coerceAtLeast(0L) } ?: 0L
         return accumulatedMs + running
+    }
+
+    companion object {
+        /** Fallback when no type was chosen (or a pre-8c persisted session is restored). */
+        const val DEFAULT_ACTIVITY_TYPE = "OTHER"
     }
 }
 
@@ -45,6 +57,7 @@ object TrackRecordingBus {
 
     private val _session = MutableStateFlow<TrackSessionSnapshot?>(null)
     private val _stats = MutableStateFlow(TrackStats())
+    private val _points = MutableStateFlow<List<TrackPoint>>(emptyList())
 
     /** Non-null while a recording session exists (recording or paused). */
     val session: StateFlow<TrackSessionSnapshot?> = _session
@@ -56,13 +69,33 @@ object TrackRecordingBus {
      */
     val stats: StateFlow<TrackStats> = _stats
 
+    /**
+     * Every accepted fix of the active session, in order — consumed by the Record
+     * screen's mini-map (drawn polyline + live position dot). Reset when the session
+     * ends. One point per ~2 s fix, so copy-per-append is cheap enough.
+     */
+    val points: StateFlow<List<TrackPoint>> = _points
+
     fun publish(snapshot: TrackSessionSnapshot?) {
         _session.value = snapshot
-        if (snapshot == null) _stats.value = TrackStats()
+        if (snapshot == null) {
+            _stats.value = TrackStats()
+            _points.value = emptyList()
+        }
     }
 
     fun publishStats(stats: TrackStats) {
         _stats.value = stats
+    }
+
+    /** Appends one accepted fix to the live track (Iteration 8c mini-map). */
+    fun publishPoint(point: TrackPoint) {
+        _points.value = _points.value + point
+    }
+
+    /** Replaces the live track wholesale (process-death restore replays the file). */
+    fun publishPoints(points: List<TrackPoint>) {
+        _points.value = points
     }
 }
 
@@ -84,6 +117,7 @@ class TrackRecordingStateStore(context: Context) {
             .putLong(KEY_STARTED_AT, map[KEY_STARTED_AT] as Long)
             .putLong(KEY_ACCUMULATED_MS, map[KEY_ACCUMULATED_MS] as Long)
             .putLong(KEY_LAST_RESUME_AT, map[KEY_LAST_RESUME_AT] as Long)
+            .putString(KEY_ACTIVITY_TYPE, map[KEY_ACTIVITY_TYPE] as String?)
             .apply()
     }
 
@@ -93,6 +127,7 @@ class TrackRecordingStateStore(context: Context) {
             KEY_STARTED_AT to if (prefs.contains(KEY_STARTED_AT)) prefs.getLong(KEY_STARTED_AT, 0L) else null,
             KEY_ACCUMULATED_MS to if (prefs.contains(KEY_ACCUMULATED_MS)) prefs.getLong(KEY_ACCUMULATED_MS, 0L) else null,
             KEY_LAST_RESUME_AT to if (prefs.contains(KEY_LAST_RESUME_AT)) prefs.getLong(KEY_LAST_RESUME_AT, -1L) else null,
+            KEY_ACTIVITY_TYPE to prefs.getString(KEY_ACTIVITY_TYPE, null),
         ),
     )
 
@@ -106,6 +141,7 @@ class TrackRecordingStateStore(context: Context) {
         private const val KEY_STARTED_AT = "started_at"
         private const val KEY_ACCUMULATED_MS = "accumulated_ms"
         private const val KEY_LAST_RESUME_AT = "last_resume_at"
+        private const val KEY_ACTIVITY_TYPE = "activity_type"
 
         /**
          * Pure serialization of a snapshot into a prefs-shaped map (lastResumeAt of -1 encodes
@@ -116,6 +152,7 @@ class TrackRecordingStateStore(context: Context) {
             KEY_STARTED_AT to snapshot.startedAtEpochMs,
             KEY_ACCUMULATED_MS to snapshot.accumulatedMs,
             KEY_LAST_RESUME_AT to (snapshot.lastResumeAtEpochMs ?: -1L),
+            KEY_ACTIVITY_TYPE to snapshot.activityType,
         )
 
         /** Inverse of [serialize]; returns null for unknown/corrupt data (never crashes). */
@@ -125,7 +162,10 @@ class TrackRecordingStateStore(context: Context) {
             val startedAt = map[KEY_STARTED_AT] as? Long ?: return null
             val accumulated = map[KEY_ACCUMULATED_MS] as? Long ?: return null
             val lastResume = (map[KEY_LAST_RESUME_AT] as? Long)?.takeIf { it >= 0 }
-            return TrackSessionSnapshot(state, startedAt, accumulated, lastResume)
+            // Sessions persisted before 8c carry no type; they restore with the default.
+            val activityType = (map[KEY_ACTIVITY_TYPE] as? String)?.takeIf { it.isNotBlank() }
+                ?: TrackSessionSnapshot.DEFAULT_ACTIVITY_TYPE
+            return TrackSessionSnapshot(state, startedAt, accumulated, lastResume, activityType)
         }
     }
 }

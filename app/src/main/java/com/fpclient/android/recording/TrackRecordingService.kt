@@ -88,7 +88,11 @@ class TrackRecordingService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             TrackRecordingController.ACTION_START ->
-                if (snapshot == null) beginSession() else enterForeground()
+                if (snapshot == null) {
+                    // The chosen activity type rides on the start intent. A second start
+                    // while a session runs is a no-op — just re-promote the foreground.
+                    beginSession(intent.getStringExtra(TrackRecordingController.EXTRA_ACTIVITY_TYPE))
+                } else enterForeground()
             TrackRecordingController.ACTION_PAUSE ->
                 snapshot?.takeIf { it.state == RecordingState.RECORDING }?.let { pause(it) }
             TrackRecordingController.ACTION_RESUME ->
@@ -108,13 +112,15 @@ class TrackRecordingService : LifecycleService() {
         super.onDestroy()
     }
 
-    private fun beginSession() {
+    private fun beginSession(chosenActivityType: String?) {
         val now = System.currentTimeMillis()
         val fresh = TrackSessionSnapshot(
             state = RecordingState.RECORDING,
             startedAtEpochMs = now,
             accumulatedMs = 0L,
             lastResumeAtEpochMs = now,
+            activityType = chosenActivityType?.takeIf { it.isNotBlank() }
+                ?: TrackSessionSnapshot.DEFAULT_ACTIVITY_TYPE,
         )
         snapshot = fresh
         statsAccumulator = TrackStatsAccumulator()
@@ -195,13 +201,17 @@ class TrackRecordingService : LifecycleService() {
      */
     private fun replayStatsFromDisk(startedAtEpochMs: Long) {
         statsAccumulator = TrackStatsAccumulator()
-        try {
-            pointStore.readAll(startedAtEpochMs).forEach { statsAccumulator.add(it) }
+        val restoredPoints = try {
+            pointStore.readAll(startedAtEpochMs)
         } catch (_: Exception) {
             // A partially unreadable file must not take the service down; the stats then
             // simply continue from whatever decoded cleanly.
+            emptyList()
         }
+        restoredPoints.forEach { statsAccumulator.add(it) }
         TrackRecordingBus.publishStats(statsAccumulator.stats)
+        // The mini-map polyline is rebuilt too, so a restored session shows its full track.
+        TrackRecordingBus.publishPoints(restoredPoints)
     }
 
     // ------------------------------------------------------------------ GPS engine
@@ -257,6 +267,8 @@ class TrackRecordingService : LifecycleService() {
         }
         statsAccumulator.add(point)
         TrackRecordingBus.publishStats(statsAccumulator.stats)
+        // The live polyline + position dot on the Record screen's mini-map.
+        TrackRecordingBus.publishPoint(point)
     }
 
     /**

@@ -18,11 +18,17 @@ object TrackRecordingController {
     const val ACTION_RESUME = "com.fpclient.android.recording.action.RESUME"
     const val ACTION_STOP = "com.fpclient.android.recording.action.STOP"
 
+    /** Intent extra carrying the activity type chosen on the Record pre-start screen. */
+    const val EXTRA_ACTIVITY_TYPE = "com.fpclient.android.recording.extra.ACTIVITY_TYPE"
+
     /** True while a session exists (recording or paused). */
     fun isActive(): Boolean = TrackRecordingBus.session.value != null
 
-    fun start(context: Context) {
-        ContextCompat.startForegroundService(context, intent(context, ACTION_START))
+    fun start(context: Context, activityType: String = TrackSessionSnapshot.DEFAULT_ACTIVITY_TYPE) {
+        ContextCompat.startForegroundService(
+            context,
+            intent(context, ACTION_START).putExtra(EXTRA_ACTIVITY_TYPE, activityType),
+        )
     }
 
     fun pause(context: Context) {
