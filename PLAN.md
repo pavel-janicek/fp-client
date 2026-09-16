@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: Release 1.4.0
-Current app version: **`1.4.0`** (`versionCode` 33)
+Assessment date: 2026-08-25 · Last updated: Release 1.4.1
+Current app version: **`1.4.1`** (`versionCode` 34)
 
 ## Current state
 
