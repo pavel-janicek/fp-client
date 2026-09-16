@@ -5,9 +5,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.platform.app.InstrumentationRegistry
+import com.fpclient.android.AppContainer
+import com.fpclient.android.FitPubApplication
+import com.fpclient.android.recording.FinishedRecording
 import com.fpclient.android.recording.RecordingState
+import com.fpclient.android.recording.TrackPoint
 import com.fpclient.android.recording.TrackRecordingBus
 import com.fpclient.android.recording.TrackSessionSnapshot
+import com.fpclient.android.recording.TrackStats
 import com.fpclient.android.ui.theme.FPClientTheme
 import org.junit.After
 import org.junit.Before
@@ -50,10 +55,13 @@ class RecordFlowSmokeTest {
         )
     }
 
+    private fun container(): AppContainer =
+        FitPubApplication.container(InstrumentationRegistry.getInstrumentation().targetContext)
+
     @Test
     fun record_preStart_showsActivityPickerAndStartButton() {
         composeRule.setContent {
-            FPClientTheme { RecordScreen(onBack = {}) }
+            FPClientTheme { RecordScreen(container = container(), onBack = {}) }
         }
 
         composeRule.onNodeWithText("What are you doing?").assertIsDisplayed()
@@ -66,7 +74,7 @@ class RecordFlowSmokeTest {
     fun record_liveScreen_showsTimerControlsAndSettings() {
         publishActiveSession("RIDE")
         composeRule.setContent {
-            FPClientTheme { RecordScreen(onBack = {}) }
+            FPClientTheme { RecordScreen(container = container(), onBack = {}) }
         }
 
         composeRule.onNodeWithText("🚴 ride").assertIsDisplayed()

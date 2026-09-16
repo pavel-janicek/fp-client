@@ -37,14 +37,20 @@ import com.fpclient.android.ui.components.StatRow
 import com.fpclient.android.util.Format
 
 /**
- * The live recording screen (Iteration 8c): big elapsed timer, the GPS engine's live
+ * The live recording screen (Iteration 8c + 8d): big elapsed timer, the GPS engine's live
  * totals (distance, pace over moving time, elevation gain), pause/resume/stop with a
  * stop confirmation, keep-screen-on toggle, and the optional live mini-map. Observes
  * [TrackRecordingBus]; pausing freezes GPS but the elapsed clock keeps running —
  * exactly the web app's semantics.
+ *
+ * Stopping reports the session id through [onStopRequested] *before* the service is told,
+ * so the caller can open the post-workout summary once the session is really gone.
  */
 @Composable
-fun LiveRecordingScreen(modifier: Modifier = Modifier) {
+fun LiveRecordingScreen(
+    modifier: Modifier = Modifier,
+    onStopRequested: (Long) -> Unit = {},
+) {
     val context = LocalContext.current
     val session by TrackRecordingBus.session.collectAsState()
     val stats by TrackRecordingBus.stats.collectAsState()
@@ -131,14 +137,20 @@ fun LiveRecordingScreen(modifier: Modifier = Modifier) {
                 title = { Text("Stop recording?") },
                 text = {
                     Text(
-                        "The track is saved on this device. Exporting and sharing it " +
-                            "comes in a later update.",
+                        "The track is saved on this device and you can review and " +
+                            "share it right away.",
                     )
                 },
                 confirmButton = {
-                    Button(onClick = { confirmStop = false; TrackRecordingController.stop(context) }) {
-                        Text("Stop")
-                    }
+                    Button(
+                        onClick = {
+                            confirmStop = false
+                            // Report the session id first: the summary opens as soon as
+                            // the service has ended the session and exported the GPX.
+                            onStopRequested(s.startedAtEpochMs)
+                            TrackRecordingController.stop(context)
+                        },
+                    ) { Text("Stop") }
                 },
                 dismissButton = {
                     OutlinedButton(onClick = { confirmStop = false }) { Text("Keep recording") }

@@ -39,6 +39,19 @@ class TrackPointStore(private val baseDir: File) {
         w.flush()
     }
 
+    /**
+     * Appends a pause/resume boundary marker (Iteration 8d). Markers are plain comment
+     * lines the point decoder ignores, so readAll()/stats replay are unaffected — while
+     * readSegments() uses them to cut the track into one GPX trkseg per paused segment.
+     */
+    @Synchronized
+    fun appendMarker(startedAtEpochMs: Long, marker: String) {
+        val w = writer?.takeIf { writerSessionStart == startedAtEpochMs } ?: newWriter(startedAtEpochMs)
+        w.write("$marker ${System.currentTimeMillis()}")
+        w.newLine()
+        w.flush()
+    }
+
     /** Reads every decodable point of a session, in file order (oldest first). */
     @Synchronized
     fun readAll(startedAtEpochMs: Long): List<TrackPoint> {
@@ -46,6 +59,36 @@ class TrackPointStore(private val baseDir: File) {
         if (!file.exists()) return emptyList()
         return file.useLines { lines -> lines.mapNotNull { decodeLine(it) }.toList() }
     }
+
+    /**
+     * Reads a session as one point list per paused segment: every [MARKER_PAUSE] /
+     * [MARKER_RESUME] boundary closes the current segment and the next accepted fixes
+     * open the following one. Empty segments (e.g. an immediate pause) are dropped.
+     * Sessions without markers come back as a single segment.
+     */
+    @Synchronized
+    fun readSegments(startedAtEpochMs: Long): List<List<TrackPoint>> {
+        val file = fileFor(startedAtEpochMs)
+        if (!file.exists()) return emptyList()
+        val segments = mutableListOf<List<TrackPoint>>()
+        var current = mutableListOf<TrackPoint>()
+        file.useLines { lines ->
+            lines.forEach { raw ->
+                val line = raw.trim()
+                when {
+                    line.startsWith(MARKER_PAUSE) || line.startsWith(MARKER_RESUME) ->
+                        if (current.isNotEmpty()) {
+                            segments.add(current)
+                            current = mutableListOf()
+                        }
+                    else -> decodeLine(line)?.let(current::add)
+                }
+            }
+        }
+        if (current.isNotEmpty()) segments.add(current)
+        return segments
+    }
+
 
     /** The most recently persisted fix of a session, or null. */
     @Synchronized
@@ -76,6 +119,10 @@ class TrackPointStore(private val baseDir: File) {
     companion object {
         const val FILE_PREFIX = "track-"
         const val FILE_EXT = "jsonl"
+
+        /** Pause/resume boundary markers (Iteration 8d); written as comment lines. */
+        const val MARKER_PAUSE = "#PAUSE"
+        const val MARKER_RESUME = "#RESUME"
 
         private val lineJson = Json { ignoreUnknownKeys = true }
 

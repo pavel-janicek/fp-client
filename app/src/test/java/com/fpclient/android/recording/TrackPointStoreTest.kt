@@ -88,6 +88,37 @@ class TrackPointStoreTest {
     }
 
     @Test
+    fun `pause and resume markers split the track into one segment per paused stretch`() {
+        val store = newStore()
+        val session = 8L
+        val first = TrackPoint(1.0, 1.0, 0.0, 1L, 1.0)
+        val second = TrackPoint(2.0, 2.0, 0.0, 2L, 1.0)
+        val third = TrackPoint(3.0, 3.0, 0.0, 3L, 1.0)
+        store.append(session, first)
+        store.appendMarker(session, TrackPointStore.MARKER_PAUSE)
+        store.appendMarker(session, TrackPointStore.MARKER_RESUME)
+        store.append(session, second)
+        store.append(session, third)
+        store.closeWriter()
+
+        val segments = store.readSegments(session)
+        assertEquals(listOf(listOf(first), listOf(second, third)), segments)
+        // Markers are not fixes: stats-relevant point reads stay unaffected.
+        assertEquals(3, store.readAll(session).size)
+    }
+
+    @Test
+    fun `a session without markers reads as a single segment while a paused-only one reads empty`() {
+        val store = newStore()
+        val point = TrackPoint(1.0, 1.0, 0.0, 1L, 1.0)
+        store.append(1L, point)
+        store.appendMarker(1L, TrackPointStore.MARKER_PAUSE)
+        store.closeWriter()
+        assertEquals(listOf(listOf(point)), store.readSegments(1L))
+        assertEquals(emptyList<List<TrackPoint>>(), store.readSegments(2L))
+    }
+
+    @Test
     fun `delete removes the session file`() {
         val store = newStore()
         val session = 7L

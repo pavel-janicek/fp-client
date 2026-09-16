@@ -49,6 +49,24 @@ data class TrackSessionSnapshot(
 }
 
 /**
+ * The session as it was the moment recording stopped (Iteration 8d): the last snapshot,
+ * the final stats and every accepted fix. Published once by the service on stop and
+ * consumed by the post-workout summary screen; cleared when the summary is dismissed.
+ * The persisted JSONL/GPX files stay on disk regardless, so a dismissed summary remains
+ * reachable later through the pending-upload list.
+ */
+data class FinishedRecording(
+    val snapshot: TrackSessionSnapshot,
+    val stats: TrackStats,
+    val points: List<TrackPoint>,
+    /** Epoch ms the stop was performed — freezes the moving time shown in the summary. */
+    val endedAtEpochMs: Long,
+) {
+    /** Moving time of the whole session (accumulated segments + the last running one). */
+    val movingMs: Long get() = snapshot.movingMsAt(endedAtEpochMs)
+}
+
+/**
  * In-process shared state between the foreground service and any Compose UI. The service
  * is the single writer; screens observe [session]. Lives outside the service instance so
  * it also survives configuration changes and is readable before the service is bound.
@@ -58,6 +76,7 @@ object TrackRecordingBus {
     private val _session = MutableStateFlow<TrackSessionSnapshot?>(null)
     private val _stats = MutableStateFlow(TrackStats())
     private val _points = MutableStateFlow<List<TrackPoint>>(emptyList())
+    private val _finished = MutableStateFlow<FinishedRecording?>(null)
 
     /** Non-null while a recording session exists (recording or paused). */
     val session: StateFlow<TrackSessionSnapshot?> = _session
@@ -75,6 +94,9 @@ object TrackRecordingBus {
      * ends. One point per ~2 s fix, so copy-per-append is cheap enough.
      */
     val points: StateFlow<List<TrackPoint>> = _points
+
+    /** Non-null right after a session was stopped, until the summary is dismissed. */
+    val finished: StateFlow<FinishedRecording?> = _finished
 
     fun publish(snapshot: TrackSessionSnapshot?) {
         _session.value = snapshot
@@ -96,6 +118,16 @@ object TrackRecordingBus {
     /** Replaces the live track wholesale (process-death restore replays the file). */
     fun publishPoints(points: List<TrackPoint>) {
         _points.value = points
+    }
+
+    /** Publishes the just-stopped session for the post-workout summary (Iteration 8d). */
+    fun publishFinished(finished: FinishedRecording) {
+        _finished.value = finished
+    }
+
+    /** Dismisses the post-workout summary (called when the summary screen closes). */
+    fun clearFinished() {
+        _finished.value = null
     }
 }
 
