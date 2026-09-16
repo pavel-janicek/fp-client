@@ -40,6 +40,7 @@ import com.fpclient.android.data.dto.CommentDto
 import com.fpclient.android.data.dto.LikeDto
 import com.fpclient.android.data.dto.ReactionPalette
 import com.fpclient.android.data.network.ApiResult
+import com.fpclient.android.util.ActorHandle
 import com.fpclient.android.util.Format
 import com.fpclient.android.util.ShareLinks
 import com.fpclient.android.util.TrackParser
@@ -112,16 +113,25 @@ class ActivityDetailViewModel(
         val status = _ui.value.followStatus
         viewModelScope.launch {
             _ui.value = _ui.value.copy(followBusy = true)
-            // No cached status (fresh visitor): default to follow; pending request cancels via unfollow.
-            val result = if (status != null && (status.isFollowing || status.canUnfollow || status.isFollowRequestPending)) {
-                users.unfollow(owner)
+            // The server classifies any `user@host` path segment as a federated handle
+            // and routes it into WebFinger discovery ("user not found"), so collapse
+            // same-instance handles to the plain local username first.
+            val target = ActorHandle.normalizeToUsername(owner, appViewModel.uiState.value.serverUrl) ?: run {
+                _ui.value = _ui.value.copy(followBusy = false)
+                return@launch
+            }
+            // An accepted follow AND a pending request are both removed via the unfollow
+            // endpoint; no cached status (fresh visitor) defaults to follow.
+            val shouldUnfollow = status != null && (status.isAccepted || status.isPending)
+            val result = if (shouldUnfollow) {
+                users.unfollow(target)
             } else {
-                users.follow(owner)
+                users.follow(target)
             }
             when (result) {
             is ApiResult.Success -> {
                     // Re-fetch authoritative state instead of guessing flags client-side.
-                    when (val f = users.followStatus(owner)) {
+                    when (val f = users.followStatus(target)) {
                         is ApiResult.Success -> _ui.value = _ui.value.copy(followStatus = f.data, followBusy = false)
                         else -> _ui.value = _ui.value.copy(followBusy = false)
                     }
