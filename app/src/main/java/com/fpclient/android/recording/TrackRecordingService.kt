@@ -17,6 +17,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import com.fpclient.android.FitPubApplication
 import com.fpclient.android.MainActivity
 import com.fpclient.android.R
 import com.fpclient.android.util.Format
@@ -73,7 +74,7 @@ class TrackRecordingService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         store = TrackRecordingStateStore(this)
-        pointStore = TrackPointStore(File(filesDir, TRACKS_DIR))
+        pointStore = TrackPointStore(File(filesDir, RecordingShareManager.TRACKS_DIR))
         locationManager = getSystemService(LocationManager::class.java)
         createNotificationChannel()
         // Restore before anything else so UI launched later observes the right state
@@ -126,6 +127,9 @@ class TrackRecordingService : LifecycleService() {
         statsAccumulator = TrackStatsAccumulator()
         TrackRecordingBus.publish(fresh)
         TrackRecordingBus.publishStats(TrackStats())
+        // A new session supersedes the previous workout's summary (Iteration 8d); its
+        // files stay on disk and remain reachable through the pending-upload list.
+        TrackRecordingBus.clearFinished()
         store.save(fresh)
         enterForeground()
         startGps(fresh.startedAtEpochMs)
@@ -142,6 +146,10 @@ class TrackRecordingService : LifecycleService() {
         snapshot = paused
         TrackRecordingBus.publish(paused)
         store.save(paused)
+        // Segment boundary for the GPX export (Iteration 8d): each pause/resume pair
+        // becomes a separate <trkseg>, so the exported track shows where the workout
+        // stopped instead of joining the gap with a straight line.
+        pointStore.appendMarker(current.startedAtEpochMs, TrackPointStore.MARKER_PAUSE)
         stopGps() // no fixes are accepted while paused; save the radio
         stopTicker()
         enterForeground() // refresh notification: paused title + Resume action
@@ -156,12 +164,15 @@ class TrackRecordingService : LifecycleService() {
         snapshot = resumed
         TrackRecordingBus.publish(resumed)
         store.save(resumed)
+        // Opens the next GPX segment (see pause()).
+        pointStore.appendMarker(resumed.startedAtEpochMs, TrackPointStore.MARKER_RESUME)
         enterForeground()
         startGps(resumed.startedAtEpochMs)
         startTicker()
     }
 
     private fun stopSession() {
+        val current = snapshot
         stopTicker()
         stopGps()
         pointStore.closeWriter()
@@ -170,8 +181,42 @@ class TrackRecordingService : LifecycleService() {
         snapshot = null
         TrackRecordingBus.publish(null)
         store.clear()
+        // Stop is the moment Iteration 8d takes over: publish the finished session for the
+        // summary screen (stats + every fix) and register it as a pending upload with its
+        // GPX 1.1 export already written to app-private storage — so the workout stays
+        // reachable even if the process dies before the summary is used. The export is a
+        // single small file write, done here (not in a coroutine that stopSelf would
+        // cancel) so the entry is guaranteed to exist.
+        if (current != null) finishSession(current)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** Publishes the just-stopped session and registers its GPX as a pending upload. */
+    private fun finishSession(current: TrackSessionSnapshot) {
+        val points = try {
+            pointStore.readAll(current.startedAtEpochMs)
+        } catch (_: Exception) {
+            // A partially unreadable file must not lose the summary; whatever decoded is
+            // shown, and the pending entry is only created when an export succeeded.
+            emptyList()
+        }
+        val accumulator = TrackStatsAccumulator()
+        points.forEach { accumulator.add(it) }
+        TrackRecordingBus.publishFinished(
+            FinishedRecording(
+                snapshot = current,
+                stats = accumulator.stats,
+                points = points,
+                endedAtEpochMs = System.currentTimeMillis(),
+            ),
+        )
+        try {
+            FitPubApplication.container(this).recordingShareManager.registerPending(current)
+        } catch (_: Exception) {
+            // Registration is best-effort: the summary's share button registers the entry
+            // again on a failed upload.
+        }
     }
 
 
@@ -380,9 +425,6 @@ class TrackRecordingService : LifecycleService() {
         private const val CHANNEL_ID = "track_recording"
         private const val NOTIFICATION_ID = 4001
         private const val PERSIST_EVERY_TICKS = 30
-
-        /** Directory (under filesDir) holding the append-only track files. */
-        private const val TRACKS_DIR = "recordings"
 
         /** GPS request cadence — PLAN 8b: ~1-3 s interval, ~2 m min distance. */
         private const val GPS_INTERVAL_MS = 2_000L

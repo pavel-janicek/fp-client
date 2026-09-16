@@ -10,6 +10,7 @@ import com.fpclient.android.data.repository.NotificationRepository
 import com.fpclient.android.data.repository.PrivacyZoneRepository
 import com.fpclient.android.data.repository.TimelineRepository
 import com.fpclient.android.data.repository.UserRepository
+import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.data.session.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -37,4 +38,14 @@ class AppContainer(context: Context) {
     val notificationRepository: NotificationRepository by lazy { NotificationRepository(apiClient.api) }
     val privacyZoneRepository: PrivacyZoneRepository by lazy { PrivacyZoneRepository(apiClient.api) }
     val batchImportRepository: BatchImportRepository by lazy { BatchImportRepository(apiClient.api) }
+
+    /**
+     * Save & share of recorded workouts (Iteration 8d): GPX export from the persisted
+     * track file, the pending-upload registry, upload/retry through the regular multipart
+     * endpoint. Held here (not in the Record screen) so the retry-on-start pass and the
+     * summary screen share one instance — and one pending-upload flow.
+     */
+    val recordingShareManager: RecordingShareManager by lazy {
+        RecordingShareManager(context, activityRepository, activitiesVersion)
+    }
 }
