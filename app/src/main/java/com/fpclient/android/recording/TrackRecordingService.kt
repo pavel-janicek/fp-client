@@ -7,7 +7,11 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -16,34 +20,61 @@ import androidx.lifecycle.lifecycleScope
 import com.fpclient.android.MainActivity
 import com.fpclient.android.R
 import com.fpclient.android.util.Format
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Foreground service skeleton for on-device track recording (Iteration 8a groundwork).
- * Declared in the manifest with foregroundServiceType="location". The GPS engine lands in
- * Iteration 8b; this class already owns the full session lifecycle (start/pause/resume/
- * stop), the ongoing notification (elapsed time + pause/resume/stop actions), persistence
- * for process death, and the shared state bus the UI observes.
+ * Foreground service for on-device track recording (Iterations 8a + 8b).
+ * Declared in the manifest with foregroundServiceType="location". Owns the session
+ * lifecycle (start/pause/resume/stop), the ongoing notification (elapsed time +
+ * pause/resume/stop actions), the GPS engine (framework LocationManager — the project
+ * deliberately avoids Google Play services), incremental track-point persistence, and
+ * the shared state bus the UI observes.
+ *
+ * GPS engine (8b): requestLocationUpdates at 2 s / 2 m; fixes with accuracy worse than
+ * [TrackMath.MAX_ACCURACY_M] are discarded. Every accepted fix is appended to an
+ * append-only JSONL file ([TrackPointStore]) and folded into [TrackStats] published on
+ * the bus. While paused, GPS updates are detached entirely.
  *
  * Survivability contract:
  *  - Returns START_STICKY; when the OS restarts it after process death the intent is
  *    null and the session is restored from [TrackRecordingStateStore] into exactly the
  *    state it had (recording keeps its elapsed time, because it is wall-clock derived).
- *  - The snapshot is persisted on every state transition and periodically while recording,
- *    bounding what a sudden process death can lose.
+ *  - Track points survive process death by construction (append-only file, flushed per
+ *    fix). Stats are rebuilt on restore by replaying that file — the file is the single
+ *    source of truth, nothing is recomputed from process memory.
  */
 class TrackRecordingService : LifecycleService() {
 
     private lateinit var store: TrackRecordingStateStore
+    private lateinit var pointStore: TrackPointStore
     private var snapshot: TrackSessionSnapshot? = null
     private var ticker: Job? = null
+    private var statsAccumulator = TrackStatsAccumulator()
+    private var locationManager: LocationManager? = null
+    private var gpsActive = false
+
+    private val locationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            onFix(location)
+        }
+
+        // Empty overrides required pre-API 30 (the interface has default implementations
+        // only from API 30; minSdk is 26, so they must exist explicitly).
+        @Deprecated("Deprecated in Java")
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+        override fun onProviderEnabled(provider: String) = Unit
+        override fun onProviderDisabled(provider: String) = Unit
+    }
 
     override fun onCreate() {
         super.onCreate()
         store = TrackRecordingStateStore(this)
+        pointStore = TrackPointStore(File(filesDir, TRACKS_DIR))
+        locationManager = getSystemService(LocationManager::class.java)
         createNotificationChannel()
         // Restore before anything else so UI launched later observes the right state
         // instead of a transient "idle".
@@ -72,6 +103,8 @@ class TrackRecordingService : LifecycleService() {
     override fun onDestroy() {
         // Last-chance persist: whatever state we die in must be restorable.
         snapshot?.let { store.save(it) }
+        stopGps()
+        pointStore.closeWriter()
         super.onDestroy()
     }
 
@@ -84,9 +117,12 @@ class TrackRecordingService : LifecycleService() {
             lastResumeAtEpochMs = now,
         )
         snapshot = fresh
+        statsAccumulator = TrackStatsAccumulator()
         TrackRecordingBus.publish(fresh)
+        TrackRecordingBus.publishStats(TrackStats())
         store.save(fresh)
         enterForeground()
+        startGps(fresh.startedAtEpochMs)
         startTicker()
     }
 
@@ -100,6 +136,7 @@ class TrackRecordingService : LifecycleService() {
         snapshot = paused
         TrackRecordingBus.publish(paused)
         store.save(paused)
+        stopGps() // no fixes are accepted while paused; save the radio
         stopTicker()
         enterForeground() // refresh notification: paused title + Resume action
     }
@@ -114,11 +151,16 @@ class TrackRecordingService : LifecycleService() {
         TrackRecordingBus.publish(resumed)
         store.save(resumed)
         enterForeground()
+        startGps(resumed.startedAtEpochMs)
         startTicker()
     }
 
     private fun stopSession() {
         stopTicker()
+        stopGps()
+        pointStore.closeWriter()
+        // The track file is deliberately KEPT: Iteration 8d turns it into the GPX export
+        // and the post-workout summary. Only the active-session marker is cleared.
         snapshot = null
         TrackRecordingBus.publish(null)
         store.clear()
@@ -138,8 +180,83 @@ class TrackRecordingService : LifecycleService() {
         }
         snapshot = restored
         TrackRecordingBus.publish(restored)
+        replayStatsFromDisk(restored.startedAtEpochMs)
         enterForeground()
-        if (restored.state == RecordingState.RECORDING) startTicker()
+        if (restored.state == RecordingState.RECORDING) {
+            startGps(restored.startedAtEpochMs)
+            startTicker()
+        }
+    }
+
+    /**
+     * Rebuilds the live stats by replaying the persisted track file. The file is the
+     * single source of truth for distance/elevation/count — this makes a process-death
+     * restore exactly consistent no matter what the dying process had in memory.
+     */
+    private fun replayStatsFromDisk(startedAtEpochMs: Long) {
+        statsAccumulator = TrackStatsAccumulator()
+        try {
+            pointStore.readAll(startedAtEpochMs).forEach { statsAccumulator.add(it) }
+        } catch (_: Exception) {
+            // A partially unreadable file must not take the service down; the stats then
+            // simply continue from whatever decoded cleanly.
+        }
+        TrackRecordingBus.publishStats(statsAccumulator.stats)
+    }
+
+    // ------------------------------------------------------------------ GPS engine
+
+    private fun startGps(startedAtEpochMs: Long) {
+        val lm = locationManager ?: return
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return // the UI permission gate prevents this in practice; fail soft here
+        }
+        if (gpsActive) return
+        try {
+            // PLAN 8b: ~1-3 s interval, ~2 m min distance.
+            lm.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                GPS_INTERVAL_MS,
+                GPS_MIN_DISTANCE_M,
+                locationListener,
+                mainLooper,
+            )
+            gpsActive = true
+        } catch (_: SecurityException) {
+            // Permission revoked mid-session; the notification flow keeps running.
+        } catch (_: IllegalArgumentException) {
+            // GPS provider absent (unlikely on phones); fail soft.
+        }
+    }
+
+    private fun stopGps() {
+        if (!gpsActive) return
+        locationManager?.removeUpdates(locationListener)
+        gpsActive = false
+    }
+
+    /** One GPS fix arrived: filter, persist, fold into the live stats. Main thread. */
+    private fun onFix(location: Location) {
+        val current = snapshot ?: return
+        if (current.state != RecordingState.RECORDING) return
+        if (!TrackMath.isAcceptableAccuracy(location.accuracy.toDouble())) return
+
+        val point = TrackPoint(
+            lat = location.latitude,
+            lon = location.longitude,
+            ele = if (location.hasAltitude()) location.altitude else 0.0,
+            time = if (location.time > 0) location.time else System.currentTimeMillis(),
+            accuracy = location.accuracy.toDouble(),
+        )
+        try {
+            pointStore.append(current.startedAtEpochMs, point)
+        } catch (_: Exception) {
+            // Disk hiccup: keep the session alive, skip this fix rather than crash the
+            // foreground service.
+            return
+        }
+        statsAccumulator.add(point)
+        TrackRecordingBus.publishStats(statsAccumulator.stats)
     }
 
     /**
@@ -251,5 +368,12 @@ class TrackRecordingService : LifecycleService() {
         private const val CHANNEL_ID = "track_recording"
         private const val NOTIFICATION_ID = 4001
         private const val PERSIST_EVERY_TICKS = 30
+
+        /** Directory (under filesDir) holding the append-only track files. */
+        private const val TRACKS_DIR = "recordings"
+
+        /** GPS request cadence — PLAN 8b: ~1-3 s interval, ~2 m min distance. */
+        private const val GPS_INTERVAL_MS = 2_000L
+        private const val GPS_MIN_DISTANCE_M = 2f
     }
 }

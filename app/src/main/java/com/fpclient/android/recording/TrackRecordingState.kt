@@ -44,12 +44,25 @@ data class TrackSessionSnapshot(
 object TrackRecordingBus {
 
     private val _session = MutableStateFlow<TrackSessionSnapshot?>(null)
+    private val _stats = MutableStateFlow(TrackStats())
 
     /** Non-null while a recording session exists (recording or paused). */
     val session: StateFlow<TrackSessionSnapshot?> = _session
 
+    /**
+     * Live track totals (distance, elevation gain, fix count) fed by the service's GPS
+     * engine; reset to zero when no session is active. Elapsed/moving time are not here —
+     * they derive from [session]'s wall-clock math so they keep ticking between fixes.
+     */
+    val stats: StateFlow<TrackStats> = _stats
+
     fun publish(snapshot: TrackSessionSnapshot?) {
         _session.value = snapshot
+        if (snapshot == null) _stats.value = TrackStats()
+    }
+
+    fun publishStats(stats: TrackStats) {
+        _stats.value = stats
     }
 }
 
