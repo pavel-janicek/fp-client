@@ -102,14 +102,37 @@ data class ChangePasswordRequest(
 @Serializable
 data class FollowStatusDto(
     val username: String? = null,
+    // The server's GET /{username}/follow-status actually answers with
+    // {"isFollowing": bool, "status": "NONE|PENDING|ACCEPTED|REJECTED"}.
     val isFollowing: Boolean = false,
+    val status: String? = null,
+    // Defensive fields for richer payloads (e.g. follower-list responses); the
+    // follow-status endpoint does not send them, so never branch on these alone.
     val isFollowRequestPending: Boolean = false,
     val isFollowRequestReceived: Boolean = false,
     val isFollowingBack: Boolean = false,
     val canFollow: Boolean = false,
     val canUnfollow: Boolean = false,
     val isOwnProfile: Boolean = false,
-)
+) {
+    /**
+     * An accepted follow relationship. Server maps `isFollowing` to status ACCEPTED;
+     * branch on this (never on [isFollowing] alone) so the `status` string is honored.
+     */
+    val isAccepted: Boolean
+        get() = isFollowing || canUnfollow || status.equals("ACCEPTED", ignoreCase = true)
+
+    /**
+     * An outgoing follow request awaiting the target's approval (server status PENDING).
+     * Cancelled through the same unfollow endpoint as an accepted follow.
+     */
+    val isPending: Boolean
+        get() = isFollowRequestPending || status.equals("PENDING", ignoreCase = true)
+
+    /** Incoming follow request sent to us (not part of the follow-status payload yet). */
+    val isReceived: Boolean
+        get() = isFollowRequestReceived
+}
 
 @Serializable
 data class FollowResultDto(

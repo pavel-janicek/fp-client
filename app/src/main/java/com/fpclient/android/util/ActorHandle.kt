@@ -50,4 +50,32 @@ object ActorHandle {
         val body = handle?.trim()?.removePrefix("@") ?: ""
         return if (body.contains('@')) body.substringBefore('@') else body
     }
+
+    /**
+     * Normalizes a follow target for the server's `POST/DELETE /users/{username}/follow`
+     * and `follow-status` endpoints. The server only accepts PLAIN usernames for local
+     * users — any `user@host` value is classified as a federated handle and routed into
+     * WebFinger discovery, which fails with "user not found" for accounts that actually
+     * live on our own instance. So:
+     *  - `alice` (or `@alice`) + any serverUrl            -> `alice`
+     *  - `@alice@fitpub.example` + serverUrl on same host -> `alice`
+     *  - `@alice@other.example`                           -> `@alice@other.example`
+     *       (kept as a handle: genuinely remote targets go through the remote branch)
+     * Returns null for blank input.
+     */
+    fun normalizeToUsername(handle: String?, serverUrl: String?): String? {
+        if (handle.isNullOrBlank()) return null
+        val trimmed = handle.trim().removePrefix("@")
+        if (!trimmed.contains('@')) return trimmed.takeIf { it.isNotBlank() }
+        val local = trimmed.substringBefore('@')
+        val host = hostOf("https://${trimmed.substringAfter('@')}")
+        val ownHost = hostOf(serverUrl)
+        return if (local.isNotBlank() && host != null && ownHost != null &&
+            host.equals(ownHost, ignoreCase = true)
+        ) {
+            local
+        } else {
+            "@$local@$host".takeIf { local.isNotBlank() && host != null }
+        }
+    }
 }
