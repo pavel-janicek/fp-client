@@ -130,8 +130,8 @@ fun SettingsScreen(
                     }
                 }
             }
-            // Temporary entry point for the Iteration 8a recording groundwork; Iteration 8c
-            // moves the flow to its own Record entry point in the main UI.
+            // Recording entry point: the flow itself lives in the main UI since Iteration
+            // 8c (Record button on Timeline/Me); this card is the secondary discovery path.
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text("Recording", style = MaterialTheme.typography.titleSmall)

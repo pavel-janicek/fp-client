@@ -210,6 +210,7 @@ private fun FitPubNavGraph(
                 onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
                 onOpenCreate = { navController.navigate(Routes.CREATE) },
+                onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },

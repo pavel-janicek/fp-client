@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -238,6 +239,7 @@ fun ProfileScreen(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenCreate: () -> Unit = {},
+    onOpenRecord: () -> Unit = {},
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
 ) {
@@ -300,6 +302,12 @@ fun ProfileScreen(
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier.align(Alignment.TopEnd),
             ) {
+                // Record (Iteration 8c) + create + settings, top-right on the Me tab.
+                if (isMe) {
+                    IconButton(onClick = onOpenRecord) {
+                        Icon(Icons.Filled.FiberManualRecord, contentDescription = "Record workout")
+                    }
+                }
                 IconButton(onClick = onOpenCreate) {
                     Icon(Icons.Filled.Add, contentDescription = "New activity")
                 }
