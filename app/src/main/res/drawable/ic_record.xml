@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Record ring (outer circle + inner hole, even-odd filled). -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,3 a9,9 0 1,0 0.001,0 Z M12,7 a5,5 0 1,1 -0.001,0 Z" />
+</vector>

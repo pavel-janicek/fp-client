@@ -3,6 +3,17 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- On-device track recording (Iteration 8a groundwork). COARSE is requested alongside
+         FINE so the system dialog offers the "approximate only" path; recording only starts
+         after FINE is granted. FOREGROUND_SERVICE_LOCATION (API 34+) is required to promote
+         a service with foregroundServiceType="location". POST_NOTIFICATIONS (API 33+) is
+         needed for the ongoing recording notification to be visible. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".FitPubApplication"
         android:allowBackup="true"
@@ -41,6 +52,10 @@
                 <data android:mimeType="text/xml" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".recording.TrackRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
     </application>
 
 </manifest>
