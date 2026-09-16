@@ -148,6 +148,7 @@ private fun PreStartScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        RecordingHealthCard(showBattery = true)
         message?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -198,12 +199,29 @@ private fun PendingUploadsSection(
 
 /** One not-yet-shared workout: when it was recorded, its retry state and its actions. */
 @Composable
-private fun PendingUploadCard(
+internal fun PendingUploadCard(
     entry: PendingUpload,
     busy: Boolean,
     onOpen: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    var confirmDiscard by rememberSaveable(entry.sessionId) { mutableStateOf(false) }
+    if (confirmDiscard) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Discard this workout?") },
+            text = { Text("The recording will be permanently deleted from this device.") },
+            confirmButton = {
+                Button(enabled = !busy, onClick = {
+                    confirmDiscard = false
+                    onDiscard()
+                }) { Text("Delete workout") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { confirmDiscard = false }) { Text("Keep workout") }
+            },
+        )
+    }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -227,7 +245,7 @@ private fun PendingUploadCard(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = onOpen, enabled = !busy) { Text("Review & share") }
-                OutlinedButton(onClick = onDiscard, enabled = !busy) { Text("Discard") }
+                OutlinedButton(onClick = { confirmDiscard = true }, enabled = !busy) { Text("Discard") }
             }
         }
     }

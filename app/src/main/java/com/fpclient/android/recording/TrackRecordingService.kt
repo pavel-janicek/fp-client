@@ -114,6 +114,7 @@ class TrackRecordingService : LifecycleService() {
     }
 
     private fun beginSession(chosenActivityType: String?) {
+        TrackRecordingBus.publishStorageError(null)
         val now = System.currentTimeMillis()
         val fresh = TrackSessionSnapshot(
             state = RecordingState.RECORDING,
@@ -132,6 +133,7 @@ class TrackRecordingService : LifecycleService() {
         TrackRecordingBus.clearFinished()
         store.save(fresh)
         enterForeground()
+        if (snapshot == null || pauseForLowStorage()) return
         startGps(fresh.startedAtEpochMs)
         startTicker()
     }
@@ -149,23 +151,46 @@ class TrackRecordingService : LifecycleService() {
         // Segment boundary for the GPX export (Iteration 8d): each pause/resume pair
         // becomes a separate <trkseg>, so the exported track shows where the workout
         // stopped instead of joining the gap with a straight line.
-        pointStore.appendMarker(current.startedAtEpochMs, TrackPointStore.MARKER_PAUSE)
+        try {
+            pointStore.appendMarker(current.startedAtEpochMs, TrackPointStore.MARKER_PAUSE)
+        } catch (_: java.io.IOException) {
+            TrackRecordingBus.publishStorageError("Track storage failed. Recording paused; free space before resuming.")
+        } catch (_: SecurityException) {
+            TrackRecordingBus.publishStorageError("Track storage is inaccessible. Recording paused.")
+        } finally {
+            pointStore.closeWriter()
+        }
         stopGps() // no fixes are accepted while paused; save the radio
         stopTicker()
         enterForeground() // refresh notification: paused title + Resume action
     }
 
+    /** Returns true when recording must not continue; keeps already saved fixes intact. */
+    private fun pauseForLowStorage(): Boolean {
+        if (RecordingHealth.hasStorage(filesDir.usableSpace)) return false
+        snapshot?.takeIf { it.state == RecordingState.RECORDING }?.let { pause(it) }
+        TrackRecordingBus.publishStorageError(
+            "Storage is low. Recording paused; free at least 10 MiB before resuming.",
+        )
+        return true
+    }
+
+
     private fun resume(current: TrackSessionSnapshot) {
         val now = System.currentTimeMillis()
-        val resumed = current.copy(
-            state = RecordingState.RECORDING,
-            lastResumeAtEpochMs = now,
-        )
+        val resumed = RecordingHealth.resumeIfWritable(current, now, filesDir.usableSpace) {
+            pointStore.appendMarker(current.startedAtEpochMs, TrackPointStore.MARKER_RESUME)
+        }
+        if (resumed == null) {
+            pointStore.closeWriter()
+            TrackRecordingBus.publishStorageError("Cannot resume: free storage and try again. Your recording is still paused.")
+            enterForeground()
+            return
+        }
+        TrackRecordingBus.publishStorageError(null)
         snapshot = resumed
         TrackRecordingBus.publish(resumed)
         store.save(resumed)
-        // Opens the next GPX segment (see pause()).
-        pointStore.appendMarker(resumed.startedAtEpochMs, TrackPointStore.MARKER_RESUME)
         enterForeground()
         startGps(resumed.startedAtEpochMs)
         startTicker()
@@ -233,7 +258,7 @@ class TrackRecordingService : LifecycleService() {
         TrackRecordingBus.publish(restored)
         replayStatsFromDisk(restored.startedAtEpochMs)
         enterForeground()
-        if (restored.state == RecordingState.RECORDING) {
+        if (snapshot != null && restored.state == RecordingState.RECORDING && !pauseForLowStorage()) {
             startGps(restored.startedAtEpochMs)
             startTicker()
         }
@@ -294,7 +319,8 @@ class TrackRecordingService : LifecycleService() {
     private fun onFix(location: Location) {
         val current = snapshot ?: return
         if (current.state != RecordingState.RECORDING) return
-        if (!TrackMath.isAcceptableAccuracy(location.accuracy.toDouble())) return
+        if (pauseForLowStorage()) return
+        if (!location.hasAccuracy() || !TrackMath.isAcceptableAccuracy(location.accuracy.toDouble())) return
 
         val point = TrackPoint(
             lat = location.latitude,
@@ -306,8 +332,8 @@ class TrackRecordingService : LifecycleService() {
         try {
             pointStore.append(current.startedAtEpochMs, point)
         } catch (_: Exception) {
-            // Disk hiccup: keep the session alive, skip this fix rather than crash the
-            // foreground service.
+            TrackRecordingBus.publishStorageError("Track write failed. Recording paused; free storage before resuming.")
+            pause(current)
             return
         }
         statsAccumulator.add(point)
@@ -387,6 +413,7 @@ class TrackRecordingService : LifecycleService() {
             var ticksSincePersist = 0
             while (isActive) {
                 delay(1_000)
+                if (pauseForLowStorage()) break
                 if (canNotify()) {
                     NotificationManagerCompat.from(this@TrackRecordingService)
                         .notify(NOTIFICATION_ID, buildNotification())

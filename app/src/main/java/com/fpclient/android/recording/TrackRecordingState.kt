@@ -73,6 +73,14 @@ data class FinishedRecording(
  */
 object TrackRecordingBus {
 
+    private val _storageError = MutableStateFlow<String?>(null)
+    val storageError: StateFlow<String?> = _storageError
+
+    fun publishStorageError(message: String?) {
+        _storageError.value = message
+    }
+
+
     private val _session = MutableStateFlow<TrackSessionSnapshot?>(null)
     private val _stats = MutableStateFlow(TrackStats())
     private val _points = MutableStateFlow<List<TrackPoint>>(emptyList())
