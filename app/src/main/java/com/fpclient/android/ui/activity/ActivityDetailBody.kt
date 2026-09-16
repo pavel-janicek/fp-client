@@ -229,8 +229,8 @@ private fun AuthorCard(
                 val status = ui.followStatus
                 val label = when {
                     status == null -> "Follow"
-                    status.isFollowing || status.canUnfollow -> "Unfollow"
-                    status.isFollowRequestPending -> "Request sent"
+                    status.isAccepted -> "Unfollow"
+                    status.isPending -> "Request sent"
                     else -> "Follow"
                 }
                 androidx.compose.material3.OutlinedButton(

@@ -178,19 +178,30 @@ class ProfileViewModel(
     fun toggleFollow() {
         // On locked (private) profiles there is no user object — fall back to the
         // username the screen was opened for, otherwise request-to-follow breaks.
-        val target = (_ui.value.user?.username ?: _ui.value.username)?.takeIf { it.isNotBlank() && it != "me" } ?: return
-        val isRemote = _ui.value.isRemoteProfile
-        // For remote profiles, follow status comes from the discover-remote endpoint as a string.
+        val raw = (_ui.value.user?.username ?: _ui.value.username)?.takeIf { it.isNotBlank() && it != "me" } ?: return
+        // The discover-remote response is authoritative about locality: a handle can
+        // LOOK remote (host alias, port, ...), yet the actor may live on our own
+        // instance — and the server's follow endpoint only accepts plain usernames
+        // for local users, so same-instance handles must be collapsed first.
+        val isRemote = _ui.value.isRemoteProfile && _ui.value.actor?.local != true
+        val target = if (isRemote) {
+            raw.trim().removePrefix("@")
+        } else {
+            ActorHandle.normalizeToUsername(raw, appViewModel.uiState.value.serverUrl) ?: return
+        }
         val remoteFollowStatus = _ui.value.actor?.followStatus
         val status = _ui.value.followStatus
         viewModelScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null)
-            val isFollowing = if (isRemote) {
+            // An accepted follow AND a pending request are both removed via the
+            // unfollow endpoint (the server cancels pending requests the same way).
+            // No status yet → default to follow, matching the button label.
+            val shouldUnfollow = if (isRemote) {
                 remoteFollowStatus == "ACCEPTED" || remoteFollowStatus == "PENDING"
             } else {
-                status == null || !(status.isFollowing || status.canUnfollow || status.isFollowRequestPending)
+                status != null && (status.isAccepted || status.isPending)
             }
-            val result = if (isFollowing) {
+            val result = if (shouldUnfollow) {
                 users.unfollow(target)
             } else {
                 users.follow(target)
@@ -407,15 +418,23 @@ private fun ProfileBody(
                     OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
                 } else {
                     val status = ui.followStatus
-                    val following = status?.isFollowing == true || status?.canUnfollow == true
-                    Button(onClick = onToggleFollow, enabled = !ui.busy && status != null, modifier = Modifier.fillMaxWidth()) {
+                    val following = status?.isAccepted == true
+                    Button(onClick = onToggleFollow, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
                         Text(
                             when {
                                 status?.isFollowRequestReceived == true -> "Respond to follow request"
                                 following -> "Unfollow"
-                                status?.isFollowRequestPending == true -> "Requested"
+                                status?.isPending == true -> "Requested"
                                 else -> "Follow"
                             },
+                        )
+                    }
+                    if (ui.error != null) {
+                        Text(
+                            ui.error!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp),
                         )
                     }
                 }
@@ -502,14 +521,14 @@ private fun RemoteProfileBody(
             )
         }
         Spacer(Modifier.height(16.dp))
-        val following = status?.isFollowing == true || status?.canUnfollow == true
+        val following = status?.isAccepted == true
         Button(
             onClick = onToggleFollow,
             enabled = !busy,
         ) {
             Text(
                 when {
-                    status?.isFollowRequestPending == true -> "Request sent"
+                    status?.isPending == true -> "Request sent"
                     following -> "Unfollow"
                     else -> "Request to follow"
                 },
@@ -552,15 +571,15 @@ private fun LockedProfileBody(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
-        val following = status?.isFollowing == true || status?.canUnfollow == true
+        val following = status?.isAccepted == true
         Button(
             onClick = onToggleFollow,
-            enabled = !busy && status != null,
+            enabled = !busy,
             modifier = Modifier.padding(top = 16.dp),
         ) {
             Text(
                 when {
-                    status?.isFollowRequestPending == true -> "Request sent"
+                    status?.isPending == true -> "Request sent"
                     following -> "Unfollow"
                     else -> "Request to follow"
                 },
