@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.record
 
+import android.view.MotionEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -29,8 +31,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 
-/**
- * The mini-map of the Record flow (Iteration 8c + 8d): draws the accepted fixes as a
+/** The mini-map of the Record flow (Iteration 8c + 8d): draws the accepted fixes as a
  * polyline with the most recent one highlighted by a position dot, and follows the dot
  * by default. Panning turns following off (it would otherwise fight the user); the
  * floating recenter button turns it back on. Rebuilt per fix emission — at the 2 s fix
@@ -45,25 +46,35 @@ fun LiveTrackMap(
     points: List<TrackPoint>,
     modifier: Modifier = Modifier,
     fitTrack: Boolean = false,
+    interactive: Boolean = !fitTrack,
 ) {
     var follow by remember { mutableStateOf(true) }
     var fitted by remember { mutableStateOf(false) }
 
-    Box(modifier) {
+    Box(modifier.clipToBounds()) {
         AndroidView(
             factory = { context ->
                 MapView(context).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
-                    setMultiTouchControls(true)
+                    setMultiTouchControls(interactive)
+                    isClickable = interactive
+                    isFocusable = interactive
+                    if (!interactive) {
+                        setOnTouchListener { _, _ -> true }
+                    } else {
+                        setOnTouchListener { v, event ->
+                            if (event.action == MotionEvent.ACTION_DOWN) {
+                                v.parent?.requestDisallowInterceptTouchEvent(true)
+                            }
+                            false
+                        }
+                    }
                     controller.setZoom(16.0)
-                    // Any manual pan stops the auto-follow; the floating button below
-                    // re-centres on the live dot. Zooming keeps following.
                     addMapListener(object : MapListener {
                         override fun onScroll(event: ScrollEvent?): Boolean {
                             follow = false
                             return true
                         }
-
                         override fun onZoom(event: ZoomEvent?): Boolean = true
                     })
                 }
@@ -79,8 +90,6 @@ fun LiveTrackMap(
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     }.also { map.overlays.add(it) }
                     when {
-                        // Review mode: frame the whole track, but only once — re-fitting on
-                        // every emission would undo the user's own zoom/pan.
                         fitTrack && !fitted -> {
                             map.post {
                                 map.zoomToBoundingBox(
@@ -90,9 +99,7 @@ fun LiveTrackMap(
                             }
                             fitted = true
                         }
-
                         fitTrack -> Unit
-
                         follow -> map.controller.animateTo(geoPoints.last())
                     }
                 }
@@ -101,7 +108,7 @@ fun LiveTrackMap(
             onRelease = { map -> map.onDetach() },
             modifier = Modifier.fillMaxSize(),
         )
-        if (!follow && !fitTrack) {
+        if (!follow && !fitTrack && interactive) {
             FilledTonalIconButton(
                 onClick = { follow = true },
                 modifier = Modifier

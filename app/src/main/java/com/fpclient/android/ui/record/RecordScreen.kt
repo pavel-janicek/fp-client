@@ -8,20 +8,27 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -129,6 +136,9 @@ private fun PreStartScreen(
 ) {
     val context = LocalContext.current
     var selected by rememberSaveable { mutableStateOf("RUN") }
+    // GPS warm-up while the user picks the type: feedback that the device already
+    // knows the start position (mini-map dot + accuracy line below).
+    val prestartFix = rememberPrestartFix()
 
     Column(
         modifier = modifier
@@ -137,7 +147,8 @@ private fun PreStartScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("What are you doing?", style = MaterialTheme.typography.titleMedium)
-        ActivityTypePicker(selected = selected, onSelect = { selected = it })
+        ActivityTypeDropdown(selected = selected, onSelect = { selected = it })
+        PrestartLocationPreview(fix = prestartFix)
         Button(
             onClick = { TrackRecordingController.start(context, selected) },
             modifier = Modifier.fillMaxWidth(),
