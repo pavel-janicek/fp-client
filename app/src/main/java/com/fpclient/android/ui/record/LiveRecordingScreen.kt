@@ -122,6 +122,7 @@ fun LiveRecordingScreen(
         }
         SettingRow("Keep screen on", keepScreenOn) { keepScreenOn = it }
         SettingRow("Show mini-map", showMap) { showMap = it }
+        RecordingHealthCard()
         if (showMap) {
             LiveTrackMap(
                 points = points,
