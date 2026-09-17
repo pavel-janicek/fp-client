@@ -5,10 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -47,11 +44,10 @@ import com.fpclient.android.util.Format
  * [TrackRecordingBus]; pausing freezes GPS but the elapsed clock keeps running —
  * exactly the web app's semantics.
  *
- * Layout: the whole column scrolls (timer + controls always reachable, toggles above
- * the map so they can never end up behind it); the map keeps a 220 dp minimum and
- * grows into leftover space. Landscape is locked to portrait while recording — a
- * rotating sweaty-phone map remounts the osmdroid view (flicker) and pushes Pause/Stop
- * below the fold.
+ * Layout: portrait-locked while recording; timer + Pause/Stop + toggles on top, the
+ * mini-map fills the leftover space (large and finger-interactive, never behind or
+ * over other controls). Landscape is locked because a rotating sweaty-phone map
+ * remounts the osmdroid view (flicker) and pushes Pause/Stop below the fold.
  *
  * Stopping reports the session id through [onStopRequested] *before* the service is told,
  * so the caller can open the post-workout summary once the session is really gone.
@@ -86,13 +82,21 @@ fun LiveRecordingScreen(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Outer column is NOT scrollable on purpose: the whole screen fits without
+        // scrolling on a normal phone, and a nested scroll container would steal the
+        // map's pan/zoom gestures (an osmdroid MapView inside verticalScroll can
+        // neither scroll the page nor be interacted with reliably).
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
         Text(
             if (s.state == RecordingState.PAUSED) "⏸ paused" else activityLabel(s.activityType),
             style = MaterialTheme.typography.titleMedium,
@@ -145,13 +149,17 @@ fun LiveRecordingScreen(
         SettingRow("Show mini-map", showMap) { showMap = it }
         RecordingHealthCard()
         if (showMap) {
+            // Weight-based INSIDE the non-scrollable column: fills all leftover space
+            // (large, finger-friendly map) without pushing anything off-screen, and the
+            // osmdroid view keeps its own touch handling (pan/zoom/recenter work).
             LiveTrackMap(
                 points = points,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 220.dp),
+                    .weight(1f, fill = true),
             )
         }
+        } // content column (non-scrollable so the map keeps touch handling)
 
         if (confirmStop) {
             AlertDialog(

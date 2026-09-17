@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -34,10 +37,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fpclient.android.AppContainer
@@ -51,6 +57,8 @@ import com.fpclient.android.util.Format
 import com.fpclient.android.util.TextLimits
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -83,7 +91,7 @@ fun WorkoutSummaryScreen(
     var title by rememberSaveable(sessionId) { mutableStateOf(initialTitle) }
     var description by rememberSaveable(sessionId) { mutableStateOf(initialDescription) }
     var visibility by rememberSaveable(sessionId) { mutableStateOf(initialVisibility) }
-    var type by rememberSaveable(sessionId) { mutableStateOf(activityType) }
+    val type = activityType
     var confirmDiscard by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -98,11 +106,15 @@ fun WorkoutSummaryScreen(
             )
         },
     ) { padding ->
+        // Fixed-height review map: 220 dp keeps it inside the scroll flow so it can
+        // never overlay the form below (title/description/visibility/share stay put).
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
+                .imePadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -140,14 +152,31 @@ fun WorkoutSummaryScreen(
                     onClose = onClose,
                 )
             } else {
+                // No activity-type picker here: the type was chosen before Start and is
+                // shown in the header — re-picking post-workout invites accidental swaps.
+                Text(
+                    "Details for FitPub (optional)",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                // Same logic as the comment composer: when the keyboard opens, scroll
+                // the focused field above it instead of letting it hide underneath.
+                val fieldScope = rememberCoroutineScope()
+                fun scrollFieldIntoView() {
+                    fieldScope.launch {
+                        // Let the IME settle before scrolling, or the offset is stale and
+                        // the field still ends up under the keyboard.
+                        delay(150)
+                        runCatching { scrollState.animateScrollTo(scrollState.maxValue) }
+                    }
+                }
                 ShareForm(
                     ui = ui,
-                    type = type,
-                    onTypeChange = { type = it },
                     title = title,
                     onTitleChange = { title = it.take(TextLimits.ACTIVITY_TITLE) },
+                    onTitleFocused = { scrollFieldIntoView() },
                     description = description,
                     onDescriptionChange = { description = it.take(TextLimits.ACTIVITY_DESCRIPTION) },
+                    onDescriptionFocused = { scrollFieldIntoView() },
                     visibility = visibility,
                     onVisibilityChange = { visibility = it },
                     onShare = {
@@ -190,25 +219,27 @@ fun WorkoutSummaryScreen(
 @Composable
 private fun ShareForm(
     ui: WorkoutSummaryViewModel.UiState,
-    type: String,
-    onTypeChange: (String) -> Unit,
     title: String,
     onTitleChange: (String) -> Unit,
+    onTitleFocused: () -> Unit,
     description: String,
     onDescriptionChange: (String) -> Unit,
+    onDescriptionFocused: () -> Unit,
     visibility: String,
     onVisibilityChange: (String) -> Unit,
     onShare: () -> Unit,
     onDiscard: () -> Unit,
 ) {
-    Text("Activity type", style = MaterialTheme.typography.labelLarge)
-    ActivityTypePicker(selected = type, onSelect = onTypeChange)
     OutlinedTextField(
         value = title,
         onValueChange = onTitleChange,
         label = { Text("Title (optional)") },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+        keyboardActions = KeyboardActions(onNext = { /* Next focuses description via tap; scroll handled on focus */ }),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { if (it.isFocused) onTitleFocused() },
     )
     OutlinedTextField(
         value = description,
@@ -216,7 +247,8 @@ private fun ShareForm(
         label = { Text("Description (optional)") },
         modifier = Modifier
             .fillMaxWidth()
-            .height(100.dp),
+            .height(100.dp)
+            .onFocusChanged { if (it.isFocused) onDescriptionFocused() },
     )
     Text("Visibility", style = MaterialTheme.typography.labelLarge)
     VisibilityPicker(selected = visibility, onSelect = onVisibilityChange)
