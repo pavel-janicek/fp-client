@@ -13,14 +13,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -33,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,16 +46,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fpclient.android.AppContainer
 import com.fpclient.android.data.dto.ActivityTypes
 import com.fpclient.android.recording.PendingUpload
+import com.fpclient.android.recording.TrackMath
+import com.fpclient.android.recording.TrackPoint
 import com.fpclient.android.recording.TrackRecordingBus
 import com.fpclient.android.recording.TrackRecordingController
 import com.fpclient.android.util.Format
 import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import android.content.pm.PackageManager
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Looper
 
 /**
  * The Record flow (Iteration 8c + 8d). A single route with two modes driven by the shared
@@ -300,3 +309,143 @@ fun rememberTicker(): Long {
     return now
 }
 
+
+
+/**
+ * Current GPS position for the pre-start screen: while the user picks the activity
+ * type, the phone already warms up its fix, so Start begins with a known position and
+ * the mini-map gives feedback that the device "knows" where the activity starts.
+ * Emits null until the first acceptable fix (same accuracy bar as recording).
+ */
+@Composable
+fun rememberPrestartFix(): TrackPoint? {
+    val context = LocalContext.current
+    var fix by remember { mutableStateOf<TrackPoint?>(null) }
+    DisposableEffect(context) {
+        val manager = ContextCompat.getSystemService(context, LocationManager::class.java)
+        if (manager == null ||
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACCESS_FINE_LOCATION,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return@DisposableEffect onDispose { }
+        }
+        val listener = LocationListener { location ->
+            if (!location.hasAccuracy() ||
+                !TrackMath.isAcceptableAccuracy(location.accuracy.toDouble())
+            ) {
+                return@LocationListener
+            }
+            fix = TrackPoint(
+                lat = location.latitude,
+                lon = location.longitude,
+                ele = location.altitude,
+                time = location.time,
+                accuracy = location.accuracy.toDouble(),
+            )
+        }
+        var registered = false
+        runCatching {
+            manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let(listener::onLocationChanged)
+            manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let {
+                if (fix == null) listener.onLocationChanged(it)
+            }
+        }
+        runCatching {
+            manager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                2_000L,
+                2f,
+                listener,
+                Looper.getMainLooper(),
+            )
+            registered = true
+        }
+        onDispose {
+            if (registered) runCatching { manager.removeUpdates(listener) }
+        }
+    }
+    return fix
+}
+
+/** Searchable activity-type dropdown over [ActivityTypes.ALL] — replaces the full
+ * chip grid so 19 types fit in one compact, findable field. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ActivityTypeDropdown(selected: String, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(query) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) ActivityTypes.ALL
+        else ActivityTypes.ALL.filter { it.lowercase().replace('_', ' ').contains(q) }
+    }
+    Box {
+        OutlinedTextField(
+            value = activityLabel(selected),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Activity type") },
+            trailingIcon = {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Filled.ExpandMore, contentDescription = "Show menu")
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Search activities") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+            filtered.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(activityLabel(type)) },
+                    onClick = {
+                        onSelect(type)
+                        expanded = false
+                    },
+                )
+            }
+            if (filtered.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("No matching activity") },
+                    onClick = {},
+                    enabled = false,
+                )
+            }
+        }
+    }
+}
+
+/** Pre-start GPS status: a non-interactive mini-map with the warmed-up fix (or a
+ * "searching" line until the first acceptable fix arrives). */
+@Composable
+private fun PrestartLocationPreview(fix: TrackPoint?) {
+    if (fix == null) {
+        Text(
+            "Searching for GPS… stand still outside for the fastest fix.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        LiveTrackMap(
+            points = listOf(fix),
+            fitTrack = true,
+            interactive = false,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+        )
+        Text(
+            "GPS ready (±${fix.accuracy.toInt()} m) — Start begins tracking here.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
