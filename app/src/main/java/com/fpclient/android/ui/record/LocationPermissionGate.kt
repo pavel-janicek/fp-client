@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /**
  * Runtime permission gate for track recording (Iteration 8a groundwork).
@@ -50,6 +52,27 @@ fun LocationPermissionGate(content: @Composable () -> Unit) {
     var granted by remember { mutableStateOf(hasRecordingPermissions(context)) }
     var showRationale by remember { mutableStateOf(false) }
     var permanentlyDenied by remember { mutableStateOf(false) }
+
+    // Re-check on every resume: the permission dialog (or the system settings page)
+    // takes the user away from the app, and the cached `granted` value would otherwise
+    // stay stale — the Record screen would keep showing the explanation card even
+    // though the permission was just granted. This is why recording only worked after
+    // revisiting the screen (e.g. via the Me tab, which recreated the gate).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val nowGranted = hasRecordingPermissions(context)
+                granted = nowGranted
+                if (nowGranted) {
+                    permanentlyDenied = false
+                    showRationale = false
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),

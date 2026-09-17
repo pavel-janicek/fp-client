@@ -118,6 +118,7 @@ fun MainScaffold(
                 onOpenActivity = onOpenActivity,
                 onOpenProfile = onOpenProfile,
                 onOpenCreate = onOpenCreate,
+                onOpenRecord = onOpenRecord,
                 onRequireSignIn = {
                     scope.launch {
                         // Clearing the guest flag switches to the auth flow.
