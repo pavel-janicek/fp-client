@@ -3,8 +3,12 @@ package com.fpclient.android.ui.record
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -38,10 +42,16 @@ import com.fpclient.android.util.Format
 
 /**
  * The live recording screen (Iteration 8c + 8d): big elapsed timer, the GPS engine's live
- * totals (distance, pace over moving time, elevation gain), pause/resume/stop with a
+ * totals (distance, pace over moving time, elevation gain/loss), pause/resume/stop with a
  * stop confirmation, keep-screen-on toggle, and the optional live mini-map. Observes
  * [TrackRecordingBus]; pausing freezes GPS but the elapsed clock keeps running —
  * exactly the web app's semantics.
+ *
+ * Layout: the whole column scrolls (timer + controls always reachable, toggles above
+ * the map so they can never end up behind it); the map keeps a 220 dp minimum and
+ * grows into leftover space. Landscape is locked to portrait while recording — a
+ * rotating sweaty-phone map remounts the osmdroid view (flicker) and pushes Pause/Stop
+ * below the fold.
  *
  * Stopping reports the session id through [onStopRequested] *before* the service is told,
  * so the caller can open the post-workout summary once the session is really gone.
@@ -51,6 +61,11 @@ fun LiveRecordingScreen(
     modifier: Modifier = Modifier,
     onStopRequested: (Long) -> Unit = {},
 ) {
+    // No landscape while recording: rotating mid-workout remounts the osmdroid view
+    // (map flicker) and pushes Pause/Stop below the fold. Portrait keeps the timer,
+    // controls and map in one stable, reachable column.
+    LockPortraitWhileRecording()
+
     val context = LocalContext.current
     val session by TrackRecordingBus.session.collectAsState()
     val stats by TrackRecordingBus.stats.collectAsState()
@@ -71,7 +86,10 @@ fun LiveRecordingScreen(
     }
 
     Column(
-        modifier = modifier.padding(16.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -131,7 +149,7 @@ fun LiveRecordingScreen(
                 points = points,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .heightIn(min = 220.dp),
             )
         }
 
@@ -173,5 +191,16 @@ private fun SettingRow(label: String, checked: Boolean, onChecked: (Boolean) -> 
     ) {
         Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         Switch(checked = checked, onCheckedChange = onChecked)
+    }
+}
+
+@Composable
+private fun LockPortraitWhileRecording() {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity ?: return
+    DisposableEffect(activity) {
+        val previous = activity.requestedOrientation
+        activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onDispose { activity.requestedOrientation = previous }
     }
 }
