@@ -115,7 +115,7 @@ Progress ledger (kept up to date per iteration):
 | **1.4.0** | **Self-healing sessions:** realigned with FitPub `main` after commit `cb6acc84` (#474) made the JWT carry a mandatory `authenticationVersion` claim — the server now rejects (401 + cookie clear) any token issued before that change, so existing app installs looped on "Unauthorized". The session interceptor now treats a `401` on a request that carried the stored JWT as a permanently dead credential and clears the stored session (as a logout does), so the app returns to the login screen and a fresh sign-in mints a valid token; guests and failed logins are unaffected. This also covers expired fixed-lifetime JWTs and instances rotating their signing secret, which previously stranded users on "Unauthorized" the same way. `docs/API-COMPATIBILITY.md` documents the server change. Bump versionCode 33 / versionName 1.4.0; `FP-Client/1.4.0` user-agent. | ✅ done |
 | **1.4.1** | **Follow / Request-to-follow fixes:** the Follow button "did nothing" because the client's `FollowStatusDto` expected `canUnfollow`/`isFollowRequestPending` flags that the server's `GET /{username}/follow-status` never sends (it answers `{"isFollowing", "status": "NONE|PENDING|ACCEPTED|REJECTED"}`) — the dropped `status` string made `toggleFollow` compute "already following" for complete strangers and send the **unfollow** call (400 "Not following this user"), with the error invisible on the profile body. The DTO now carries `status` plus derived `isAccepted`/`isPending` flags every follow button branches on, and follow errors are surfaced under the profile Follow button. "Request to follow" failed with "user not found" for same-instance users reached via their full `@user@host` handle (follower lists always navigate with the full handle): the server classifies any `user@host` path segment as federated and routes it into WebFinger discovery instead of the local follow. New `ActorHandle.normalizeToUsername()` collapses same-instance handles to the plain local username before follow/unfollow/follow-status calls (genuinely remote handles pass through), `discover-remote`'s `local: true` is honored as authoritative locality, and the ProfileScreen buttons no longer stay permanently disabled when a follow-status fetch fails. Unit tests pin the DTO parsing against the real server payload and the handle normalization. | ✅ done |
 | **2.0.0-alpha** | **Recording polish:** active workouts now surface GPS-off, prolonged no-fix, and low-storage warnings while recording; the release also includes the 8e battery guidance, storage safeguards, and discard confirmations. Bump versionCode 34 / versionName 2.0.0-alpha; `FP-Client/2.0.0-alpha` user-agent. | 🔄 in progress |
-| **2.0** | + Iterations 7+8 — community-driven translations; record workouts on-device and share. **Groundwork already landed on `feature/tracking-engine`**: (Iteration 8a/8b) `TrackRecordingService` records real GPS fixes with the framework `LocationManager` (no Play services, per project policy), `requestLocationUpdates(GPS_PROVIDER, 2 s, 2 m)`, fixes with accuracy > 20 m discarded, GPS detached while paused; every accepted fix is append-flushed to `files/recordings/track-<sessionStart>.jsonl` (single source of truth — live stats rebuilt by replaying the file on START_STICKY restore); live state via `TrackRecordingBus` (session + stats + points flows; distance via haversine, elevation gain with 3-fix smoothing + 3 m hysteresis, point count, derived pace). (Iteration 8c) the full Record flow UI: Route RECORD with pre-start activity-type picker (ActivityTypes), live recording screen (big elapsed timer, distance/pace/elevation, pause/resume, stop with confirmation, keep-screen-on toggle), osmdroid mini-map with live position dot + polyline (pan stops auto-follow, recenter button), Record entry next to the + on Timeline (stacked small FAB) and Me tab, app-wide "recording in progress" banner above every tab with quick pause/resume, and a second-session guard (pre-start only exists while idle; service no-ops a duplicate start); the chosen activity type is persisted with the session snapshot (pre-8c sessions restore with the default). Unit tests pin the bus/point accumulation, the activity-type persistence round trip, and the haversine/elevation/pace math; instrumented smoke tests cover pre-start, live screen, and banner. (Iteration 8d) on stop the session is assembled into a GPX 1.1 file (`GpxBuilder`: trk/trkseg/trkpt with ele + time, one trkseg per paused segment via `#PAUSE`/`#RESUME` markers in the track file, strict UTC second-precision timestamps) in app-private storage and registered in a file-backed pending-upload registry (`pending_uploads.json`); the post-workout summary route (`workout_summary/{sessionId}`) shows stats + mini-map with title/description/visibility/activity-type pickers, uploads via the same multipart endpoint as the upload form (`POST api/web/activities/upload`, activity type reconciled with a follow-up metadata update), persists the entered metadata on failure for retries (automatic retry pass on app start + manual retry from the Record screen's "waiting to be shared" list), cleans up track + GPX files after a successful import, and offers navigation to the created ActivityDetail; privacy zones are applied server-side on import exactly as for any uploaded track. Unit tests pin the GPX document shape and the pending-store round trip. Still pending for 2.0: Iteration 7 (translations), then 2.0 polish. | 🔄 in progress — 8d done |
+| **2.0** | + Iterations 7+8 — community-driven translations; record workouts on-device and share. **Groundwork already landed on `feature/tracking-engine`**: (Iteration 8a/8b) `TrackRecordingService` records real GPS fixes with the framework `LocationManager` (no Play services, per project policy), `requestLocationUpdates(GPS_PROVIDER, 2 s, 2 m)`, fixes with accuracy > 20 m discarded, GPS detached while paused; every accepted fix is append-flushed to `files/recordings/track-<sessionStart>.jsonl` (single source of truth — live stats rebuilt by replaying the file on START_STICKY restore); live state via `TrackRecordingBus` (session + stats + points flows; distance via haversine, elevation gain with 3-fix smoothing + 3 m hysteresis, point count, derived pace). (Iteration 8c) the full Record flow UI: Route RECORD with pre-start activity-type picker (ActivityTypes), live recording screen (big elapsed timer, distance/pace/elevation, pause/resume, stop with confirmation, keep-screen-on toggle), osmdroid mini-map with live position dot + polyline (pan stops auto-follow, recenter button), Record entry next to the + on Timeline (stacked small FAB) and Me tab, app-wide "recording in progress" banner above every tab with quick pause/resume, and a second-session guard (pre-start only exists while idle; service no-ops a duplicate start); the chosen activity type is persisted with the session snapshot (pre-8c sessions restore with the default). Unit tests pin the bus/point accumulation, the activity-type persistence round trip, and the haversine/elevation/pace math; instrumented smoke tests cover pre-start, live screen, and banner. (Iteration 8d) on stop the session is assembled into a GPX 1.1 file (`GpxBuilder`: trk/trkseg/trkpt with ele + time, one trkseg per paused segment via `#PAUSE`/`#RESUME` markers in the track file, strict UTC second-precision timestamps) in app-private storage and registered in a file-backed pending-upload registry (`pending_uploads.json`); the post-workout summary route (`workout_summary/{sessionId}`) shows stats + mini-map with title/description/visibility/activity-type pickers, uploads via the same multipart endpoint as the upload form (`POST api/web/activities/upload`, activity type reconciled with a follow-up metadata update), persists the entered metadata on failure for retries (automatic retry pass on app start + manual retry from the Record screen's "waiting to be shared" list), cleans up track + GPX files after a successful import, and offers navigation to the created ActivityDetail; privacy zones are applied server-side on import exactly as for any uploaded track. Unit tests pin the GPX document shape and the pending-store round trip. Still pending for 2.0: Iteration 7 (translations), push sub-steps 8f–8i (universal push notifications), then 2.0 polish. | 🔄 in progress — 8d done |
 | **3.0** | + Iteration 9 — FitPub Wear companion app | ⬜ |
 
 ## Roadmap — one prompt per iteration
@@ -302,6 +302,11 @@ while the screen is off / app is backgrounded, then review and share the
 resulting activity to the configured FitPub instance. This is a new feature
 (no backend changes needed — the existing single-file upload endpoint is reused).
 
+Sub-steps 8f–8i add **universal push notifications** (likes, comments, boosts,
+follows) riding the FitPub server's *existing* Web Push subscription API — no
+server changes, no stored passwords, no token export; a tiny self-hosted
+"mailbox" service on a user VPS carries the delivery.
+
 Suggested split into sub-steps (one prompt each if done iteratively):
 
 **8a — Permissions & service skeleton**
@@ -351,11 +356,91 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > behavior, and emulator testing via mock locations. Update README features list
 > and take fresh screenshots."
 
+**8f — Background notification polling (universal fallback, no VPS needed)**
+> "Add background delivery of in-app notifications that works against ANY FitPub
+> instance with zero extra infrastructure: a WorkManager periodic worker (≥15 min
+> interval, Doze-deferrable — set expectations in Settings, this is 'eventual',
+> not instant) that, for signed-in sessions only (skip guests), calls the
+> existing `GET api/web/notifications?page=1` via NotificationRepository, tracks
+> the last-seen notification id in DataStore, and posts local Android
+> notifications for new ACTIVITY_LIKED / ACTIVITY_COMMENTED / ACTIVITY_SHARED /
+> USER_FOLLOWED / FOLLOW_REQUEST rows — reusing the notification list's existing
+> text formatting, coalescing bursts into one summary notification with the
+> unread count. New notification channel `fitpub_push` (own OS-level toggle);
+> POST_NOTIFICATIONS runtime gate modeled on LocationPermissionGate, asked once
+> from a new Settings → Push section. On 401 keep the existing session-clearing
+> semantics (do not loop). Unit-test the new-row diffing and summary coalescing.
+> This is the only new dependency of the whole feature (androidx.work)."
+
+**8g — VPS mailbox service (self-hosted RFC 8030 Web Push receiver)**
+> "Build the push infrastructure as a small dockerized service (separate
+> repository, e.g. `fitpub-push-relay`; Kotlin/Ktor or Go, keep it dependency-
+> light): an RFC 8030-compatible Web Push receiver holding NO FitPub
+> credentials — ciphertext only. Endpoints: `POST /mailbox` mints a fresh random
+> subscription id and returns the endpoint URL; `POST /push/<id>` stores an
+> opaque aes128gcm blob (201 + Location header per RFC 8030); `GET /push/<id>`
+> returns queued blobs and clears them; `DELETE /push/<id>` unregisters;
+> auto-expire subscriptions the phone hasn't fetched for ~30 days by answering
+> 410 Gone to subsequent POSTs — the FitPub server already deletes such
+> subscriptions on 410/404 (verified: WebPushService.sendPush), so cleanup
+> stays automatic end-to-end. Never log payloads. Ship docker-compose.yml,
+> a reverse-proxy TLS example, deployment notes, and an integration test that
+> subscribes a fake endpoint, fires a real FitPub push (or replays the server's
+> encrypted fixture), then fetches + decrypts it with the matching key."
+
+**8h — Client push: keys, subscribe, decrypt, mailbox check**
+> "Wire FP Client to the server's existing Web Push subscription API (verified
+> against the FitPub source — `POST /api/web/push/subscribe`
+> `{endpoint, keys{p256dh, auth}}`, `DELETE /api/web/push/subscribe`,
+> `GET /api/web/push/vapid-key` as availability probe; treat its 503 as 'push
+> disabled on this instance → keep the 8f poll fallback'). Settings → Push:
+> generate an ECDH P-256 keypair + 16-byte auth secret on-device with JCA (no
+> new crypto library), store app-privately, mint an endpoint on the user's
+> configured mailbox (8g), and POST the subscription through the app's existing
+> session + CSRF flow — no password or token is ever stored off-device, and the
+> exported keypair can only decrypt notification payloads (revocable via
+> DELETE /subscribe). Delivery: a WorkManager worker fetches queued blobs from
+> the mailbox, decrypts RFC 8291 aes128gcm on-device (client-side mirror of the
+> server's WebPushService.encrypt: parse the aes128gcm header [salt, record
+> size, ephemeral AS public key], ECDH, HKDF, AES-128-GCM, strip the 0x02
+> delimiter), parses the `{title, body, icon, tag, url}` JSON and posts the
+> notification with the tag used for collapse. Disable = DELETE /subscribe +
+> DELETE mailbox + wipe local keys. Unit-test decryption against vectors
+> captured from the server's own WebPushService tests."
+
+**8i — Instant delivery via ntfy (optional, same VPS)**
+> "Add the instant path on top of 8g/8h: extend the mailbox service with an
+> opt-in mode where it also receives the subscription's private decryption key
+> and, on each incoming push, decrypts and forwards readable `{title, body,
+> url}` to a private ntfy topic on the same VPS (ntfy dockerized, Apache-2.0 —
+> keeps the F-Droid dependency audit clean); the ntfy Android app then delivers
+> within seconds in self-hosted WebSocket mode (document the battery-
+> optimization exemption, same as 8e). Settings → Push gains an optional
+> 'instant via ntfy' toggle with an explicit one-sentence trust explanation:
+> the stored key only ever decrypts notification payloads (it cannot access
+> the account), lives only on the user's own VPS, and is revoked by one
+> DELETE /api/web/push/subscribe. Users who refuse that trust keep 8h (~15 min
+> latency, keys never leave the phone). Optionally also an in-app WebSocket to
+> the mailbox for instant delivery without ntfy. Document the whole stack in
+> docs/: instance admin (FITPUB_PUSH_ENABLED=true + VAPID keys — off by
+> default on every instance), VPS (mailbox + optional ntfy), and app
+> (Settings → Push)."
+
 Notes:
 - Reuses existing pieces: osmdroid (live map), Format.kt (stat formatting),
   ActivityTypes icons, upload endpoint/multipart plumbing from CreateViewModel.
 - New dependencies to consider (keep minimal): none strictly required — Room
   optional (could start with a simple file-backed log); avoid play-services-location.
+- Push sub-steps 8f–8i ride the server's **existing** Web Push subscription API
+  (verified in the FitPub server source: `social/fitpub/push/PushSubscriptionResource`
+  — `POST/DELETE /api/web/push/subscribe`, `GET /api/web/push/vapid-key`; and
+  `WebPushService` — RFC 8291 `aes128gcm` encryption + VAPID per RFC 8292): no
+  server changes, no stored passwords, no token export; the server's ongoing
+  JWT/auth-version hardening does not affect an active subscription because push
+  is outbound and sessionless. 8f is the universal fallback when an instance has
+  push disabled.
+- Dependency impact: 8f introduces `androidx.work` (WorkManager); 8h adds none
+  (JCA crypto only); the VPS services (8g/8i) live outside this repo.
 
 > 🚩 Release gate: this iteration ships as **v3.0**.
 
