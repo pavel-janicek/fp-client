@@ -61,6 +61,8 @@ data class TrackStats(
     val pointCount: Int = 0,
     val distanceM: Double = 0.0,
     val elevationGainM: Double = 0.0,
+    /** Total descent, in meters (positive value, kept separate from gain). */
+    val elevationLossM: Double = 0.0,
 ) {
     val hasFixes: Boolean get() = pointCount > 0
 }
@@ -79,10 +81,12 @@ class TrackStatsAccumulator {
     fun add(point: TrackPoint) {
         val previous = lastPoint
         val delta = previous?.let { TrackMath.haversineMeters(it, point) } ?: 0.0
+        elevation.add(point.ele)
         stats = stats.copy(
             pointCount = stats.pointCount + 1,
             distanceM = stats.distanceM + delta,
-            elevationGainM = elevation.add(point.ele),
+            elevationGainM = elevation.gainM,
+            elevationLossM = elevation.lossM,
         )
         lastPoint = point
     }
@@ -90,6 +94,17 @@ class TrackStatsAccumulator {
     /** Last accepted point; needed by the service to continue the segment after a restore. */
     var lastPoint: TrackPoint? = null
         private set
+
+    /**
+     * Segment boundary (pause/resume): gain and loss stay per-segment — the jump
+     * across the gap is transport, not climbing. Resets the smoothing window and the
+     * pivot so the first fix of the new segment seeds it fresh (the same way the very
+     * first fix of a session does), instead of folding the gap into the totals.
+     */
+    fun startNewSegment() {
+        elevation.reset()
+        lastPoint = null
+    }
 }
 
 /**
@@ -108,15 +123,19 @@ class ElevationAccumulator(
 
     private val recent = ArrayDeque<Double>()
     private var pivot: Double? = null
-    private var gainM = 0.0
+    var gainM = 0.0
+        private set
+    /** Total descent, in meters (positive value, kept separate from gain). */
+    var lossM = 0.0
+        private set
 
-    /** Feeds one fix elevation; returns the accumulated gain so far, in meters. */
-    fun add(elevationM: Double): Double {
+    /** Feeds one fix elevation; accumulated gain/loss are read from [gainM]/[lossM]. */
+    fun add(elevationM: Double) {
         val smoothed = smooth(elevationM)
         val base = pivot
         if (base == null) {
             pivot = smoothed
-            return gainM
+            return
         }
         val delta = smoothed - base
         when {
@@ -125,12 +144,20 @@ class ElevationAccumulator(
                 pivot = smoothed
             }
             delta <= -thresholdM -> {
-                // Descent: reset the pivot so a later climb only counts from the low point.
+                // Descent: the drop counts as loss, and the pivot resets to the low
+                // point so a later climb only counts from there — never re-summing
+                // the descent back as gain.
+                lossM += -delta
                 pivot = smoothed
             }
             // Sub-threshold jitter: pivot stays put, nothing accumulates.
         }
-        return gainM
+    }
+
+    /** Segment boundary: the next fix seeds a fresh pivot, like the session's first fix. */
+    fun reset() {
+        recent.clear()
+        pivot = null
     }
 
     private fun smooth(elevationM: Double): Double {

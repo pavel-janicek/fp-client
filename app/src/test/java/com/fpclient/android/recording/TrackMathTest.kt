@@ -86,7 +86,9 @@ class TrackMathTest {
     fun `flat track produces zero gain`() {
         val acc = ElevationAccumulator()
         repeat(20) { acc.add(100.0) }
-        assertEquals(0.0, acc.add(100.0), 1e-9)
+        acc.add(100.0)
+        assertEquals(0.0, acc.gainM, 1e-9)
+        assertEquals(0.0, acc.lossM, 1e-9)
     }
 
     @Test
@@ -95,8 +97,11 @@ class TrackMathTest {
         // behavior itself is covered by the spike test below.
         val acc = ElevationAccumulator(window = 1)
         acc.add(100.0)
-        assertEquals(10.0, acc.add(110.0), 1e-9)
-        assertEquals(25.0, acc.add(125.0), 1e-9) // +15 from the new pivot at 110
+        acc.add(110.0)
+        assertEquals(10.0, acc.gainM, 1e-9)
+        acc.add(125.0)
+        assertEquals(25.0, acc.gainM, 1e-9) // +15 from the new pivot at 110
+        assertEquals(0.0, acc.lossM, 1e-9)
     }
 
     @Test
@@ -106,16 +111,47 @@ class TrackMathTest {
         // ±1-2 m of GPS altitude jitter around the same elevation
         val noise = listOf(101.5, 99.0, 102.0, 100.0, 101.0, 99.5, 102.0, 100.5)
         noise.forEach { acc.add(it) }
-        assertEquals(0.0, acc.add(100.0), 1e-9)
+        acc.add(100.0)
+        assertEquals(0.0, acc.gainM, 1e-9)
+        assertEquals(0.0, acc.lossM, 1e-9)
     }
 
     @Test
     fun `descent then climb counts only the climb from the low point`() {
         val acc = ElevationAccumulator(window = 1)
         acc.add(200.0)
-        acc.add(100.0) // -100: descent, pivot resets to the low point
-        assertEquals(0.0, acc.add(95.0), 1e-9) // still a descent: no gain
-        assertEquals(35.0, acc.add(130.0), 1e-9) // climb measured from 95, not from 200
+        acc.add(100.0) // -100: descent, counted as loss, pivot resets to the low point
+        assertEquals(100.0, acc.lossM, 1e-9)
+        assertEquals(0.0, acc.gainM, 1e-9)
+        acc.add(95.0) // still a descent: no gain
+        assertEquals(0.0, acc.gainM, 1e-9)
+        assertEquals(105.0, acc.lossM, 1e-9)
+        acc.add(130.0) // climb measured from 95, not from 200
+        assertEquals(35.0, acc.gainM, 1e-9)
+        assertEquals(105.0, acc.lossM, 1e-9)
+    }
+
+    @Test
+    fun `gain and loss stay separate across an out-and-back`() {
+        val acc = ElevationAccumulator(window = 1)
+        acc.add(100.0)
+        acc.add(110.0)
+        acc.add(100.0)
+        // Up 10 then down 10: gain and loss both report 10, never netted to zero.
+        assertEquals(10.0, acc.gainM, 1e-9)
+        assertEquals(10.0, acc.lossM, 1e-9)
+    }
+
+    @Test
+    fun `reset starts a fresh segment that ignores the gap`() {
+        val acc = ElevationAccumulator(window = 1)
+        acc.add(100.0)
+        acc.add(110.0)
+        acc.reset() // e.g. pause/resume: transport across the gap is not climbing
+        acc.add(200.0)
+        acc.add(205.0)
+        assertEquals(15.0, acc.gainM, 1e-9) // 10 + 5, gap 110 -> 200 ignored
+        assertEquals(0.0, acc.lossM, 1e-9)
     }
 
     @Test
@@ -124,7 +160,9 @@ class TrackMathTest {
         acc.add(100.0)
         acc.add(110.0) // window avg = 105 -> delta 5, below the 12 m threshold
         acc.add(100.0)
-        assertEquals(0.0, acc.add(100.0), 1e-9)
+        acc.add(100.0)
+        assertEquals(0.0, acc.gainM, 1e-9)
+        assertEquals(0.0, acc.lossM, 1e-9)
     }
 
     @Test
@@ -132,15 +170,36 @@ class TrackMathTest {
         val acc = ElevationAccumulator(window = 1)
         var elevation = 0.0
         acc.add(elevation)
-        var expected = 0.0
+        var expectedGain = 0.0
+        var expectedLoss = 0.0
         repeat(5) {
             elevation += 10.0
             acc.add(elevation)
-            expected += 10.0
+            expectedGain += 10.0
             elevation -= 3.0
             acc.add(elevation)
+            // Each 3 m dip clears the 3 m threshold, so it counts as loss while the
+            // re-climb counts as gain — the two stay separate, never netted.
+            expectedLoss += 3.0
         }
-        assertEquals(expected, acc.add(elevation), 0.5)
+        acc.add(elevation)
+        assertEquals(expectedGain, acc.gainM, 0.5)
+        assertEquals(expectedLoss, acc.lossM, 0.5)
+    }
+
+    @Test
+    fun `segment boundary keeps pause gaps out of gain and loss`() {
+        val acc = TrackStatsAccumulator()
+        acc.add(TrackPoint(47.0, 8.0, 100.0, 0L, 5.0))
+        acc.add(TrackPoint(47.0001, 8.0001, 120.0, 2_000L, 5.0))
+        acc.startNewSegment() // pause/resume: next fix is transport, not climbing
+        acc.add(TrackPoint(48.0, 9.0, 500.0, 3_600_000L, 5.0))
+        acc.add(TrackPoint(48.0001, 9.0001, 520.0, 3_602_000L, 5.0))
+        // Each segment climbs 20 (smoothed); the 120 -> 500 gap contributes nothing.
+        assertEquals(20.0, acc.stats.elevationGainM, 1e-9)
+        assertEquals(0.0, acc.stats.elevationLossM, 1e-9)
+        // Point count still sums across segments; only the jumps stay out.
+        assertEquals(4, acc.stats.pointCount)
     }
 
     // ------------------------------------------------------------- stats folding

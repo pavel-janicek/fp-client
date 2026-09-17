@@ -114,7 +114,8 @@ fun WorkoutSummaryScreen(
                 items = listOf(
                     "distance" to Format.distanceShort(stats.distanceM),
                     "moving time" to Format.duration(movingMs / 1000),
-                    "elevation gain" to "↑${stats.elevationGainM.toInt()} m",
+                    "↑ gain" to "↑${stats.elevationGainM.toInt()} m",
+                    "↓ loss" to "↓${stats.elevationLossM.toInt()} m",
                 ),
             )
             if (points.isNotEmpty()) {
@@ -321,12 +322,12 @@ fun WorkoutSummaryRoute(
                     visibility = pending?.visibility ?: ActivityVisibilities.PUBLIC,
                 )
             } else {
-                val points = share.readPoints(sessionId)
+                val segments = share.readSegments(sessionId)
                 SummaryData(
                     startedAtEpochMs = pending?.startedAtEpochMs ?: sessionId,
                     activityType = pending?.activityType ?: TrackSessionSnapshot.DEFAULT_ACTIVITY_TYPE,
-                    points = points,
-                    stats = share.statsFor(points),
+                    points = segments.flatten(),
+                    stats = share.statsForSegments(segments),
                     movingMs = share.movingMsFor(sessionId),
                     title = pending?.title.orEmpty(),
                     description = pending?.description.orEmpty(),

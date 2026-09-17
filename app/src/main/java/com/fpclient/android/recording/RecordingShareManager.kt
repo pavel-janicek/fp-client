@@ -48,12 +48,24 @@ class RecordingShareManager(
     fun readPoints(sessionId: Long): List<TrackPoint> =
         runCatching { pointStore.readAll(sessionId) }.getOrDefault(emptyList())
 
-    /** Stats recomputed from the persisted track — the summary's numbers after a restart. */
-    fun statsFor(points: List<TrackPoint>): TrackStats {
+    /** A session's segments (one per pause/resume pair), in file order. */
+    fun readSegments(sessionId: Long): List<List<TrackPoint>> =
+        runCatching { pointStore.readSegments(sessionId) }.getOrDefault(emptyList())
+
+    /** Stats recomputed from the persisted segments — the summary's numbers after a restart. */
+    fun statsForSegments(segments: List<List<TrackPoint>>): TrackStats {
         val accumulator = TrackStatsAccumulator()
-        points.forEach { accumulator.add(it) }
+        var first = true
+        segments.forEach { segment ->
+            if (!first) accumulator.startNewSegment()
+            first = false
+            segment.forEach { accumulator.add(it) }
+        }
         return accumulator.stats
     }
+
+    /** Stats recomputed from the persisted track — the summary's numbers after a restart. */
+    fun statsFor(points: List<TrackPoint>): TrackStats = statsForSegments(listOf(points))
 
     /**
      * Moving time of a persisted session, reconstructed from its segment files: the sum of

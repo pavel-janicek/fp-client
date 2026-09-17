@@ -91,11 +91,14 @@ fun LiveRecordingScreen(
         )
         // Live totals from the GPS engine; pace derives moving time over distance
         // (metric for now, like the groundwork — the 2.0 polish pass revisits).
+        // Gain and loss stay separate tiles: descents are transport back down, not
+        // negative climbing to net against the ascent.
         StatRow(
             items = listOf(
                 "distance" to Format.distanceShort(stats.distanceM),
                 "pace" to Format.pace(TrackMath.paceSecondsPerKm(s.movingMsAt(now), stats.distanceM), null),
-                "elevation gain" to "↑${stats.elevationGainM.toInt()} m",
+                "↑ gain" to "↑${stats.elevationGainM.toInt()} m",
+                "↓ loss" to "↓${stats.elevationLossM.toInt()} m",
             ),
         )
         Row(

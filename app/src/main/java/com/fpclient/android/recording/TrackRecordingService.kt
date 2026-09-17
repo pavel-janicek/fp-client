@@ -191,6 +191,9 @@ class TrackRecordingService : LifecycleService() {
         snapshot = resumed
         TrackRecordingBus.publish(resumed)
         store.save(resumed)
+        // New segment, new baseline: gain/loss (and the distance jump) must not fold
+        // the transport gap across the pause into the totals.
+        statsAccumulator.startNewSegment()
         enterForeground()
         startGps(resumed.startedAtEpochMs)
         startTicker()
@@ -219,15 +222,24 @@ class TrackRecordingService : LifecycleService() {
 
     /** Publishes the just-stopped session and registers its GPX as a pending upload. */
     private fun finishSession(current: TrackSessionSnapshot) {
-        val points = try {
-            pointStore.readAll(current.startedAtEpochMs)
+        val segments = try {
+            pointStore.readSegments(current.startedAtEpochMs)
         } catch (_: Exception) {
             // A partially unreadable file must not lose the summary; whatever decoded is
             // shown, and the pending entry is only created when an export succeeded.
             emptyList()
         }
+        // Fold per segment with a fresh accumulator state per segment: pause gaps are
+        // transport, not climbing — the distance/elevation jump across the gap must not
+        // land in the totals. Point counts sum; segment stats merge additively.
         val accumulator = TrackStatsAccumulator()
-        points.forEach { accumulator.add(it) }
+        var firstOfSession = true
+        segments.forEach { segment ->
+            if (!firstOfSession) accumulator.startNewSegment()
+            firstOfSession = false
+            segment.forEach { accumulator.add(it) }
+        }
+        val points = segments.flatten()
         TrackRecordingBus.publishFinished(
             FinishedRecording(
                 snapshot = current,
@@ -268,17 +280,28 @@ class TrackRecordingService : LifecycleService() {
      * Rebuilds the live stats by replaying the persisted track file. The file is the
      * single source of truth for distance/elevation/count — this makes a process-death
      * restore exactly consistent no matter what the dying process had in memory.
+     * Replay is segment-aware (pause markers cut the track): pause gaps never fold
+     * their distance/elevation jump into the totals.
      */
     private fun replayStatsFromDisk(startedAtEpochMs: Long) {
         statsAccumulator = TrackStatsAccumulator()
-        val restoredPoints = try {
-            pointStore.readAll(startedAtEpochMs)
+        val segments = try {
+            pointStore.readSegments(startedAtEpochMs)
         } catch (_: Exception) {
             // A partially unreadable file must not take the service down; the stats then
             // simply continue from whatever decoded cleanly.
             emptyList()
         }
-        restoredPoints.forEach { statsAccumulator.add(it) }
+        var firstOfSession = true
+        val restoredPoints = mutableListOf<TrackPoint>()
+        segments.forEach { segment ->
+            if (!firstOfSession) statsAccumulator.startNewSegment()
+            firstOfSession = false
+            segment.forEach {
+                statsAccumulator.add(it)
+                restoredPoints.add(it)
+            }
+        }
         TrackRecordingBus.publishStats(statsAccumulator.stats)
         // The mini-map polyline is rebuilt too, so a restored session shows its full track.
         TrackRecordingBus.publishPoints(restoredPoints)
