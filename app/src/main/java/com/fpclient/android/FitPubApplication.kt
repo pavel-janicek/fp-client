@@ -17,7 +17,7 @@ class FitPubApplication : Application() {
         @Suppress("DEPRECATION")
         val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this)
         Configuration.getInstance().load(this, prefs)
-        Configuration.getInstance().userAgentValue = "FP-Client/2.0.0-alpha"
+        Configuration.getInstance().userAgentValue = "FP-Client/2.0.0-beta"
 
         // osmdroid needs access to a writeable tile cache dir for modern scoped storage.
         Configuration.getInstance().osmdroidBasePath = filesDir
