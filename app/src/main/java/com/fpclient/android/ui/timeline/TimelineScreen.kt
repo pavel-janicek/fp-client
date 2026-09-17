@@ -209,6 +209,7 @@ fun TimelineScreen(
         topBar = {
             TopAppBar(
                 title = { Text("FP Client") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
                     // Toggles the "Search activities" input; sits left of the reload icon.
                     IconButton(
