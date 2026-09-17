@@ -14,15 +14,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -32,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -381,26 +385,26 @@ fun ActivityTypeDropdown(selected: String, onSelect: (String) -> Unit) {
         if (q.isEmpty()) ActivityTypes.ALL
         else ActivityTypes.ALL.filter { it.lowercase().replace('_', ' ').contains(q) }
     }
-    Box {
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
         OutlinedTextField(
             value = activityLabel(selected),
             onValueChange = {},
-            readOnly = true,
             label = { Text("Activity type") },
             trailingIcon = {
-                IconButton(onClick = { expanded = true }) {
-                    Icon(Icons.Filled.ExpandMore, contentDescription = "Show menu")
-                }
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .let { mf ->
-                    // The whole field (not just the trailing icon) opens the dropdown when
-                    // clicked — the trailing icon is redundant but kept for affordance.
-                    mf.clickable { expanded = true }
-                },
+                .menuAnchor()
+                .clickable { expanded = true },
         )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
