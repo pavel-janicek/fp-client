@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.record
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -391,7 +392,13 @@ fun ActivityTypeDropdown(selected: String, onSelect: (String) -> Unit) {
                     Icon(Icons.Filled.ExpandMore, contentDescription = "Show menu")
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { mf ->
+                    // The whole field (not just the trailing icon) opens the dropdown when
+                    // clicked — the trailing icon is redundant but kept for affordance.
+                    mf.clickable { expanded = true }
+                },
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             OutlinedTextField(

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,13 @@ fun LiveTrackMap(
     var follow by remember { mutableStateOf(true) }
     var fitted by remember { mutableStateOf(false) }
 
+    // Reset the fitted flag when the point count changes so the map re-fits on
+    // every meaningful change (new points during recording, or re-entering the
+    // summary screen after leaving it).
+    LaunchedEffect(points.size) {
+        fitted = false
+    }
+
     Box(modifier.clipToBounds()) {
         AndroidView(
             factory = { context ->
@@ -90,17 +98,29 @@ fun LiveTrackMap(
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     }.also { map.overlays.add(it) }
                     when {
+                        // During recording, follow the live position: pan the map to the
+                        // latest GPS fix so the user always sees where they are. Panning the
+                        // map turns follow off (it would otherwise fight the user).
+                        follow -> map.controller.animateTo(geoPoints.last())
+                        // Fit the whole track when requested (post-workout summary, or the
+                        // pre-start preview with a single point). The fitted flag ensures this
+                        // only runs once per point set, so re-entering the summary screen
+                        // re-fits instead of showing a stale view.
+                        //
+                        // A minimum span is enforced so that a lone fix still lands at a usable
+                        // zoom instead of jumping to a degenerate location near the default
+                        // (0,0) origin.
                         fitTrack && !fitted -> {
                             map.post {
-                                map.zoomToBoundingBox(
-                                    BoundingBox.fromGeoPoints(geoPoints).increaseByScale(1.2f),
-                                    false,
-                                )
+                                val center = geoPoints.last()
+                                val span = 0.004 // ~440 m — enough to see context around a point
+                                map.controller.setCenter(center)
+                                map.controller.zoomToSpan(span, span)
                             }
                             fitted = true
                         }
-                        fitTrack -> Unit
-                        follow -> map.controller.animateTo(geoPoints.last())
+                        // Already fitted or fitTrack disabled: nothing to do.
+                        else -> Unit
                     }
                 }
                 map.invalidate()
