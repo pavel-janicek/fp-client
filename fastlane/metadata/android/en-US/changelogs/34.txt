@@ -1,0 +1,4 @@
+Recording polish (release 2.0.0-alpha):
+- Active workouts now warn when GPS is disabled, no accurate fix has arrived for two minutes, or device storage is running low.
+- Added battery-optimization guidance for longer recordings.
+- Added confirmation before discarding an unsent workout.
