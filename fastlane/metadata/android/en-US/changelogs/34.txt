@@ -1,4 +1,4 @@
-Recording polish (release 2.0.0-alpha):
-- Active workouts now warn when GPS is disabled, no accurate fix has arrived for two minutes, or device storage is running low.
-- Added battery-optimization guidance for longer recordings.
-- Added confirmation before discarding an unsent workout.
+Follow & follow-request fixes (release 1.4.1):
+- Fix: the Follow button on profiles and activity pages works again — it previously sent the opposite request and silently failed; errors are now shown next to the button.
+- Fix: "Request to follow" no longer fails with "user not found" for people on your own instance, e.g. when opening them from a follower list.
+- Follow-request state ("Request sent" / "Requested") is now shown correctly from the server's response.
