@@ -32,21 +32,31 @@ data class UpdateCheckResult(
  * Parsing/ordering helpers for release-tag version strings. Tags carry a release
  * prefix ("Release_1.3.6") and can have arbitrary numeric arity, so a plain
  * string comparison would never match and "1.3.10" must rank above "1.3.6".
- * Pre-release suffixes order semver-style — alpha < beta < rc1..rcN < final —
- * so an install running "2.0.0-alpha" is prompted to update as soon as the
- * final "2.0.0" is published (GitHub's `releases/latest` never returns
- * prerelease tags, so the suffix must not be folded into extra digits).
+ * Pre-release suffixes order semver-style — alpha < beta < rc1..rcN < an explicit
+ * "final" label < the unsuffixed release — so an install running "2.0.0-alpha"
+ * is prompted to update as soon as the final "2.0.0" is published (GitHub's
+ * `releases/latest` never returns prerelease tags, so the suffix must not be
+ * folded into extra digits). The unsuffixed form always ranks highest, so
+ * "2.0.0" is newer than "2.0.0-final".
  */
 object UpdateVersions {
 
     /** True when [candidate] denotes a newer version than [current]. */
     fun isNewer(candidate: String, current: String): Boolean = compare(candidate, current) > 0
 
-    /** Pre-release stage; higher is newer: alpha (0) < beta (1) < rc (2) < final (3). */
+    /**
+     * Release stage; higher is newer: alpha (0) < beta (1) < rc (2) < an explicit
+     * "final"/"release" label (3) < **no suffix at all** (4).
+     *
+     * The unsuffixed stage is deliberately the maximum, so the canonical release
+     * "2.0.0" outranks "2.0.0-final" (and every other suffix) and an install
+     * running any kind of pre-release build is always offered the final update.
+     */
     private const val STAGE_ALPHA = 0
     private const val STAGE_BETA = 1
     private const val STAGE_RC = 2
-    private const val STAGE_FINAL = 3
+    private const val STAGE_FINAL_LABEL = 3
+    private const val STAGE_RELEASE = 4
 
     private class ParsedVersion(val core: List<Int>, val stage: Int, val stageNumber: Int)
 
@@ -99,13 +109,16 @@ object UpdateVersions {
     /** Maps a suffix like "-rc2" / "beta.1" / "-alpha" to its stage and iteration number. */
     private fun parseStage(suffix: String): Pair<Int, Int> {
         val stripped = suffix.dropWhile { !it.isLetter() }
-        if (stripped.isBlank()) return STAGE_FINAL to 0
+        if (stripped.isBlank()) return STAGE_RELEASE to 0
         val letters = stripped.takeWhile { it.isLetter() }
         val digits = stripped.drop(letters.length).filter { it.isDigit() }
         val number = if (digits.isEmpty()) 0 else digits.toIntOrNull() ?: 0
         return when (letters.lowercase()) {
             "rc" -> STAGE_RC to number
             "beta" -> STAGE_BETA to number
+            // Labels that merely say "this is the last one": newer than any
+            // pre-release stage, but still older than the unsuffixed release.
+            "final", "release", "stable", "ga" -> STAGE_FINAL_LABEL to number
             else -> STAGE_ALPHA to number // unknown pre-release stage → most conservative ranking
         }
     }
