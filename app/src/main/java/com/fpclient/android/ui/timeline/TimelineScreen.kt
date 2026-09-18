@@ -1,6 +1,7 @@
 package com.fpclient.android.ui.timeline
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -23,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -33,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -180,6 +184,7 @@ fun TimelineScreen(
     onOpenActivity: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenCreate: () -> Unit,
+    onOpenRecord: () -> Unit = {},
     onRequireSignIn: () -> Unit = {},
 ) {
     val vm: TimelineViewModel = viewModel(factory = TimelineViewModel.factory(container))
@@ -204,6 +209,7 @@ fun TimelineScreen(
         topBar = {
             TopAppBar(
                 title = { Text("FP Client") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
                     // Toggles the "Search activities" input; sits left of the reload icon.
                     IconButton(
@@ -238,15 +244,24 @@ fun TimelineScreen(
             )
         },
         floatingActionButton = {
-            // Guests see the same FAB; tapping it takes them to sign-in since
-            // posting requires an account.
-            FloatingActionButton(
-                onClick = if (guestMode) onRequireSignIn else onOpenCreate,
+            // The + (create) FAB with the Record action stacked above it (Iteration 8c).
+            // Guests see the same actions: + takes them to sign-in since posting requires
+            // an account; recording is local, so it works signed out too.
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = if (guestMode) "Sign in to add an activity" else "New activity",
-                )
+                SmallFloatingActionButton(onClick = onOpenRecord) {
+                    Icon(Icons.Filled.FiberManualRecord, contentDescription = "Record workout")
+                }
+                FloatingActionButton(
+                    onClick = if (guestMode) onRequireSignIn else onOpenCreate,
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = if (guestMode) "Sign in to add an activity" else "New activity",
+                    )
+                }
             }
         },
     ) { padding ->

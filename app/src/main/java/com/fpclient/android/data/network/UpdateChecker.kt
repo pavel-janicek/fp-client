@@ -32,44 +32,95 @@ data class UpdateCheckResult(
  * Parsing/ordering helpers for release-tag version strings. Tags carry a release
  * prefix ("Release_1.3.6") and can have arbitrary numeric arity, so a plain
  * string comparison would never match and "1.3.10" must rank above "1.3.6".
+ * Pre-release suffixes order semver-style — alpha < beta < rc1..rcN < an explicit
+ * "final" label < the unsuffixed release — so an install running "2.0.0-alpha"
+ * is prompted to update as soon as the final "2.0.0" is published (GitHub's
+ * `releases/latest` never returns prerelease tags, so the suffix must not be
+ * folded into extra digits). The unsuffixed form always ranks highest, so
+ * "2.0.0" is newer than "2.0.0-final".
  */
 object UpdateVersions {
 
     /** True when [candidate] denotes a newer version than [current]. */
     fun isNewer(candidate: String, current: String): Boolean = compare(candidate, current) > 0
 
+    /**
+     * Release stage; higher is newer: alpha (0) < beta (1) < rc (2) < an explicit
+     * "final"/"release" label (3) < **no suffix at all** (4).
+     *
+     * The unsuffixed stage is deliberately the maximum, so the canonical release
+     * "2.0.0" outranks "2.0.0-final" (and every other suffix) and an install
+     * running any kind of pre-release build is always offered the final update.
+     */
+    private const val STAGE_ALPHA = 0
+    private const val STAGE_BETA = 1
+    private const val STAGE_RC = 2
+    private const val STAGE_FINAL_LABEL = 3
+    private const val STAGE_RELEASE = 4
+
+    private class ParsedVersion(val core: List<Int>, val stage: Int, val stageNumber: Int)
+
     private fun compare(a: String, b: String): Int {
-        val aa = components(a)
-        val bb = components(b)
+        val pa = parse(a)
+        val pb = parse(b)
+        compareComponents(pa.core, pb.core).let { if (it != 0) return it }
+        if (pa.stage != pb.stage) return pa.stage.compareTo(pb.stage)
+        return pa.stageNumber.compareTo(pb.stageNumber)
+    }
+
+    private fun compareComponents(a: List<Int>, b: List<Int>): Int {
         var i = 0
-        while (i < aa.size || i < bb.size) {
-            val x = if (i < aa.size) aa[i] else 0
-            val y = if (i < bb.size) bb[i] else 0
+        while (i < a.size || i < b.size) {
+            val x = if (i < a.size) a[i] else 0
+            val y = if (i < b.size) b[i] else 0
             if (x != y) return if (x > y) 1 else -1
             i += 1
         }
         return 0
     }
 
-    /** Extracts numeric components from a version-ish string: "Release_1.3.6" -> [1, 3, 6],
-     *  "1.3.6-beta2" -> [1, 3, 6, 2]. Falls back to [0] for strings without any digits. */
-    private fun components(raw: String): List<Int> {
-        val parts = ArrayList<Int>()
+    private fun parse(raw: String): ParsedVersion {
+        var i = 0
+        val n = raw.length
+        // Skip a leading tag prefix such as "Release_".
+        while (i < n && !raw[i].isDigit()) i += 1
+        // Numeric core: digits and dots up to the first other character (e.g. "-beta").
+        val core = ArrayList<Int>()
         var value = 0
         var inNumber = false
-        for (ch in raw) {
+        while (i < n && (raw[i].isDigit() || raw[i] == '.')) {
+            val ch = raw[i]
             if (ch.isDigit()) {
                 value = value * 10 + (ch - '0')
                 inNumber = true
             } else if (inNumber) {
-                parts.add(value)
+                core.add(value)
                 value = 0
                 inNumber = false
             }
+            i += 1
         }
-        if (inNumber) parts.add(value)
-        if (parts.isEmpty()) parts.add(0)
-        return parts
+        if (inNumber) core.add(value)
+        if (core.isEmpty()) core.add(0)
+        val (stage, stageNumber) = parseStage(raw.substring(i))
+        return ParsedVersion(core, stage, stageNumber)
+    }
+
+    /** Maps a suffix like "-rc2" / "beta.1" / "-alpha" to its stage and iteration number. */
+    private fun parseStage(suffix: String): Pair<Int, Int> {
+        val stripped = suffix.dropWhile { !it.isLetter() }
+        if (stripped.isBlank()) return STAGE_RELEASE to 0
+        val letters = stripped.takeWhile { it.isLetter() }
+        val digits = stripped.drop(letters.length).filter { it.isDigit() }
+        val number = if (digits.isEmpty()) 0 else digits.toIntOrNull() ?: 0
+        return when (letters.lowercase()) {
+            "rc" -> STAGE_RC to number
+            "beta" -> STAGE_BETA to number
+            // Labels that merely say "this is the last one": newer than any
+            // pre-release stage, but still older than the unsuffixed release.
+            "final", "release", "stable", "ga" -> STAGE_FINAL_LABEL to number
+            else -> STAGE_ALPHA to number // unknown pre-release stage → most conservative ranking
+        }
     }
 }
 

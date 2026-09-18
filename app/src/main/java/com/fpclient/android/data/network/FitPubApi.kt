@@ -133,8 +133,11 @@ interface FitPubApi {
     @POST("api/web/activities/manual")
     suspend fun createManualActivity(@Body request: ManualActivityRequest): Response<ActivityDto>
 
-    // Published route — kept under /api for federation peers (do not move under /api/web).
-    @GET("api/activities/{id}")
+    // Full detail DTO — the web route returns the complete ActivityDTO with the author
+    // fields (username/displayName/avatarUrl/actorUri). The federation route
+    // GET /api/activities/{id} returns the deliberately minimal PublishedActivityDTO
+    // without ANY author info, so the detail screen must use /api/web.
+    @GET("api/web/activities/{id}")
     suspend fun getActivity(@Path("id") id: String): Response<ActivityDto>
 
     @PUT("api/web/activities/{id}")

@@ -92,9 +92,31 @@ class ActivityRepository(
         description: String?,
         visibility: String?,
     ): ApiResult<ActivityDto> {
+        val file = copyUriToCache(context, uri)
+            ?: return ApiResult.Error("Could not read the selected file")
+        val name = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { null } ?: file.name
+        return uploadFile(file, name, title, description, visibility)
+    }
+
+    /**
+     * Uploads an already-materialised file through the same multipart endpoint — used by
+     * the recorded-workout share flow (Iteration 8d) with its app-private GPX export.
+     */
+    suspend fun uploadFile(
+        file: File,
+        title: String?,
+        description: String?,
+        visibility: String?,
+    ): ApiResult<ActivityDto> = uploadFile(file, file.name, title, description, visibility)
+
+    private suspend fun uploadFile(
+        file: File,
+        name: String,
+        title: String?,
+        description: String?,
+        visibility: String?,
+    ): ApiResult<ActivityDto> {
         return try {
-            val file = copyUriToCache(context, uri) ?: return ApiResult.Error("Could not read the selected file")
-            val name = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { null } ?: file.name
             val mediaType = when (file.extension.lowercase()) {
                 "fit" -> "application/octet-stream"
                 "gpx" -> "application/gpx+xml"

@@ -14,14 +14,26 @@ object Routes {
     const val ME = "me"
     const val EDIT_PROFILE = "edit_profile"
     const val PRIVACY_ZONES = "privacy_zones"
+    /** Full-screen map editor; `zoneId` selects an existing zone, absence creates a new one. */
+    const val PRIVACY_ZONE_EDIT = "privacy_zone_edit?zoneId={zoneId}"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val BATCH_IMPORT = "batch_import"
+    const val RECORD = "record"
+    // The finished recording's session id (= its start epoch ms) selects the workout.
+    const val WORKOUT_SUMMARY = "workout_summary/{sessionId}"
     const val FOLLOW_LIST = "follow_list/{username}/{type}"
 
     fun activityDetail(activityId: String) = "activity/$activityId"
     fun profile(username: String) = "profile/$username"
     fun followList(username: String, type: String) = "follow_list/$username/$type"
+
+    /** Privacy-zone editor: no argument creates a new zone, a zoneId edits that zone. */
+    fun privacyZoneEdit(zoneId: String? = null) =
+        if (zoneId == null) "privacy_zone_edit" else "privacy_zone_edit?zoneId=$zoneId"
+
+    /** Post-workout summary of a recorded session (Iteration 8d). */
+    fun workoutSummary(sessionId: Long) = "workout_summary/$sessionId"
 
     /** Create screen with a pre-selected file from an incoming share/open intent. */
     fun createWithSharedUri(sharedUri: String) = "create?sharedUri=${android.net.Uri.encode(sharedUri)}"

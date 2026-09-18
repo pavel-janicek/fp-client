@@ -1,0 +1,7 @@
+2.0.0 (release 2.0.0):
+- Record workouts on your phone: live GPS tracking with map, distance, pace and elevation, pause/resume, then save the session.
+- Share a recorded activity straight to your FitPub instance.
+- Recording safeguards: warnings when GPS is off, when no position fix arrives for a long time, and when storage runs low.
+- Activity detail shows the author's name, handle and avatar again (the card previously always fell back to a generic "Athlete").
+- Privacy zones: create and edit zones on a full-screen map with an adjustable radius, centered on your current location.
+- Update checks now order versions correctly, including pre-releases, so you are prompted when a newer release is out.

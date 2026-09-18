@@ -27,6 +27,14 @@ keys are ignored) — that additive policy is unchanged.
   `GET /api/activities/{id}/track` endpoint was removed; the activity-detail map now reads
   its polyline from the `simplifiedTrack` geometry embedded in the activity DTO. Route
   downloads use `GET /api/web/activities/{id}/route?format=fit|gpx|tcx`.
+
+  ⚠️ Note: the federation detail route `GET /api/activities/{id}` returns the deliberately
+  minimal `PublishedActivityDTO` (activity type, title, description, times, distances,
+  metrics, location, simplified track) **without any author fields** — it is meant for
+  federation peers that resolve the author via the actor URI themselves. FP Client therefore
+  fetches activity detail from `GET /api/web/activities/{id}` (full `ActivityDTO` with
+  `username`/`displayName`/`avatarUrl`/`actorUri`); using the federation route here made the
+  author card fall back to a generic "Athlete". The image route stays as-is.
 * **Authentication is cookie-based, not bearer-token based.** Since FitPub 1.3 the JWT is delivered only as an `Set-Cookie: JWT_TOKEN=…` (HttpOnly) header on login / registration-verify / password-reset; the app reads it from that response and sends it back as a `Cookie` header on every subsequent request. `Authorization: Bearer <token>` is no longer accepted.
 * **CSRF protection enforced.** Mutating requests (POST/PUT/PATCH/DELETE) require an
   `X-XSRF-TOKEN` header matching the `XSRF-TOKEN` cookie. The app primes the cookie with an

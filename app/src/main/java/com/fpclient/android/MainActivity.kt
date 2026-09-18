@@ -21,7 +21,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -38,6 +40,8 @@ import com.fpclient.android.ui.auth.ServerSetupViewModel
 import com.fpclient.android.ui.auth.VerifyCodeContent
 import com.fpclient.android.ui.navigation.Routes
 import com.fpclient.android.ui.theme.FPClientTheme
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -48,6 +52,18 @@ class MainActivity : ComponentActivity() {
         val container = FitPubApplication.container(this)
         // Only on a fresh launch — on recreation the same intent would re-trigger the share flow.
         val sharedFileUri = if (savedInstanceState == null) extractSharedFileUri(intent) else null
+        // Workouts whose share attempt failed (or that were recorded without a reachable
+        // server, Iteration 8d) are retried silently on the next launch, once per process
+        // and only for a signed-in session — the Record screen keeps the queue visible and
+        // retryable if the server is still unreachable.
+        if (savedInstanceState == null) {
+            lifecycleScope.launch {
+                val session = container.sessionStore.session.first()
+                if (session.isLoggedIn) {
+                    runCatching { container.recordingShareManager.retryPending() }
+                }
+            }
+        }
         setContent {
             FPClientTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -210,6 +226,7 @@ private fun FitPubNavGraph(
                 onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
                 onOpenCreate = { navController.navigate(Routes.CREATE) },
+                onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
@@ -273,6 +290,7 @@ private fun FitPubNavGraph(
                 onOpenPrivacyZones = { navController.navigate(Routes.PRIVACY_ZONES) },
                 onChangeInstance = { navController.navigate(Routes.SERVER_SETUP) },
                 onOpenBatchImport = { navController.navigate(Routes.BATCH_IMPORT) },
+                onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
             )
         }
@@ -285,6 +303,32 @@ private fun FitPubNavGraph(
             com.fpclient.android.ui.settings.BatchImportScreen(
                 container = container,
                 onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.RECORD) {
+            com.fpclient.android.ui.record.RecordScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+                onOpenSummary = { sessionId ->
+                    navController.navigate(Routes.workoutSummary(sessionId))
+                },
+            )
+        }
+        composable(
+            route = Routes.WORKOUT_SUMMARY,
+            arguments = listOf(navArgument("sessionId") { type = NavType.LongType }),
+        ) { entry ->
+            val sessionId = entry.arguments?.getLong("sessionId") ?: 0L
+            com.fpclient.android.ui.record.WorkoutSummaryRoute(
+                sessionId = sessionId,
+                container = container,
+                onOpenActivity = { id ->
+                    // Leave the summary behind: once the activity is on the server the
+                    // review is done, and Back from the detail should land on Record.
+                    navController.popBackStack()
+                    navController.navigate(Routes.activityDetail(id))
+                },
+                onClose = { navController.popBackStack() },
             )
         }
         composable(Routes.SERVER_SETUP) {
@@ -301,6 +345,19 @@ private fun FitPubNavGraph(
             com.fpclient.android.ui.settings.PrivacyZonesScreen(
                 container = container,
                 appViewModel = appViewModel,
+                onBack = { navController.popBackStack() },
+                onCreateZone = { navController.navigate(Routes.privacyZoneEdit()) },
+                onEditZone = { zoneId -> navController.navigate(Routes.privacyZoneEdit(zoneId)) },
+            )
+        }
+        composable(
+            route = Routes.PRIVACY_ZONE_EDIT,
+            arguments = listOf(navArgument("zoneId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
+            com.fpclient.android.ui.settings.PrivacyZoneEditScreen(
+                container = container,
+                appViewModel = appViewModel,
+                zoneId = entry.arguments?.getString("zoneId"),
                 onBack = { navController.popBackStack() },
             )
         }

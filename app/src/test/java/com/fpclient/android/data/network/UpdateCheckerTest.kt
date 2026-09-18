@@ -36,9 +36,11 @@ class UpdateCheckerTest {
     /** The running version as a release tag, e.g. `1.3.7` -> `Release_1.3.7`. */
     private fun currentTag(): String = "Release_${BuildConfig.VERSION_NAME}"
 
-    /** A release tag one patch above the running version, so the test never depends on the bumped version. */
+    /** A release tag strictly above the running version, so the test never depends on the bumped version:
+     *  strips any pre-release suffix ("2.0.0-beta" -> "2.0.0") and bumps the last numeric component. */
     private fun newerTag(): String {
-        val parts = BuildConfig.VERSION_NAME.split('.').toMutableList()
+        val base = BuildConfig.VERSION_NAME.substringBefore('-')
+        val parts = base.split('.').toMutableList()
         parts[parts.size - 1] = ((parts.last().toIntOrNull() ?: 0) + 1).toString()
         return "Release_" + parts.joinToString(".")
     }
@@ -105,7 +107,62 @@ class UpdateCheckerTest {
         assertFalse(UpdateVersions.isNewer("1.3.5", "Release_1.3.6"))
         assertFalse(UpdateVersions.isNewer("1.3", "Release_1.3.0"))
         assertFalse(UpdateVersions.isNewer("garbage", "1.3.6"))
-        assertTrue(UpdateVersions.isNewer("1.3.6-rc2", "1.3.6"))
+        // A release candidate is a pre-release of the final version, never newer than it.
+        assertFalse(UpdateVersions.isNewer("1.3.6-rc2", "1.3.6"))
+        // Conversely, an install running the RC must be told the final release is out.
+        assertTrue(UpdateVersions.isNewer("1.3.6", "1.3.6-rc2"))
+    }
+
+    /**
+     * Pre-release suffixes order semver-style — alpha < beta < rc1..rcN < an
+     * explicit "final" label < unsuffixed release — so installs running a
+     * 2.0.0-alpha/beta/rc build are prompted to update as soon as the final
+     * 2.0.0 is published. The suffix must never be treated as extra numeric
+     * components (that previously ranked "1.3.6-rc2" above "1.3.6" and made
+     * "2.0.0-beta" equal to "2.0.0").
+     */
+    @Test
+    fun versionOrdering_ranksPreReleaseSuffixes() {
+        assertTrue(UpdateVersions.isNewer("2.0.0-beta", "2.0.0-alpha"))
+        assertTrue(UpdateVersions.isNewer("2.0.0-rc1", "2.0.0-beta"))
+        assertTrue(UpdateVersions.isNewer("Release_2.0.0", "2.0.0-alpha"))
+        assertTrue(UpdateVersions.isNewer("Release_2.0.0", "2.0.0-beta"))
+        assertTrue(UpdateVersions.isNewer("Release_2.0.0", "2.0.0-rc3"))
+        assertTrue(UpdateVersions.isNewer("Release_2.0.0-beta", "2.0.0-alpha"))
+        // Iterated pre-releases within one stage.
+        assertTrue(UpdateVersions.isNewer("2.0.0-rc2", "2.0.0-rc1"))
+        assertTrue(UpdateVersions.isNewer("2.0.0-rc10", "2.0.0-rc2"))
+        assertTrue(UpdateVersions.isNewer("2.0.0-beta.2", "2.0.0-beta.1"))
+        assertTrue(UpdateVersions.isNewer("2.0.0-beta2", "2.0.0-beta"))
+        // And the wrong direction must never report an update.
+        assertFalse(UpdateVersions.isNewer("2.0.0-alpha", "2.0.0-beta"))
+        assertFalse(UpdateVersions.isNewer("2.0.0-rc1", "Release_2.0.0"))
+        assertFalse(UpdateVersions.isNewer("2.0.0-beta", "2.0.0-beta"))
+        assertFalse(UpdateVersions.isNewer("1.9.9-rc1", "2.0.0-alpha"))
+    }
+
+    /**
+     * The canonical release is the unsuffixed tag: "2.0.0" must outrank *every*
+     * suffixed form, including a hand-written "-final" (which is just a label,
+     * not the canonical release). An install running "2.0.0-final" or any other
+     * suffix is therefore offered the update to "2.0.0", while the final build
+     * is never offered a "2.0.0-final" release as an update.
+     */
+    @Test
+    fun versionOrdering_unsuffixedReleaseOutranksEveryLabel() {
+        assertTrue(UpdateVersions.isNewer("Release_2.0.0", "2.0.0-final"))
+        assertTrue(UpdateVersions.isNewer("2.0.0", "2.0.0-final"))
+        assertTrue(UpdateVersions.isNewer("2.0.0", "2.0.0-release"))
+        assertTrue(UpdateVersions.isNewer("2.0.0", "2.0.0-stable"))
+        assertTrue(UpdateVersions.isNewer("2.0.0", "2.0.0-rcN"))
+        // A "final" label still beats the pre-release stages it supersedes.
+        assertTrue(UpdateVersions.isNewer("2.0.0-final", "2.0.0-rc3"))
+        assertTrue(UpdateVersions.isNewer("2.0.0-final", "2.0.0-beta"))
+        assertTrue(UpdateVersions.isNewer("2.0.0-final", "2.0.0-alpha"))
+        // And the wrong direction never reports an update.
+        assertFalse(UpdateVersions.isNewer("2.0.0-final", "2.0.0"))
+        assertFalse(UpdateVersions.isNewer("2.0.0", "2.0.0"))
+        assertFalse(UpdateVersions.isNewer("2.0.0-rc1", "2.0.0-final"))
     }
 
     /**

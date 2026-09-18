@@ -37,11 +37,19 @@ class PrivacyZoneRepository(
         }
     }
 
-    suspend fun update(id: String, name: String, radiusMeters: Int): ApiResult<PrivacyZoneDto> {
+    suspend fun update(
+        id: String,
+        name: String,
+        lat: Double,
+        lon: Double,
+        radiusMeters: Int,
+    ): ApiResult<PrivacyZoneDto> {
         return try {
             val response = api.updatePrivacyZone(
                 id,
-                PrivacyZoneUpdateRequest(name = name, radiusMeters = radiusMeters),
+                // The server's UpdatePrivacyZoneRequest declares name, latitude, longitude
+                // and radiusMeters @NotNull — a partial body is rejected with 400.
+                PrivacyZoneUpdateRequest(name = name, latitude = lat, longitude = lon, radiusMeters = radiusMeters),
             )
             if (!response.isSuccessful) {
                 return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())

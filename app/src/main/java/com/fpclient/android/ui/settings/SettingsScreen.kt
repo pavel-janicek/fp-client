@@ -44,6 +44,7 @@ fun SettingsScreen(
     onOpenPrivacyZones: () -> Unit,
     onChangeInstance: () -> Unit,
     onOpenBatchImport: () -> Unit,
+    onOpenRecord: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
     val unitSystem by appViewModel.unitSystem.collectAsState()
@@ -127,6 +128,17 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Batch import activities") }
                     }
+                }
+            }
+            // Recording entry point: the flow itself lives in the main UI since Iteration
+            // 8c (Record button on Timeline/Me); this card is the secondary discovery path.
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("Recording", style = MaterialTheme.typography.titleSmall)
+                    OutlinedButton(
+                        onClick = onOpenRecord,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Record a track") }
                 }
             }
             UpdateCheckCard()
