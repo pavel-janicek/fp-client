@@ -163,8 +163,8 @@ fun ActivityDetailScreen(
         when {
             ui.loading -> LoadingIndicator(Modifier.padding(padding))
             ui.error != null -> {
-                // Federated (remote) activities return 404 — the server only exposes
-                // local activities via GET /api/activities/{id}. Show a neutral
+                // Federated (remote) activities return 404 — no FitPub route can resolve
+                // an activity id owned by another instance. Show a neutral
                 // informational state (not a red error) with a Back button instead of
                 // a useless Retry: the limitation is FitPub federation, not the app.
                 if (ui.errorStatusCode == 404 && ui.activity == null) {

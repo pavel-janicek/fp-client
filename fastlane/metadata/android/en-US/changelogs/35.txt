@@ -1,3 +1,4 @@
 2.0.0-beta pre-release (release 2.0.0-beta):
 - Version promoted from alpha to beta on the road to 2.0.
 - Update checks now order pre-release versions correctly (alpha < beta < release candidates < final), so pre-release installs are prompted to update once the final 2.0.0 ships.
+- Activity detail: the author's name, handle and avatar are shown again (previously the card always fell back to a generic "Athlete").
