@@ -346,6 +346,19 @@ private fun FitPubNavGraph(
                 container = container,
                 appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
+                onCreateZone = { navController.navigate(Routes.privacyZoneEdit()) },
+                onEditZone = { zoneId -> navController.navigate(Routes.privacyZoneEdit(zoneId)) },
+            )
+        }
+        composable(
+            route = Routes.PRIVACY_ZONE_EDIT,
+            arguments = listOf(navArgument("zoneId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
+            com.fpclient.android.ui.settings.PrivacyZoneEditScreen(
+                container = container,
+                appViewModel = appViewModel,
+                zoneId = entry.arguments?.getString("zoneId"),
+                onBack = { navController.popBackStack() },
             )
         }
         composable(
