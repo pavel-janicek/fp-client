@@ -1,0 +1,5 @@
+2.0.1 (release 2.0.1):
+- Remote (federated) activities open on their author's home server in an in-app browser tab instead of showing an error, and their timeline cards are marked with a "Remote" badge.
+- Privacy zones: enabling and disabling a zone works again, and failed changes now show an error message instead of silently doing nothing.
+- Recording: the pre-start mini-map centers on your current location instead of a stale position from a previous recording.
+- Recording: the mini-map keeps following your position while moving again; it only stops following when you drag the map yourself.
