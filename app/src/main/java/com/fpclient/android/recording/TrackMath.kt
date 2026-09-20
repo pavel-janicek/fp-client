@@ -19,6 +19,15 @@ object TrackMath {
     /** Fixes less accurate than this are discarded outright (PLAN 8b: ~20 m). */
     const val MAX_ACCURACY_M = 20.0
 
+    /**
+     * How old a *cached* fix (`LocationManager.getLastKnownLocation`) may be and still count
+     * as "where the user is now". Older fixes are leftovers from somewhere else — most often
+     * the town of the previous recording — and showing them as the current position put the
+     * Record screen's pre-start mini-map in the wrong place ("GPS ready" for a place the user
+     * had already left). Live fixes from `requestLocationUpdates` never need this check.
+     */
+    const val MAX_CACHED_FIX_AGE_MS = 60_000L
+
     /** Below this distance the pace is undefined (GPS noise would produce absurd values). */
     private const val MIN_DISTANCE_FOR_PACE_M = 10.0
 
@@ -50,6 +59,18 @@ object TrackMath {
     /** True when the fix is accurate enough to be recorded. */
     fun isAcceptableAccuracy(accuracyM: Double): Boolean =
         accuracyM in 0.0..MAX_ACCURACY_M
+
+    /**
+     * True when a fix taken at [fixTimeMs] is recent enough to stand in for "now" instead of
+     * being a leftover position from another place. An unknown (0) timestamp counts as stale:
+     * the provider that hands it out cannot say when it was taken, so it must not be presented
+     * as the current position.
+     */
+    fun isRecentFix(
+        fixTimeMs: Long,
+        nowMs: Long,
+        maxAgeMs: Long = MAX_CACHED_FIX_AGE_MS,
+    ): Boolean = fixTimeMs > 0 && nowMs - fixTimeMs <= maxAgeMs
 }
 
 /**
