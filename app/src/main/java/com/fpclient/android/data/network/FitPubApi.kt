@@ -29,6 +29,7 @@ import com.fpclient.android.data.dto.PasswordResetConfirmRequest
 import com.fpclient.android.data.dto.PasswordResetRequest
 import com.fpclient.android.data.dto.PrivacyZoneCreateRequest
 import com.fpclient.android.data.dto.PrivacyZoneDto
+import com.fpclient.android.data.dto.PrivacyZoneToggleRequest
 import com.fpclient.android.data.dto.PrivacyZoneUpdateRequest
 import com.fpclient.android.data.dto.ReactionRequest
 import com.fpclient.android.data.dto.RegisterRequest
@@ -355,7 +356,10 @@ interface FitPubApi {
     suspend fun updatePrivacyZone(@Path("zoneId") zoneId: String, @Body request: PrivacyZoneUpdateRequest): Response<PrivacyZoneDto>
 
     @PATCH("api/web/privacy-zones/{zoneId}/toggle")
-    suspend fun togglePrivacyZone(@Path("zoneId") zoneId: String): Response<PrivacyZoneDto>
+    suspend fun togglePrivacyZone(
+        @Path("zoneId") zoneId: String,
+        @Body request: PrivacyZoneToggleRequest,
+    ): Response<PrivacyZoneDto>
 
     @DELETE("api/web/privacy-zones/{zoneId}")
     suspend fun deletePrivacyZone(@Path("zoneId") zoneId: String): Response<Unit>

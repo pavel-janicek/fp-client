@@ -2,6 +2,7 @@ package com.fpclient.android.data.repository
 
 import com.fpclient.android.data.dto.PrivacyZoneCreateRequest
 import com.fpclient.android.data.dto.PrivacyZoneDto
+import com.fpclient.android.data.dto.PrivacyZoneToggleRequest
 import com.fpclient.android.data.dto.PrivacyZoneUpdateRequest
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.network.ErrorMessages
@@ -60,9 +61,12 @@ class PrivacyZoneRepository(
         }
     }
 
-    suspend fun toggle(id: String): ApiResult<PrivacyZoneDto> {
+    suspend fun toggle(id: String, isActive: Boolean): ApiResult<PrivacyZoneDto> {
         return try {
-            val response = api.togglePrivacyZone(id)
+            // The server's toggle endpoint is not a flip: it requires the desired state in the
+            // body (`{"isActive": …}`) and rejects a bodyless PATCH with
+            // 400 "Required request body is missing".
+            val response = api.togglePrivacyZone(id, PrivacyZoneToggleRequest(isActive = isActive))
             if (!response.isSuccessful) {
                 return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
             }

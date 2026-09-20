@@ -13,7 +13,8 @@ data class PrivacyZoneDto(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val radiusMeters: Int? = null,
-    val enabled: Boolean = false,
+    /** Server's `PrivacyZoneDTO.isActive` (Lombok `getIsActive()` serializes as `isActive`). */
+    val isActive: Boolean = false,
     val createdAt: String? = null,
     val updatedAt: String? = null,
 )
@@ -32,6 +33,16 @@ data class PrivacyZoneUpdateRequest(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val radiusMeters: Int? = null,
+)
+
+/**
+ * Body of `PATCH /api/web/privacy-zones/{id}/toggle`. The endpoint is not a server-side flip:
+ * `PrivacyZoneResource.togglePrivacyZone` reads the desired state from this map and answers
+ * 400 ("Required request body is missing") when the body is absent.
+ */
+@Serializable
+data class PrivacyZoneToggleRequest(
+    val isActive: Boolean,
 )
 
 // ---------------------------------------------------------------------------
