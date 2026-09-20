@@ -55,6 +55,9 @@ class PrivacyZonesViewModel(private val repository: PrivacyZoneRepository) : Vie
     data class UiState(
         val loading: Boolean = false,
         val error: String? = null,
+        /** Failure of a single action (toggle/delete) — shown above the list instead of
+         * replacing it with a full-screen error state. */
+        val actionError: String? = null,
         val zones: List<PrivacyZoneDto> = emptyList(),
     )
 
@@ -67,7 +70,7 @@ class PrivacyZonesViewModel(private val repository: PrivacyZoneRepository) : Vie
 
     fun refresh() {
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(loading = true, error = null)
+            _ui.value = _ui.value.copy(loading = true, error = null, actionError = null)
             when (val r = repository.list()) {
                 is ApiResult.Success -> _ui.value = UiState(zones = r.data)
                 is ApiResult.Error -> _ui.value = UiState(error = r.message)
@@ -82,17 +85,35 @@ class PrivacyZonesViewModel(private val repository: PrivacyZoneRepository) : Vie
         }
     }
 
-    fun toggle(id: String) {
+    /**
+     * Sets the zone's active state. The server's toggle endpoint is a setter — it takes the
+     * desired state in the request body — so the switch's new value is forwarded verbatim.
+     */
+    fun setActive(id: String, isActive: Boolean) {
         viewModelScope.launch {
-            repository.toggle(id)
-            refresh()
+            when (val r = repository.toggle(id, isActive)) {
+                is ApiResult.Success -> {
+                    _ui.value = _ui.value.copy(actionError = null)
+                    refresh()
+                }
+                is ApiResult.Error -> _ui.value = _ui.value.copy(
+                    actionError = r.message ?: "Could not update the privacy zone.",
+                )
+            }
         }
     }
 
     fun delete(id: String) {
         viewModelScope.launch {
-            repository.delete(id)
-            refresh()
+            when (val r = repository.delete(id)) {
+                is ApiResult.Success -> {
+                    _ui.value = _ui.value.copy(actionError = null)
+                    refresh()
+                }
+                is ApiResult.Error -> _ui.value = _ui.value.copy(
+                    actionError = r.message ?: "Could not delete the privacy zone.",
+                )
+            }
         }
     }
 

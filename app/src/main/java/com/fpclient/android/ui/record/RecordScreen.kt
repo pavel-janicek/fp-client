@@ -71,6 +71,7 @@ import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import android.content.pm.PackageManager
+import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
@@ -327,6 +328,13 @@ fun rememberTicker(): Long {
  * type, the phone already warms up its fix, so Start begins with a known position and
  * the mini-map gives feedback that the device "knows" where the activity starts.
  * Emits null until the first acceptable fix (same accuracy bar as recording).
+ *
+ * The cached last-known fix is only used when it is recent ([TrackMath.isRecentFix]).
+ * `getLastKnownLocation` happily returns the position of the *previous* recording — often
+ * an entirely different town — and showing that as "where you are now" centered the
+ * mini-map on the wrong place and printed an accuracy figure ("GPS ready (±3 m)") that
+ * belonged to the stale fix rather than to the current position. A too-old cache entry is
+ * ignored: the screen stays on "Searching for GPS…" until a real fix arrives.
  */
 @Composable
 fun rememberPrestartFix(): TrackPoint? {
@@ -355,12 +363,17 @@ fun rememberPrestartFix(): TrackPoint? {
                 accuracy = location.accuracy.toDouble(),
             )
         }
+        // Seed from the provider caches only when the fix is recent enough to still say
+        // where the user is; anything older is a leftover from somewhere else.
+        fun seedFromCache(location: Location?) {
+            if (location == null) return
+            if (!TrackMath.isRecentFix(location.time, System.currentTimeMillis())) return
+            listener.onLocationChanged(location)
+        }
         var registered = false
         runCatching {
-            manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let(listener::onLocationChanged)
-            manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let {
-                if (fix == null) listener.onLocationChanged(it)
-            }
+            seedFromCache(manager.getLastKnownLocation(LocationManager.GPS_PROVIDER))
+            if (fix == null) seedFromCache(manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER))
         }
         runCatching {
             manager.requestLocationUpdates(
@@ -472,8 +485,9 @@ fun ActivityTypeDropdown(selected: String, onSelect: (String) -> Unit) {
     }
 }
 
-/** Pre-start GPS status: a non-interactive mini-map with the warmed-up fix (or a
- * "searching" line until the first acceptable fix arrives). */
+/** Pre-start GPS status: a non-interactive mini-map that keeps the camera on the warmed-up
+ * fix (so it shows where the user is, not where the previous recording happened), or a
+ * "searching" line until the first acceptable fix arrives. */
 @Composable
 private fun PrestartLocationPreview(fix: TrackPoint?) {
     if (fix == null) {
@@ -483,9 +497,11 @@ private fun PrestartLocationPreview(fix: TrackPoint?) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     } else {
+        // Follow mode (not fitTrack): every fresh fix re-centers the camera. The preview
+        // holds a single point, so the fit-once path would leave the camera where the
+        // screen was opened.
         LiveTrackMap(
             points = listOf(fix),
-            fitTrack = true,
             interactive = false,
             modifier = Modifier
                 .fillMaxWidth()

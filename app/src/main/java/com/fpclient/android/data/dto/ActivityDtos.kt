@@ -180,6 +180,12 @@ data class TimelineActivityDto(
     val avatarUrl: String? = null,
     val actorUri: String? = null,
     val isLocal: Boolean = false,
+    /**
+     * The activity's canonical URL on its origin server (set for federated
+     * items, where the local `id` is only a metadata mirror and the in-app
+     * detail would 404 — the web client opens this URI instead).
+     */
+    val activityUri: String? = null,
     val simplifiedTrack: GeoJsonGeometry? = null,
     val mapImageUrl: String? = null,
     val likesCount: Long? = null,

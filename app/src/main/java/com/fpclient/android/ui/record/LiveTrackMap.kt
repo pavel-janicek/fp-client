@@ -1,6 +1,7 @@
 package com.fpclient.android.ui.record
 
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -22,9 +23,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.fpclient.android.R
 import com.fpclient.android.recording.TrackPoint
-import org.osmdroid.events.MapListener
-import org.osmdroid.events.ScrollEvent
-import org.osmdroid.events.ZoomEvent
+import kotlin.math.abs
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
@@ -38,6 +37,12 @@ import org.osmdroid.views.overlay.Polyline
  * floating recenter button turns it back on. Rebuilt per fix emission — at the 2 s fix
  * cadence that is cheap, and it sidesteps incremental overlay bookkeeping.
  *
+ * Following is driven by *touches*, not by osmdroid's map listeners: every programmatic
+ * camera move goes through `MapView.setExpectedCenter`, which also dispatches the
+ * listeners' scroll events — a scroll listener therefore switched following off on the
+ * map's own `animateTo`, and the camera stayed wherever the screen was opened (the
+ * pre-start mini-map kept showing the previous town even after a fresh fix arrived).
+ *
  * [fitTrack] switches it to the post-workout review use (Iteration 8d): the camera zooms
  * out to the whole track once instead of following the last fix, which is what the summary
  * wants when the recording is already complete.
@@ -49,13 +54,24 @@ fun LiveTrackMap(
     fitTrack: Boolean = false,
     interactive: Boolean = !fitTrack,
 ) {
-    var follow by remember { mutableStateOf(true) }
+    // Following is the default (live recording, pre-start warm-up). The fit-the-whole-track
+    // use starts with it off, so the post-workout summary zooms out to the complete track
+    // instead of trailing its last point.
+    var follow by remember { mutableStateOf(!fitTrack) }
     var fitted by remember { mutableStateOf(false) }
+    // The fix the camera was last sent to. Recompositions (the 500 ms ticker, stats) rerun
+    // the AndroidView update block; re-aiming the camera at the same fix every time would
+    // restart its animation needlessly.
+    var lastCentered by remember { mutableStateOf<TrackPoint?>(null) }
+    // Touch-down coordinates of the current gesture (plain holder — writing Compose state
+    // per touch move would recompose the whole map on every finger movement).
+    val downAt = remember { FloatArray(2) }
 
-    // Reset the fitted flag when the point count changes so the map re-fits on
-    // every meaningful change (new points during recording, or re-entering the
-    // summary screen after leaving it).
-    LaunchedEffect(points.size) {
+    // Reset the fitted flag whenever the newest fix changes so a fit runs for every new
+    // point set. Keyed on the point itself, not on `points.size`: the pre-start preview
+    // carries exactly one point, so a size-based key never changed and the camera was
+    // never moved to the new fix.
+    LaunchedEffect(points.lastOrNull()) {
         fitted = false
     }
 
@@ -68,23 +84,34 @@ fun LiveTrackMap(
                     isClickable = interactive
                     isFocusable = interactive
                     if (!interactive) {
+                        // View-only (summary, pre-start warm-up): swallow touches; the
+                        // camera keeps following the newest fix.
                         setOnTouchListener { _, _ -> true }
                     } else {
                         setOnTouchListener { v, event ->
-                            if (event.action == MotionEvent.ACTION_DOWN) {
-                                v.parent?.requestDisallowInterceptTouchEvent(true)
+                            when (event.actionMasked) {
+                                MotionEvent.ACTION_DOWN -> {
+                                    downAt[0] = event.x
+                                    downAt[1] = event.y
+                                    v.parent?.requestDisallowInterceptTouchEvent(true)
+                                }
+                                MotionEvent.ACTION_MOVE -> {
+                                    val slop = ViewConfiguration.get(v.context).scaledTouchSlop.toFloat()
+                                    if (isUserPan(
+                                            event.pointerCount,
+                                            event.x - downAt[0],
+                                            event.y - downAt[1],
+                                            slop,
+                                        )
+                                    ) {
+                                        follow = false
+                                    }
+                                }
                             }
                             false
                         }
                     }
                     controller.setZoom(16.0)
-                    addMapListener(object : MapListener {
-                        override fun onScroll(event: ScrollEvent?): Boolean {
-                            follow = false
-                            return true
-                        }
-                        override fun onZoom(event: ZoomEvent?): Boolean = true
-                    })
                 }
             },
             update = { map ->
@@ -97,15 +124,20 @@ fun LiveTrackMap(
                         icon = ContextCompat.getDrawable(map.context, R.drawable.ic_record)
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     }.also { map.overlays.add(it) }
+                    val newest = points.last()
                     when {
-                        // During recording, follow the live position: pan the map to the
-                        // latest GPS fix so the user always sees where they are. Panning the
-                        // map turns follow off (it would otherwise fight the user).
-                        follow -> map.controller.animateTo(geoPoints.last())
-                        // Fit the whole track when requested (post-workout summary, or the
-                        // pre-start preview with a single point). The fitted flag ensures this
-                        // only runs once per point set, so re-entering the summary screen
-                        // re-fits instead of showing a stale view.
+                        // Recording and the pre-start warm-up: keep the newest fix in the
+                        // middle of the view so the user always sees where they are. Panning
+                        // the map turns following off (it would otherwise fight the user).
+                        // Skipped when the camera was already sent to this very fix.
+                        follow && newest != lastCentered -> {
+                            lastCentered = newest
+                            map.controller.animateTo(geoPoints.last())
+                        }
+                        // Fit the whole track when requested (post-workout summary). The
+                        // fitted flag ensures this only runs once per point set, so
+                        // re-entering the summary screen re-fits instead of showing a stale
+                        // view.
                         //
                         // A minimum span is enforced so that a lone fix still lands at a usable
                         // zoom instead of jumping to a degenerate location near the default
@@ -130,7 +162,12 @@ fun LiveTrackMap(
         )
         if (!follow && !fitTrack && interactive) {
             FilledTonalIconButton(
-                onClick = { follow = true },
+                onClick = {
+                    // Forget the last camera target so the next update re-centers even when
+                    // no new fix arrived while the user was panning around.
+                    lastCentered = null
+                    follow = true
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp),
@@ -140,3 +177,12 @@ fun LiveTrackMap(
         }
     }
 }
+
+/**
+ * True when a touch gesture means the user took the map over — a single-finger drag past
+ * [touchSlop]. Only then may following be switched off: a tap or an unintended two-finger
+ * pinch must not, and neither may the map's own programmatic camera moves (which is why
+ * following is wired to touch events instead of osmdroid's scroll events).
+ */
+internal fun isUserPan(pointerCount: Int, dx: Float, dy: Float, touchSlop: Float): Boolean =
+    pointerCount == 1 && (abs(dx) > touchSlop || abs(dy) > touchSlop)

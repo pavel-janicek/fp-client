@@ -65,6 +65,31 @@ class TrackMathTest {
         assertFalse(TrackMath.isAcceptableAccuracy(-1.0)) // nonsense accuracy
     }
 
+    // ------------------------------------------------------------- cached-fix freshness
+
+    @Test
+    fun `a cached fix taken moments ago is still the current position`() {
+        val now = 1_700_000_000_000L
+        assertTrue(TrackMath.isRecentFix(now, now)) // right now
+        assertTrue(TrackMath.isRecentFix(now - 59_000L, now)) // under a minute old
+        assertTrue(TrackMath.isRecentFix(now - TrackMath.MAX_CACHED_FIX_AGE_MS, now)) // boundary
+    }
+
+    @Test
+    fun `a cached fix from another place is stale and must not stand in for now`() {
+        val now = 1_700_000_000_000L
+        assertFalse(TrackMath.isRecentFix(now - TrackMath.MAX_CACHED_FIX_AGE_MS - 1, now))
+        assertFalse(TrackMath.isRecentFix(now - 90 * 60_000L, now)) // the previous recording
+        assertFalse(TrackMath.isRecentFix(0L, now)) // provider cannot say when it was taken
+    }
+
+    @Test
+    fun `a fix timestamped slightly in the future is not rejected`() {
+        // GPS time vs. the device clock can disagree by a little; that is not "another place".
+        val now = 1_700_000_000_000L
+        assertTrue(TrackMath.isRecentFix(now + 2_000L, now))
+    }
+
     // ------------------------------------------------------------- pace
 
     @Test

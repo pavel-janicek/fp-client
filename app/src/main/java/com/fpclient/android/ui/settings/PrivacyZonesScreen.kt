@@ -91,6 +91,14 @@ fun PrivacyZonesScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
+            ui.actionError?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
             when {
                 ui.loading -> LoadingIndicator()
                 ui.error != null -> ErrorState(message = ui.error, onRetry = vm::refresh)
@@ -113,7 +121,10 @@ fun PrivacyZonesScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                Switch(checked = z.enabled, onCheckedChange = { z.id?.let(vm::toggle) })
+                                Switch(
+                                    checked = z.isActive,
+                                    onCheckedChange = { checked -> z.id?.let { vm.setActive(it, checked) } },
+                                )
                                 IconButton(onClick = { z.id?.let(vm::delete) }) {
                                     Icon(Icons.Filled.Delete, contentDescription = "Delete")
                                 }

@@ -40,6 +40,9 @@ fun ActivityCard(
     onAuthorClick: ((String) -> Unit)? = null,
 ) {
     val authorHandle = activity.fullHandle ?: activity.username?.let { "@$it" }
+    // Web parity (timeline.js): federated cards carry a visible "Remote" badge so the
+    // different tap behaviour (opens the origin server, not the in-app detail) is expected.
+    val isRemote = !activity.isLocal
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp)) {
         Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -65,8 +68,23 @@ fun ActivityCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-            }
+                    if (isRemote) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "🌐 Remote",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                }
             val mapUrl = activity.mapImageUrl?.let { UrlBuilder.avatar(serverUrl, it) }
+
             if (mapUrl != null) {
                 Spacer(Modifier.height(10.dp))
                 AsyncImage(
