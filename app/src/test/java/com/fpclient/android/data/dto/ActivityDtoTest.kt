@@ -3,6 +3,7 @@ package com.fpclient.android.data.dto
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -71,6 +72,50 @@ class ActivityDtoTest {
         assertEquals("@remote-runner@remote.example", boost.fullHandle)
         assertEquals("Remote Runner", boost.displayName)
         assertTrue(!boost.local)
+    }
+
+    @Test
+    fun timelineItem_parsesActivityUriAndIsLocalFromFederatedPayload() {
+        // Mirror of the server's TimelineActivityDTO for a remote item: the `id`
+        // is the local mirror UUID, `isLocal=false`, and `activityUri` points at
+        // the origin instance's activity page.
+        val item = Json { ignoreUnknownKeys = true }.decodeFromString<TimelineActivityDto>(
+            """
+            {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "title": "Morning ride",
+              "username": "remote-runner",
+              "actorUri": "https://fitpub.social/users/remote-runner",
+              "isLocal": false,
+              "activityUri": "https://fitpub.social/activities/a69d0c4f-172b-4697-8fac-8475d8ae7863"
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(false, item.isLocal)
+        assertEquals("https://fitpub.social/activities/a69d0c4f-172b-4697-8fac-8475d8ae7863", item.activityUri)
+    }
+
+    @Test
+    fun originUrl_remoteItemWithUriOpensOnOrigin() {
+        assertEquals(
+            "https://fitpub.social/activities/a69d0c4f-172b-4697-8fac-8475d8ae7863",
+            com.fpclient.android.util.RemoteActivity.originUrl(
+                isLocal = false,
+                activityUri = "https://fitpub.social/activities/a69d0c4f-172b-4697-8fac-8475d8ae7863",
+            ),
+        )
+    }
+
+    @Test
+    fun originUrl_localItemUsesInAppDetail() {
+        assertNull(com.fpclient.android.util.RemoteActivity.originUrl(isLocal = true, activityUri = "https://fitpub.social/activities/x"))
+    }
+
+    @Test
+    fun originUrl_remoteItemWithoutUriFallsBackToInAppDetail() {
+        assertNull(com.fpclient.android.util.RemoteActivity.originUrl(isLocal = false, activityUri = null))
+        assertNull(com.fpclient.android.util.RemoteActivity.originUrl(isLocal = false, activityUri = ""))
     }
 
     @Test

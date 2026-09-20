@@ -56,6 +56,7 @@ import com.fpclient.android.ui.components.ActivityCard
 import com.fpclient.android.ui.components.EmptyState
 import com.fpclient.android.ui.components.ErrorState
 import com.fpclient.android.ui.components.LoadingIndicator
+import com.fpclient.android.util.openOnOrigin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -297,6 +298,7 @@ fun TimelineScreen(
                 onRefresh = vm::refresh,
                 modifier = Modifier.fillMaxSize(),
             ) {
+                val context = androidx.compose.ui.platform.LocalContext.current
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     when {
                         ui.loading && ui.activities.isEmpty() -> {
@@ -319,7 +321,21 @@ fun TimelineScreen(
                                     activity = activity,
                                     serverUrl = serverUrl,
                                     unitSystem = unitSystem,
-                                    onClick = { onOpenActivity(activity.id) },
+                                    onClick = {
+                                        // Web parity (timeline.js): federated activities have only a
+                                        // metadata mirror locally — GET /api/web/activities/{id} 404s —
+                                        // so remote cards open activityUri (the origin server's page)
+                                        // in a Custom Tab instead of the in-app detail. If the handoff
+                                        // fails (no browser installed) the in-app detail with its
+                                        // "not accessible yet" screen is the fallback.
+                                        val origin = com.fpclient.android.util.RemoteActivity.originUrl(
+                                            isLocal = activity.isLocal,
+                                            activityUri = activity.activityUri,
+                                        )
+                                        if (origin == null || !context.openOnOrigin(origin)) {
+                                            onOpenActivity(activity.id)
+                                        }
+                                    },
                                     onAuthorClick = { handle -> onOpenProfile(handle) },
                                 )
                             }

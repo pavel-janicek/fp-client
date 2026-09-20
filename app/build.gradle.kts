@@ -101,6 +101,9 @@ dependencies {
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // Chrome Custom Tabs (opens federated activities on their origin server, like the web UI)
+    implementation("androidx.browser:browser:1.8.0")
+
     // Mapping (mirrors the OSM tiles + GeoJSON polyline rendering the web UI uses)
     implementation("org.osmdroid:osmdroid-android:6.1.18")
 
