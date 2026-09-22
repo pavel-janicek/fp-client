@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.fpclient.android.recording.RecordingState
 import com.fpclient.android.recording.TrackMath
 import com.fpclient.android.recording.TrackRecordingBus
@@ -44,10 +45,10 @@ import com.fpclient.android.util.Format
  * [TrackRecordingBus]; pausing freezes GPS but the elapsed clock keeps running —
  * exactly the web app's semantics.
  *
- * Layout: portrait-locked while recording; timer + Pause/Stop + toggles on top, the
- * mini-map fills the leftover space (large and finger-interactive, never behind or
- * over other controls). Landscape is locked because a rotating sweaty-phone map
- * remounts the osmdroid view (flicker) and pushes Pause/Stop below the fold.
+ * Layout: timer + Pause/Stop + toggles on top, the mini-map fills the leftover space
+ * (large and finger-interactive, never behind or over other controls). The layout
+ * adapts to any size/orientation (foldables, tablets, split-screen): the column just
+ * gets more or less map space, so no orientation lock is applied while recording.
  *
  * Stopping reports the session id through [onStopRequested] *before* the service is told,
  * so the caller can open the post-workout summary once the session is really gone.
@@ -57,11 +58,6 @@ fun LiveRecordingScreen(
     modifier: Modifier = Modifier,
     onStopRequested: (Long) -> Unit = {},
 ) {
-    // No landscape while recording: rotating mid-workout remounts the osmdroid view
-    // (map flicker) and pushes Pause/Stop below the fold. Portrait keeps the timer,
-    // controls and map in one stable, reachable column.
-    LockPortraitWhileRecording()
-
     val context = LocalContext.current
     val session by TrackRecordingBus.session.collectAsState()
     val stats by TrackRecordingBus.stats.collectAsState()
@@ -163,6 +159,9 @@ fun LiveRecordingScreen(
 
         if (confirmStop) {
             AlertDialog(
+                // Not restricted to the platform default width: the dialog window can
+                // resize freely on large screens (Android 16+ ignores size constraints).
+                properties = DialogProperties(usePlatformDefaultWidth = false),
                 onDismissRequest = { confirmStop = false },
                 title = { Text("Stop recording?") },
                 text = {
@@ -202,13 +201,3 @@ private fun SettingRow(label: String, checked: Boolean, onChecked: (Boolean) -> 
     }
 }
 
-@Composable
-private fun LockPortraitWhileRecording() {
-    val context = LocalContext.current
-    val activity = context as? android.app.Activity ?: return
-    DisposableEffect(activity) {
-        val previous = activity.requestedOrientation
-        activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        onDispose { activity.requestedOrientation = previous }
-    }
-}

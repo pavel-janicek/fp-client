@@ -275,6 +275,10 @@ fun EditProfileScreen(
             }
             if (showTimezoneDialog) {
                 androidx.compose.material3.AlertDialog(
+                    // Resizable on large screens: not limited to the platform default width.
+                    properties = androidx.compose.ui.window.DialogProperties(
+                        usePlatformDefaultWidth = false,
+                    ),
                     onDismissRequest = { showTimezoneDialog = false },
                     confirmButton = {},
                     dismissButton = {

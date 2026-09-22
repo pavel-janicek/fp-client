@@ -191,6 +191,10 @@ fun SettingsScreen(
                         ) { Text("Delete account") }
                         if (confirmDelete) {
                             androidx.compose.material3.AlertDialog(
+                                // Resizable on large screens: not limited to the platform default width.
+                                properties = androidx.compose.ui.window.DialogProperties(
+                                    usePlatformDefaultWidth = false,
+                                ),
                                 onDismissRequest = { confirmDelete = false },
                                 title = { Text("Delete account?") },
                                 text = {

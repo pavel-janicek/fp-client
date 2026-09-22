@@ -240,6 +240,10 @@ internal fun PendingUploadCard(
     var confirmDiscard by rememberSaveable(entry.sessionId) { mutableStateOf(false) }
     if (confirmDiscard) {
         androidx.compose.material3.AlertDialog(
+            // Resizable on large screens: not limited to the platform default width.
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+            ),
             onDismissRequest = { confirmDiscard = false },
             title = { Text("Discard this workout?") },
             text = { Text("The recording will be permanently deleted from this device.") },
