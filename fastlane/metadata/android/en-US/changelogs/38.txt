@@ -1,0 +1,4 @@
+2.0.2 (release 2.0.2):
+- Large-screen support: dialogs are no longer fixed to the platform default width and resize properly on foldables and tablets (phone layout unchanged).
+- Recording: the screen no longer forces portrait orientation — it adapts to landscape and split-screen while you record.
+- Updated build toolchain (Android Gradle Plugin 9) for smaller, better-optimized release builds.
