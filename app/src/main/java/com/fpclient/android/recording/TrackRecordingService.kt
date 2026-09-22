@@ -438,8 +438,17 @@ class TrackRecordingService : LifecycleService() {
                 delay(1_000)
                 if (pauseForLowStorage()) break
                 if (canNotify()) {
-                    NotificationManagerCompat.from(this@TrackRecordingService)
-                        .notify(NOTIFICATION_ID, buildNotification())
+                    // POST_NOTIFICATIONS can be revoked mid-recording, between the
+                    // canNotify() check above and this call — the revoked permission
+                    // surfaces as SecurityException. Handle it explicitly (lint also
+                    // requires this): the recording simply continues without the
+                    // notification refresh until the permission is granted again.
+                    try {
+                        NotificationManagerCompat.from(this@TrackRecordingService)
+                            .notify(NOTIFICATION_ID, buildNotification())
+                    } catch (e: SecurityException) {
+                        // Notification permission revoked while recording; skip this tick.
+                    }
                 }
                 // Bound the loss on process death: the wall-clock math means elapsed time
                 // itself survives, but keep the store fresh for the moving segment.

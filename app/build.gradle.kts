@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
@@ -47,9 +46,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // Note: with AGP 9 built-in Kotlin there is no kotlinOptions{} DSL.
+    // kotlin jvmTarget defaults to android.compileOptions.targetCompatibility (17).
     buildFeatures {
         compose = true
         buildConfig = true
