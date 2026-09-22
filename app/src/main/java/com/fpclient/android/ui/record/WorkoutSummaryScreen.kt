@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -196,6 +197,8 @@ fun WorkoutSummaryScreen(
 
     if (confirmDiscard) {
         AlertDialog(
+            // Resizable on large screens: not limited to the platform default width.
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             onDismissRequest = { confirmDiscard = false },
             title = { Text("Discard this workout?") },
             text = { Text("The recording is deleted from this device and never uploaded.") },

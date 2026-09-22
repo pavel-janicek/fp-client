@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.viewinterop.AndroidView
 import com.fpclient.android.AppContainer
@@ -199,6 +200,9 @@ fun ActivityDetailScreen(
 
     if (showEditDialog) {
         AlertDialog(
+            // Resizable on large screens: not limited to the platform default width
+            // (Material3 still caps the content at 560dp, so phones look unchanged).
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             onDismissRequest = { showEditDialog = false },
             title = { Text("Edit activity") },
             text = {
@@ -241,6 +245,7 @@ fun ActivityDetailScreen(
     }
     if (showDeleteConfirm) {
         AlertDialog(
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete activity") },
             text = { Text("This activity will be permanently deleted. This cannot be undone.") },
@@ -259,6 +264,7 @@ fun ActivityDetailScreen(
     }
     downloadError?.let { message ->
         AlertDialog(
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             onDismissRequest = { downloadError = null },
             title = { Text("Route download failed") },
             text = { Text(message) },

@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
@@ -135,6 +136,8 @@ fun LocationPermissionGate(content: @Composable () -> Unit) {
 
     if (showRationale) {
         AlertDialog(
+            // Resizable on large screens: not limited to the platform default width.
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             onDismissRequest = { showRationale = false },
             title = { Text("Why we need your location") },
             text = {

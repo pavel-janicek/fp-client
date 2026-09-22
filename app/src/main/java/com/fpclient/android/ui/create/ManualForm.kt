@@ -31,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.fpclient.android.data.dto.ActivityTypes
 import com.fpclient.android.data.dto.ManualActivityRequest
 import com.fpclient.android.util.Format
@@ -115,6 +116,9 @@ fun ManualForm(vm: CreateViewModel) {
             }
             val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
             DatePickerDialog(
+                // Resizable on large screens: not limited to the platform default width
+                // (Material3 still caps the picker at 560dp, so phones look unchanged).
+                properties = DialogProperties(usePlatformDefaultWidth = false),
                 onDismissRequest = { showDatePicker = false },
                 confirmButton = {
                     TextButton(onClick = {

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.fpclient.android.AppContainer
 import kotlinx.coroutines.runBlocking
 
@@ -36,6 +37,9 @@ fun ChangePasswordDialog(container: AppContainer, onDismiss: () -> Unit) {
     var showNew by rememberSaveable { mutableStateOf(false) }
 
     AlertDialog(
+        // Resizable on large screens: not limited to the platform default width
+        // (Material3 still caps the content at 560dp, so phones look unchanged).
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         onDismissRequest = onDismiss,
         title = { Text("Change password") },
         text = {
