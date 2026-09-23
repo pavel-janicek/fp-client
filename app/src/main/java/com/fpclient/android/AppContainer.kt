@@ -10,6 +10,7 @@ import com.fpclient.android.data.repository.NotificationRepository
 import com.fpclient.android.data.repository.PrivacyZoneRepository
 import com.fpclient.android.data.repository.TimelineRepository
 import com.fpclient.android.data.repository.UserRepository
+import com.fpclient.android.notifications.NotificationPollStore
 import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.data.session.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,13 @@ class AppContainer(context: Context) {
     val userRepository: UserRepository by lazy { UserRepository(apiClient.api) }
     val analyticsRepository: AnalyticsRepository by lazy { AnalyticsRepository(apiClient.api) }
     val notificationRepository: NotificationRepository by lazy { NotificationRepository(apiClient.api) }
+
+    /**
+     * Remembers how far background notification delivery got (Iteration 8f): the last-seen
+     * notification id, which session it belongs to, and whether the push permission was
+     * already offered in Settings. Shared by the periodic worker and the Settings → Push card.
+     */
+    val notificationPollStore: NotificationPollStore by lazy { NotificationPollStore(context) }
     val privacyZoneRepository: PrivacyZoneRepository by lazy { PrivacyZoneRepository(apiClient.api) }
     val batchImportRepository: BatchImportRepository by lazy { BatchImportRepository(apiClient.api) }
 

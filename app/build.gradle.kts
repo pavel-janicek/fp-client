@@ -96,6 +96,10 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.security:security-crypto:1.1.0")
 
+    // Background notification polling (Iteration 8f) — the only new dependency the whole
+    // push feature needs: the periodic worker that checks the instance for new notifications.
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
+
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")
 

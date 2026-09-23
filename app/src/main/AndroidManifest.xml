@@ -7,12 +7,22 @@
          FINE so the system dialog offers the "approximate only" path; recording only starts
          after FINE is granted. FOREGROUND_SERVICE_LOCATION (API 34+) is required to promote
          a service with foregroundServiceType="location". POST_NOTIFICATIONS (API 33+) is
-         needed for the ongoing recording notification to be visible. -->
+         needed for the ongoing recording notification to be visible, and since Iteration 8f
+         also gates the background notification poll — requested only from Settings → Push,
+         never at app start. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Background notification delivery (Iteration 8f) adds androidx.work; its runtime library
+         declares WAKE_LOCK (WorkManager's own wakelocks) and ACCESS_NETWORK_STATE (the
+         NetworkType.CONNECTED constraint the poll uses). They are stated here explicitly so the
+         app's permission set stays readable without opening a merged manifest. Both are
+         normal-protection permissions and nothing extra is requested by this feature. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".FitPubApplication"

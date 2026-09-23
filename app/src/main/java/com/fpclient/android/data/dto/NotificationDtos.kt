@@ -48,6 +48,8 @@ object NotificationTypes {
     const val FOLLOW_REQUEST = "FOLLOW_REQUEST"
     const val FOLLOW_REQUEST_ACCEPTED = "FOLLOW_REQUEST_ACCEPTED"
     const val ACTIVITY_COMMENTED = "ACTIVITY_COMMENTED"
+    /** Someone shared the user's activity; background delivery (Iteration 8f) announces it. */
+    const val ACTIVITY_SHARED = "ACTIVITY_SHARED"
     const val ACTIVITY_MENTION = "ACTIVITY_MENTION"
     const val PRIVACY_ZONE_TRIGGERED = "PRIVACY_ZONE_TRIGGERED"
     const val SYSTEM_ANNOUNCEMENT = "SYSTEM_ANNOUNCEMENT"

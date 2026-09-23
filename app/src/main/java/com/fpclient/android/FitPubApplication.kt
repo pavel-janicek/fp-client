@@ -2,6 +2,8 @@ package com.fpclient.android
 
 import android.app.Application
 import android.content.Context
+import com.fpclient.android.notifications.NotificationPollWorker
+import com.fpclient.android.notifications.PushNotifications
 import org.osmdroid.config.Configuration
 
 class FitPubApplication : Application() {
@@ -12,6 +14,13 @@ class FitPubApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+
+        // Background notification delivery (Iteration 8f): create the channel up front so the
+        // OS-level toggle for it is visible in system settings even before the first poll, and
+        // make sure the periodic poll exists. The worker itself skips guests / signed-out
+        // users, so scheduling unconditionally is safe.
+        PushNotifications.ensureChannel(this)
+        NotificationPollWorker.schedule(this)
 
         // Configure osmdroid tile cache in app storage.
         @Suppress("DEPRECATION")

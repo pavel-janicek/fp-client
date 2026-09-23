@@ -59,8 +59,19 @@ fun MainScaffold(
     onOpenSettings: () -> Unit,
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
+    requestedTab: String? = null,
+    onRequestedTabHandled: () -> Unit = {},
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(Routes.BottomTab.TIMELINE.name) }
+
+    // A tap on the background poll's summary notification asks for the notifications tab
+    // (Iteration 8f). The request is consumed so that tapping the notification again after the
+    // user wandered to another tab switches back, instead of being silently ignored.
+    LaunchedEffect(requestedTab) {
+        val requested = requestedTab ?: return@LaunchedEffect
+        if (Routes.BottomTab.entries.any { it.name == requested }) selectedTab = requested
+        onRequestedTabHandled()
+    }
 
     // Badge for unread notifications.
     val notificationsVm: NotificationsViewModel =

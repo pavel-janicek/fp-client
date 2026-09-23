@@ -119,6 +119,9 @@ fun SettingsScreen(
                     ) { Text("Manage privacy zones") }
                 }
             }
+            // Push (Iteration 8f): the card owns the notification-permission request and states
+            // the "eventual, not instant" delivery model.
+            PushNotificationCard(container)
             if (sessionState.loggedIn) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(14.dp)) {

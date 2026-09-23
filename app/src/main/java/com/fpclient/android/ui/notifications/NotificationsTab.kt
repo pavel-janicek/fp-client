@@ -21,15 +21,18 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fpclient.android.AppContainer
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.data.dto.NotificationDto
+import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.ui.components.EmptyState
 import com.fpclient.android.ui.components.ErrorState
 import com.fpclient.android.ui.components.LoadingIndicator
@@ -44,6 +47,11 @@ fun NotificationsTabContent(
     modifier: Modifier = Modifier,
 ) {
     val ui by viewModel.ui.collectAsState()
+
+    // Opening this tab is the "already read" signal for the background summary notification:
+    // the user is looking at the very list it summarized (Iteration 8f).
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { PushNotifications.cancel(context) }
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
@@ -131,15 +139,9 @@ private fun NotificationRow(
     onAccept: () -> Unit = {},
     onReject: () -> Unit = {},
 ) {
-    val actor = notification.actorDisplayName ?: notification.actorUsername ?: "Someone"
-    val text = when (notification.type) {
-        "ACTIVITY_LIKED" -> "$actor reacted ${notification.reactionEmoji ?: "❤️"} to your activity"
-        "COMMENT_ADDED", "ACTIVITY_COMMENTED" -> "$actor commented: \"${notification.commentText ?: ""}\""
-        "USER_FOLLOWED" -> "$actor started following you"
-        "FOLLOW_REQUEST" -> "$actor requested to follow you"
-        "FOLLOW_REQUEST_ACCEPTED" -> "$actor accepted your follow request"
-        else -> "$actor interacted with you"
-    }
+    // Wording comes from NotificationText so the in-app row and the background push
+    // notification (Iteration 8f) always read identically.
+    val text = com.fpclient.android.notifications.NotificationText.describe(notification)
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = if (notification.read) MaterialTheme.colorScheme.surface

@@ -28,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.ui.auth.LoginContent
 import com.fpclient.android.ui.auth.LoginViewModel
@@ -47,11 +48,18 @@ class MainActivity : ComponentActivity() {
 
     private val appViewModel: AppViewModel by viewModels { AppViewModel.factory(FitPubApplication.container(this)) }
 
+    /**
+     * Bottom tab asked for by a tapped background notification (Iteration 8f), or null for a
+     * normal launch. Cleared by the main screen once it has honoured the request.
+     */
+    private val requestedTab = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = FitPubApplication.container(this)
         // Only on a fresh launch — on recreation the same intent would re-trigger the share flow.
         val sharedFileUri = if (savedInstanceState == null) extractSharedFileUri(intent) else null
+        requestedTab.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_TAB)
         // Workouts whose share attempt failed (or that were recorded without a reachable
         // server, Iteration 8d) are retried silently on the next launch, once per process
         // and only for a signed-in session — the Record screen keeps the queue visible and
@@ -74,11 +82,29 @@ class MainActivity : ComponentActivity() {
                         }
                         !state.configured -> ServerSetupRoute(container)
                         !state.loggedIn && !state.guest -> AuthFlowRoute(container, appViewModel)
-                        else -> MainAppRoute(container, appViewModel, sharedFileUri)
+                        else -> MainAppRoute(
+                            container = container,
+                            appViewModel = appViewModel,
+                            sharedFileUri = sharedFileUri,
+                            requestedTab = requestedTab.value,
+                            onRequestedTabHandled = { requestedTab.value = null },
+                        )
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Tapping the background poll's summary notification brings FP Client to the front
+     * (Iteration 8f). The PendingIntent uses NEW_TASK|CLEAR_TOP, so the normal path is a fresh
+     * `onCreate` carrying the extra; [onNewIntent] covers deliveries that land on a live
+     * instance instead, so the tap works either way.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        requestedTab.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_TAB)
     }
 
     /** File shared into the app (share sheet: ACTION_SEND + EXTRA_STREAM) or opened via
@@ -200,9 +226,18 @@ private fun MainAppRoute(
     container: AppContainer,
     appViewModel: AppViewModel,
     sharedFileUri: Uri? = null,
+    requestedTab: String? = null,
+    onRequestedTabHandled: () -> Unit = {},
 ) {
     val navController = rememberNavController()
-    FitPubNavGraph(navController = navController, container = container, appViewModel = appViewModel, sharedFileUri = sharedFileUri)
+    FitPubNavGraph(
+        navController = navController,
+        container = container,
+        appViewModel = appViewModel,
+        sharedFileUri = sharedFileUri,
+        requestedTab = requestedTab,
+        onRequestedTabHandled = onRequestedTabHandled,
+    )
 }
 @Composable
 private fun FitPubNavGraph(
@@ -210,6 +245,8 @@ private fun FitPubNavGraph(
     container: AppContainer,
     appViewModel: AppViewModel,
     sharedFileUri: Uri? = null,
+    requestedTab: String? = null,
+    onRequestedTabHandled: () -> Unit = {},
 ) {
     // A file arrived through the share sheet / "Open with": open the upload form with
     // that file pre-selected once, right after the main screen is up.
@@ -231,6 +268,8 @@ private fun FitPubNavGraph(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
                 onOpenFollowing = { username -> navController.navigate(Routes.followList(username, "following")) },
+                requestedTab = requestedTab,
+                onRequestedTabHandled = onRequestedTabHandled,
             )
         }
         composable(
