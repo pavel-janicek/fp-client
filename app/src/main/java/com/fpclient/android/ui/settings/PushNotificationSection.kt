@@ -17,9 +17,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,9 +38,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fpclient.android.AppContainer
+import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.NotificationPolling
+import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
+import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.util.Format
 import java.time.Instant
 import kotlinx.coroutines.launch
@@ -222,4 +227,168 @@ private fun openNotificationSettings(context: Context) {
         .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     context.startActivity(intent)
+}
+
+/**
+ * Settings → Push, the direct-mailbox half (Iteration 8h).
+ *
+ * Probes whether the configured instance has Web Push on (`GET /api/web/push/vapid-key`; a
+ * **503** means the admin has it disabled — the card then says so and the 8f background check
+ * above remains the delivery path), lets the user point at their push mailbox (the
+ * dockerized-server stack ships one at `https://push.paveljanicek.cz`), and enables/disables
+ * the subscription. The copy states the trust model plainly: the keys are generated on-device
+ * with JCA, the mailbox only ever sees ciphertext, no password or token is stored off-device,
+ * and one tap runs `DELETE /subscribe` + mailbox removal + local key wipe. While this is on,
+ * the 8f poll above keeps running as the fallback but stops announcing (this path delivers).
+ */
+@Composable
+internal fun MailboxPushCard(container: AppContainer) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val session by container.sessionStore.session.collectAsState(initial = null)
+    val subscription by container.pushSubscriptionStore.subscription.collectAsState()
+    val storedMailbox by container.pushSubscriptionStore.mailboxBase.collectAsState()
+
+    var mailboxInput by remember(storedMailbox) { mutableStateOf(storedMailbox) }
+    var probing by remember { mutableStateOf(false) }
+    // null = unknown (still probing, or the instance could not be asked), true/false = probe.
+    var available by remember { mutableStateOf<Boolean?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val loggedIn = session?.isLoggedIn == true
+    val owner = session?.let { NotificationPolling.cursorOwner(it.serverUrl, it.username) }
+    val active = subscription != null && subscription?.owner == owner
+
+    // Re-probe whenever the signed-in account (or instance) changes — a fresh Settings visit
+    // always reflects the instance's current FITPUB_PUSH_ENABLED state.
+    LaunchedEffect(session?.serverUrl, session?.username) {
+        available = null
+        error = null
+        if (loggedIn) {
+            probing = true
+            available = when (val probe = container.pushRepository.probe()) {
+                is ApiResult.Success -> probe.data
+                // The instance could not be asked (offline, restarting): leave unknown —
+                // enabling is still allowed because the subscribe call answers 503 itself.
+                is ApiResult.Error -> null
+            }
+            probing = false
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("Mailbox push", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Fetches encrypted notifications straight from your push mailbox roughly " +
+                    "every 15 minutes, without any third-party push service. The decryption " +
+                    "keys are generated on this device and never leave it — the mailbox only " +
+                    "ever holds ciphertext — and disabling below revokes the subscription " +
+                    "with a single call. While it is on, the background check above stays " +
+                    "scheduled as a fallback but stops announcing (this path delivers instead).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+
+            if (!loggedIn) {
+                Text(
+                    "Sign in to enable mailbox push.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                return@Column
+            }
+
+            if (active) {
+                Text(
+                    "Enabled for ${session?.username ?: "this account"} — the mailbox is " +
+                        "checked about every 15 minutes and notifications collapse by their " +
+                        "server tag.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            error = null
+                            error = when (val result = container.pushRepository.disable()) {
+                                is ApiResult.Success -> null
+                                is ApiResult.Error -> result.message
+                            }
+                            busy = false
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) { Text(if (busy) "Disabling…" else "Disable mailbox push") }
+            } else {
+                if (subscription != null) {
+                    Text(
+                        "A mailbox subscription for a different account on this device is " +
+                            "active; enabling push here replaces it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                OutlinedTextField(
+                    value = mailboxInput,
+                    onValueChange = { mailboxInput = it },
+                    label = { Text("Mailbox URL") },
+                    singleLine = true,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                Text(
+                    when {
+                        probing -> "Checking whether this instance has push enabled…"
+                        available == false ->
+                            "Push is switched off on this instance, so the background check " +
+                                "above remains your delivery path."
+                        available == null ->
+                            "Couldn't check whether this instance has push enabled — you can " +
+                                "still try; enabling reports the instance's answer."
+                        else ->
+                            "This instance has Web Push enabled. Point the URL above at your " +
+                                "mailbox (the shared one is " +
+                                "${PushSubscriptionStore.DEFAULT_MAILBOX})."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Button(
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            error = null
+                            when (val result = container.pushRepository.enable(mailboxInput)) {
+                                is ApiResult.Success ->
+                                    // Idempotent (KEEP) — makes sure the 15-minute check runs
+                                    // even if the app was updated since it was last scheduled.
+                                    PushFetchWorker.schedule(context)
+                                is ApiResult.Error -> error = result.message
+                            }
+                            busy = false
+                        }
+                    },
+                    enabled = !busy && available != false,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) { Text(if (busy) "Enabling…" else "Enable mailbox push") }
+            }
+
+            error?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+    }
 }

@@ -31,6 +31,9 @@ import com.fpclient.android.data.dto.PrivacyZoneCreateRequest
 import com.fpclient.android.data.dto.PrivacyZoneDto
 import com.fpclient.android.data.dto.PrivacyZoneToggleRequest
 import com.fpclient.android.data.dto.PrivacyZoneUpdateRequest
+import com.fpclient.android.data.dto.PushStatusDto
+import com.fpclient.android.data.dto.PushSubscribeRequest
+import com.fpclient.android.data.dto.PushUnsubscribeRequest
 import com.fpclient.android.data.dto.ReactionRequest
 import com.fpclient.android.data.dto.RegisterRequest
 import com.fpclient.android.data.dto.RegistrationStatusResponse
@@ -48,6 +51,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -395,9 +399,17 @@ interface FitPubApi {
     suspend fun deleteBatchImport(@Path("jobId") jobId: String): Response<Unit>
 
     // ------------------------------------------------------------------
-    // Push
+    // Push (Iteration 8h)
     // ------------------------------------------------------------------
 
-        @GET("api/web/push/vapid-key")
+    @GET("api/web/push/vapid-key")
     suspend fun vapidKey(): Response<VapidKeyResponse>
+
+    @POST("api/web/push/subscribe")
+    suspend fun pushSubscribe(@Body request: PushSubscribeRequest): Response<PushStatusDto>
+
+    // The server declares @RequestBody UnsubscribeRequest; Retrofit's @DELETE forbids a
+    // body, so the equivalent @HTTP form (hasBody = true) is used instead.
+    @HTTP(method = "DELETE", hasBody = true, path = "api/web/push/subscribe")
+    suspend fun pushUnsubscribe(@Body request: PushUnsubscribeRequest): Response<PushStatusDto>
 }

@@ -122,6 +122,11 @@ fun SettingsScreen(
             // Push (Iteration 8f): the card owns the notification-permission request and states
             // the "eventual, not instant" delivery model.
             PushNotificationCard(container)
+            // Direct mailbox push (Iteration 8h): shown signed-in only, since the subscription
+            // is per-account (probe → mint mailbox → POST /subscribe through the session flow).
+            if (sessionState.loggedIn) {
+                MailboxPushCard(container)
+            }
             if (sessionState.loggedIn) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(14.dp)) {

@@ -3,6 +3,7 @@ package com.fpclient.android
 import android.app.Application
 import android.content.Context
 import com.fpclient.android.notifications.NotificationPollWorker
+import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
 import org.osmdroid.config.Configuration
 
@@ -21,6 +22,10 @@ class FitPubApplication : Application() {
         // users, so scheduling unconditionally is safe.
         PushNotifications.ensureChannel(this)
         NotificationPollWorker.schedule(this)
+        // Mailbox Web Push check (Iteration 8h): scheduled unconditionally as well — the
+        // worker exits immediately until a subscription for the current session exists, and
+        // scheduling with KEEP never shifts an already-running schedule.
+        PushFetchWorker.schedule(this)
 
         // Configure osmdroid tile cache in app storage.
         @Suppress("DEPRECATION")

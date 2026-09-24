@@ -58,7 +58,27 @@ screen and a fresh login mints a valid token. This also covers expired fixed-lif
 and instances that rotate their signing secret — previously those left the user stranded
 on "Unauthorized" errors.
 
-### Pre-1.3.4 behavior the app already adapted to
+### 2.1 — Web Push subscription (Iteration 8h, optional feature)
+
+The app's mailbox push rides the server's **pre-existing** Web Push API
+(`social.fitpub.push.boundary.PushSubscriptionResource`); no server changes are involved:
+
+* `GET /api/web/push/vapid-key` — availability probe. **503** with
+  `{"error": "Push notifications are not configured"}` means `FITPUB_PUSH_ENABLED` is off or the
+  VAPID keys are missing on that instance; the app treats the 503 as definitive ("push disabled
+  here") and keeps its 30-minute notification poll as the delivery path. 200 answers with the VAPID
+  public key (the app only needs the *availability*, never the key itself).
+* `POST /api/web/push/subscribe` — `{endpoint, keys:{p256dh, auth}}` (base64url, no padding),
+  authenticated by the session cookie + CSRF like every other mutating call. 503 with the same
+  body when push is disabled; the app then unregisters the mailbox it had just minted.
+* `DELETE /api/web/push/subscribe` — body `{endpoint}`. The server declares `@RequestBody`, so the
+  app sends it via Retrofit's `@HTTP(method = "DELETE", hasBody = true)` (plain `@DELETE` cannot
+  carry a body). 404 = endpoint already unknown, treated as unsubscribed.
+
+No password or token ever leaves the device: the subscription publishes only the public half of a
+keypair that can decrypt notification payloads, revocable with the `DELETE` above (plus automatic
+expiry — the mailbox relay answers 410 after ~30 days without a fetch and the server then drops the
+subscription via `WebPushService.deleteByEndpoint`).
 
 The server now **enforces** text length limits it previously accepted silently — activity
 title 200 chars, activity description 5000 chars, bio 500 chars, comments 5000 chars, display

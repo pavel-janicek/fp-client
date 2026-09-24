@@ -60,6 +60,15 @@ class NotificationPollWorker(
                     store.recordPoll(owner, NotificationPolling.newestId(page))
                     return Result.success()
                 }
+                // While direct mailbox delivery (Iteration 8h) is active for this session,
+                // the mailbox worker announces new events — faster and per-tag — so this poll
+                // stays silent to avoid announcing everything twice. It keeps polling and
+                // advancing the cursor, which means the 8f fallback resumes instantly (and
+                // without replaying the backlog) the moment mailbox push is disabled.
+                if (container.pushSubscriptionStore.subscription.value?.owner == owner) {
+                    store.recordPoll(owner, NotificationPolling.newestId(page) ?: cursor.lastSeenId)
+                    return Result.success()
+                }
                 val fresh = NotificationPolling.newRows(page, cursor.lastSeenId)
                 if (fresh.isNotEmpty()) {
                     val unread = (container.notificationRepository.unreadCount() as? ApiResult.Success)?.data

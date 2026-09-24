@@ -2,15 +2,18 @@ package com.fpclient.android
 
 import android.content.Context
 import com.fpclient.android.data.network.ApiClient
+import com.fpclient.android.data.network.MailboxClient
 import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.repository.AnalyticsRepository
 import com.fpclient.android.data.repository.AuthRepository
 import com.fpclient.android.data.repository.BatchImportRepository
 import com.fpclient.android.data.repository.NotificationRepository
 import com.fpclient.android.data.repository.PrivacyZoneRepository
+import com.fpclient.android.data.repository.PushRepository
 import com.fpclient.android.data.repository.TimelineRepository
 import com.fpclient.android.data.repository.UserRepository
 import com.fpclient.android.notifications.NotificationPollStore
+import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.data.session.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +47,18 @@ class AppContainer(context: Context) {
      * already offered in Settings. Shared by the periodic worker and the Settings → Push card.
      */
     val notificationPollStore: NotificationPollStore by lazy { NotificationPollStore(context) }
+
+    /**
+     * Iteration 8h — the mailbox Web Push subscription (endpoint + app-private keypair +
+     * auth secret) and the repository that probes/enables/disables it and decrypts queued
+     * blobs. Shared by Settings → Push, the mailbox worker and the 8f poll (which needs to
+     * know when 8h owns the announcements).
+     */
+    val pushSubscriptionStore: PushSubscriptionStore by lazy { PushSubscriptionStore(context) }
+    val pushRepository: PushRepository by lazy {
+        PushRepository(apiClient.api, MailboxClient(), pushSubscriptionStore, sessionStore)
+    }
+
     val privacyZoneRepository: PrivacyZoneRepository by lazy { PrivacyZoneRepository(apiClient.api) }
     val batchImportRepository: BatchImportRepository by lazy { BatchImportRepository(apiClient.api) }
 

@@ -54,12 +54,22 @@ class MainActivity : ComponentActivity() {
      */
     private val requestedTab = mutableStateOf<String?>(null)
 
+    /**
+     * Server-relative path asked for by a tapped mailbox push notification (Iteration 8h),
+     * e.g. `/activities/<id>`, or null for a normal launch. Consumed once the nav graph is up.
+     */
+    private val requestedPath = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = FitPubApplication.container(this)
         // Only on a fresh launch — on recreation the same intent would re-trigger the share flow.
         val sharedFileUri = if (savedInstanceState == null) extractSharedFileUri(intent) else null
         requestedTab.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_TAB)
+        // Path only on a fresh launch: on recreation the same intent would re-navigate and
+        // stack a duplicate detail screen (same reasoning as the shared-file guard above).
+        requestedPath.value =
+            if (savedInstanceState == null) intent.getStringExtra(PushNotifications.EXTRA_OPEN_PATH) else null
         // Workouts whose share attempt failed (or that were recorded without a reachable
         // server, Iteration 8d) are retried silently on the next launch, once per process
         // and only for a signed-in session — the Record screen keeps the queue visible and
@@ -88,6 +98,8 @@ class MainActivity : ComponentActivity() {
                             sharedFileUri = sharedFileUri,
                             requestedTab = requestedTab.value,
                             onRequestedTabHandled = { requestedTab.value = null },
+                            requestedPath = requestedPath.value,
+                            onRequestedPathHandled = { requestedPath.value = null },
                         )
                     }
                 }
@@ -105,6 +117,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         requestedTab.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_TAB)
+        requestedPath.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_PATH)
     }
 
     /** File shared into the app (share sheet: ACTION_SEND + EXTRA_STREAM) or opened via
@@ -115,6 +128,9 @@ class MainActivity : ComponentActivity() {
         else -> null
     }
 }
+
+/** Matches the server-relative activity paths mailbox push payloads carry (`/activities/<id>`). */
+private val PUSH_ACTIVITY_PATH = Regex("^/activities/([^/?#]+)")
 
 @Composable
 private fun ServerSetupRoute(
@@ -228,6 +244,8 @@ private fun MainAppRoute(
     sharedFileUri: Uri? = null,
     requestedTab: String? = null,
     onRequestedTabHandled: () -> Unit = {},
+    requestedPath: String? = null,
+    onRequestedPathHandled: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     FitPubNavGraph(
@@ -237,6 +255,8 @@ private fun MainAppRoute(
         sharedFileUri = sharedFileUri,
         requestedTab = requestedTab,
         onRequestedTabHandled = onRequestedTabHandled,
+        requestedPath = requestedPath,
+        onRequestedPathHandled = onRequestedPathHandled,
     )
 }
 @Composable
@@ -247,6 +267,8 @@ private fun FitPubNavGraph(
     sharedFileUri: Uri? = null,
     requestedTab: String? = null,
     onRequestedTabHandled: () -> Unit = {},
+    requestedPath: String? = null,
+    onRequestedPathHandled: () -> Unit = {},
 ) {
     // A file arrived through the share sheet / "Open with": open the upload form with
     // that file pre-selected once, right after the main screen is up.
@@ -254,6 +276,18 @@ private fun FitPubNavGraph(
         LaunchedEffect(sharedFileUri) {
             navController.navigate(Routes.createWithSharedUri(sharedFileUri.toString()))
         }
+    }
+    // A mailbox push notification (Iteration 8h) carried a server-relative path such as
+    // /activities/<id>: open it on top of the main screen once the graph is up, so the tap
+    // lands on the activity behind the notification instead of the bare notifications tab
+    // (which the companion EXTRA_OPEN_TAB request still selects underneath).
+    LaunchedEffect(requestedPath) {
+        val path = requestedPath ?: return@LaunchedEffect
+        val activityId = PUSH_ACTIVITY_PATH.matchEntire(path)?.groupValues?.get(1)
+        if (!activityId.isNullOrBlank()) {
+            navController.navigate(Routes.activityDetail(activityId))
+        }
+        onRequestedPathHandled()
     }
     NavHost(navController = navController, startDestination = Routes.MAIN) {
         composable(Routes.MAIN) {
