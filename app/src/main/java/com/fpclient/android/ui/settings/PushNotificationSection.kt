@@ -72,6 +72,10 @@ internal fun PushNotificationCard(container: AppContainer) {
 
     var allowed by remember { mutableStateOf(PushNotifications.canPost(context)) }
     var showRationale by remember { mutableStateOf(false) }
+    // Confirmation for the "Ensure background checks are scheduled" repair button below:
+    // re-arming an already-scheduled check is deliberately a no-op (KEEP never shifts the next
+    // run), so without this the tap would look broken.
+    var scheduleConfirmed by remember { mutableStateOf(false) }
 
     // The permission dialog (and the system settings page) takes the user away from the app;
     // re-check on resume so the card never shows a stale verdict.
@@ -163,12 +167,29 @@ internal fun PushNotificationCard(container: AppContainer) {
                 )
             }
 
-            // Re-arming the schedule here makes the card a repair path: if the periodic poll
-            // was ever dropped (e.g. by a system cleanup), tapping this brings it back.
+            // Re-arming the schedule here makes the card a repair path: if a background check
+            // was ever dropped (e.g. by a system cleanup), tapping this brings it back. Both the
+            // 8f poll and the 8h mailbox check are re-armed — either can be dropped, and both
+            // calls are idempotent (KEEP), so a live schedule is never shifted.
             OutlinedButton(
-                onClick = { NotificationPollWorker.schedule(context) },
+                onClick = {
+                    NotificationPollWorker.schedule(context)
+                    PushFetchWorker.schedule(context)
+                    // Re-arming is invisible when the work is already in place; say so plainly
+                    // so the tap is never mistaken for a dead button.
+                    scheduleConfirmed = true
+                },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             ) { Text("Ensure background checks are scheduled") }
+            if (scheduleConfirmed) {
+                Text(
+                    "Background checks are scheduled — the next one runs within about " +
+                        "30 minutes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         }
     }
 
