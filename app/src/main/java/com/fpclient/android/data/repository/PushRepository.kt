@@ -155,8 +155,10 @@ class PushRepository(
                 "An ntfy topic may only use a-z, 0-9, '-' and '_', and be at most 64 characters.",
             )
         }
-        // Uploading the private key is the point: the relay has to decrypt to forward readable
-        // text. It is the same key the phone already holds — notification payloads, nothing else.
+        // Since 8j the relay forwards the *untouched ciphertext* — it never needs the key, so
+        // no key is uploaded. This is the whole point of the step: instant delivery now moves
+        // exactly as much off the phone as mailbox push does, and nothing else. The `keys`
+        // object is still accepted by a pre-8j relay for one release (see ForwardRequestDto).
         val result = mailbox.setForward(
             endpoint = subscription.endpoint,
             manageToken = manageToken,
@@ -166,7 +168,6 @@ class PushRepository(
                 keys = ForwardKeysDto(
                     p256dh = subscription.publicKey,
                     auth = subscription.authSecret,
-                    privkey = subscription.privateKey,
                 ),
             ),
         )
@@ -251,23 +252,68 @@ class PushRepository(
             is ApiResult.Error -> return fetched
             is ApiResult.Success -> fetched.data
         }
-        val keys = try {
-            Triple(
+        val keys = when (val read = keysOf(subscription)) {
+            is ApiResult.Error -> return read
+            is ApiResult.Success -> read.data
+        }
+        return ApiResult.Success(queued.mapNotNull { decrypt(it.payload, subscription, keys) })
+    }
+
+    /**
+     * Decrypts + parses one standard-base64 aes128gcm blob into a postable payload, or null when
+     * it cannot be read (wrong key, corrupted relay copy, unparsable plaintext).
+     *
+     * Shared by the two delivery paths on purpose: the 15-minute `fitpub_push_mailbox_check` and
+     * the 8j ntfy stream receive the *same* bytes over different transports (the relay hands
+     * the mailbox queue the untouched blob as base64, and publishes the untouched blob to ntfy
+     * as base64 too), so they must produce byte-identical notifications — including the
+     * payload `tag` that drives the per-event-type collapse. One implementation, one fixture
+     * test, no chance of the fast path drifting from the slow one.
+     */
+    fun decryptPayload(
+        base64Blob: String,
+        subscription: PushSubscription,
+    ): PushPayloadDto? {
+        val keys = when (val read = keysOf(subscription)) {
+            is ApiResult.Error -> return null
+            is ApiResult.Success -> read.data
+        }
+        return decrypt(base64Blob, subscription, keys)
+    }
+
+    /** The subscription's own key triple, decoded once per call site. */
+    private fun keysOf(subscription: PushSubscription): ApiResult<PushKeys> = try {
+        ApiResult.Success(
+            PushKeys(
                 WebPushCrypto.fromBase64Url(subscription.privateKey),
                 WebPushCrypto.fromBase64Url(subscription.publicKey),
                 WebPushCrypto.fromBase64Url(subscription.authSecret),
-            )
-        } catch (e: Exception) {
-            return ApiResult.Error("The stored push keys could not be read.")
-        }
-        val (privateKey, publicKey, authSecret) = keys
-        val payloads = queued.mapNotNull { message ->
-            runCatching {
-                // The relay hands the blob back as standard base64 (Go []byte JSON encoding).
-                val blob = Base64.getDecoder().decode(message.payload)
-                PushPayloads.decode(WebPushCrypto.decrypt(blob, privateKey, publicKey, authSecret))
-            }.getOrNull()
-        }
-        return ApiResult.Success(payloads)
+            ),
+        )
+    } catch (e: Exception) {
+        ApiResult.Error("The stored push keys could not be read.")
+    }
+
+    private fun decrypt(
+        base64Blob: String,
+        subscription: PushSubscription,
+        keys: PushKeys,
+    ): PushPayloadDto? = runCatching {
+        // The relay hands the blob back as standard base64 (Go []byte JSON encoding, and the
+        // same encoding it publishes to ntfy).
+        val blob = Base64.getDecoder().decode(base64Blob)
+        PushPayloads.decode(
+            WebPushCrypto.decrypt(blob, keys.privateKey, keys.publicKey, keys.authSecret),
+        )
+    }.getOrNull()
+
+    /** Named so the log-free rule stays obvious at every call site. */
+    private data class PushKeys(
+        val privateKey: ByteArray,
+        val publicKey: ByteArray,
+        val authSecret: ByteArray,
+    ) {
+        // Keys must never reach a log line: redact, exactly like RecipientKeys does.
+        override fun toString(): String = "PushKeys(…, …, …)"
     }
 }

@@ -44,10 +44,21 @@ data class PushSubscription(
      * switched on, and 8h delivery is unaffected.
      */
     val manageToken: String? = null,
-    /** True while the relay forwards decrypted notifications to the ntfy topic below. */
+    /** True while the relay forwards notifications to the ntfy topic below (ciphertext only). */
     val instantEnabled: Boolean = false,
-    /** The private ntfy topic the relay publishes to — shown (and copyable) in Settings. */
+    /**
+     * The private ntfy topic the relay publishes to. Shown in Settings for reference, but no
+     * longer something the user has to copy anywhere: FP Client subscribes to it itself
+     * (Iteration 8j).
+     */
     val ntfyTopic: String? = null,
+    /**
+     * Newest ntfy message id this device has delivered (Iteration 8j) — the `since=` value
+     * the next reconnect replays from, so a connection that dropped mid-flight does not lose
+     * the events in between. Not secret, but session-scoped like the rest of the record:
+     * switching accounts must not inherit another account's cursor.
+     */
+    val lastNtfyMessageId: String? = null,
 )
 
 class PushSubscriptionStore internal constructor(private val prefs: SharedPreferences) {
@@ -74,6 +85,7 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
         const val INSTANT_ENABLED = "instant_enabled"
         const val NTFY_TOPIC = "ntfy_topic"
         const val NTFY_SERVER = "ntfy_server"
+        const val NTFY_LAST_ID = "ntfy_last_id"
     }
 
     private val _subscription = MutableStateFlow(readSubscription())
@@ -102,6 +114,7 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
             manageToken = prefs.getString(Keys.MANAGE_TOKEN, null),
             instantEnabled = prefs.getBoolean(Keys.INSTANT_ENABLED, false),
             ntfyTopic = prefs.getString(Keys.NTFY_TOPIC, null),
+            lastNtfyMessageId = prefs.getString(Keys.NTFY_LAST_ID, null),
         )
     }
 
@@ -117,29 +130,48 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
             .putString(Keys.MANAGE_TOKEN, subscription.manageToken)
             .putBoolean(Keys.INSTANT_ENABLED, subscription.instantEnabled)
             .putString(Keys.NTFY_TOPIC, subscription.ntfyTopic)
+            .putString(Keys.NTFY_LAST_ID, subscription.lastNtfyMessageId)
             .apply()
         _mailboxBase.value = subscription.mailboxBase
         _subscription.value = subscription
     }
 
     /**
-     * Records the 8i instant-forward state on the active subscription (the relay is already
+     * Records the 8i/8j instant-forward state on the active subscription (the relay is already
      * updated by then — this is the local mirror, so a restart keeps showing the topic).
+     *
+     * Switching instant delivery **off** also drops the ntfy replay cursor: the new topic (or
+     * no topic at all) has its own id space, and replaying from a cursor belonging to a
+     * different topic would either skip real messages or resurrect a backlog.
      */
     suspend fun setInstantForward(enabled: Boolean, topic: String?) =
         withContext(Dispatchers.IO) {
             val current = _subscription.value
-            prefs.edit()
+            val editor = prefs.edit()
                 .putBoolean(Keys.INSTANT_ENABLED, enabled)
                 .putString(Keys.NTFY_TOPIC, if (enabled) topic else null)
-                .apply()
+            if (!enabled) editor.remove(Keys.NTFY_LAST_ID)
+            editor.apply()
             if (current != null) {
                 _subscription.value = current.copy(
                     instantEnabled = enabled,
                     ntfyTopic = if (enabled) topic else null,
+                    lastNtfyMessageId = if (enabled) current.lastNtfyMessageId else null,
                 )
             }
         }
+
+    /**
+     * Advances the ntfy replay cursor (Iteration 8j). Called after every delivered message so
+     * a process death, a reboot or a dropped connection resumes from the right place instead
+     * of replaying the whole cache window.
+     */
+    suspend fun setLastNtfyMessageId(id: String?) = withContext(Dispatchers.IO) {
+        if (id.isNullOrBlank()) return@withContext
+        val current = _subscription.value ?: return@withContext
+        prefs.edit().putString(Keys.NTFY_LAST_ID, id).apply()
+        _subscription.value = current.copy(lastNtfyMessageId = id)
+    }
 
     /** Remembers the mailbox URL the user typed, even before enabling. */
     suspend fun setMailboxBase(raw: String) = withContext(Dispatchers.IO) {
@@ -178,6 +210,7 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
             .remove(Keys.MANAGE_TOKEN)
             .remove(Keys.INSTANT_ENABLED)
             .remove(Keys.NTFY_TOPIC)
+            .remove(Keys.NTFY_LAST_ID)
             .apply()
         _subscription.value = null
     }

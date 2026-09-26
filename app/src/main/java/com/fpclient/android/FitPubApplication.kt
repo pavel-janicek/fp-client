@@ -2,6 +2,7 @@ package com.fpclient.android
 
 import android.app.Application
 import android.content.Context
+import com.fpclient.android.notifications.InstantDeliveryService
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
@@ -26,6 +27,11 @@ class FitPubApplication : Application() {
         // worker exits immediately until a subscription for the current session exists, and
         // scheduling with KEEP never shifts an already-running schedule.
         PushFetchWorker.schedule(this)
+        // Instant delivery receiver (Iteration 8j): started only when the *current* session
+        // already owns an `instantEnabled` subscription. The service re-checks that on every
+        // start, so a signed-out device or another account's subscription never connects even
+        // if this runs at a bad moment.
+        InstantDeliveryService.startIfEnabled(this)
 
         // Configure osmdroid tile cache in app storage.
         @Suppress("DEPRECATION")

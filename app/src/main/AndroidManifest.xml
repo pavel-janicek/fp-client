@@ -14,6 +14,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Iteration 8j: the in-app ntfy receiver is a foreground service of type
+         specialUse (see InstantDeliveryService for why not dataSync). API 34+ requires a
+         matching per-type permission; below that FOREGROUND_SERVICE alone is enough. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Background notification delivery (Iteration 8f) adds androidx.work; its runtime library
@@ -66,6 +70,19 @@
             android:name=".recording.TrackRecordingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+        <!-- Iteration 8j: the in-app ntfy receiver. specialUse rather than dataSync because
+             dataSync is time-capped on API 35+ (6 h/24 h) and an always-on push subscription
+             must not be torn down mid-flight; specialUse has no cap. Play requires the
+             subtype justification below; the decision is documented at length in
+             InstantDeliveryService's KDoc. -->
+        <service
+            android:name=".notifications.InstantDeliveryService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Holds a user-initiated ntfy subscription open so push notifications reach the user within seconds. The connection carries only end-to-end encrypted RFC 8291 ciphertext to the user's own self-hosted ntfy server, which is decrypted on this device only; no data is synced, transferred or read by the OS." />
+        </service>
     </application>
 
 </manifest>

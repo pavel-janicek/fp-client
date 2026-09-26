@@ -49,20 +49,27 @@ data class MailboxMessageDto(
 data class MailboxMessagesDto(val messages: List<MailboxMessageDto> = emptyList())
 
 /**
- * Decryption key material uploaded to the relay for instant ntfy delivery (Iteration 8i).
- * All fields are base64url-encoded without padding:
- * - [p256dh]: 65-byte uncompressed public point
- * - [auth]: 16-byte RFC 8291 auth secret
- * - [privkey]: 32-byte P-256 private scalar
+ * The public part of the subscription's Web Push key material, uploaded to the relay for
+ * instant delivery (Iteration 8i, changed by 8j).
+ *
+ * [privkey] was the single switch in the whole app that moved a key off the device. Since 8j
+ * the relay forwards the untouched ciphertext and never decrypts, so the phone no longer sends
+ * it: it is gone from every request the app makes, and kept here only as a nullable field so a
+ * request captured against a pre-8j build still deserialises. Do not set it.
  */
 @Serializable
 data class ForwardKeysDto(
     val p256dh: String,
     val auth: String,
-    val privkey: String,
+    val privkey: String? = null,
 )
 
-/** `PUT /push/{id}/forward` request body for enabling instant delivery via ntfy. */
+/**
+ * `PUT /push/{id}/forward` request body for enabling instant delivery via ntfy.
+ *
+ * [keys] is still sent (and still accepted by a pre-8j relay) even though an 8j relay ignores
+ * it entirely, so the two generations interoperate for one release.
+ */
 @Serializable
 data class ForwardRequestDto(
     val topic: String,

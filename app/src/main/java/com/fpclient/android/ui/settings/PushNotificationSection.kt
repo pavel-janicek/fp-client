@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,11 +21,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +45,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fpclient.android.AppContainer
 import com.fpclient.android.data.network.ApiResult
+import com.fpclient.android.notifications.InstantDeliveryBus
+import com.fpclient.android.notifications.InstantDeliveryService
+import com.fpclient.android.notifications.InstantDeliveryState
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.NotificationPolling
 import com.fpclient.android.notifications.PushFetchWorker
@@ -435,37 +441,50 @@ internal fun MailboxPushCard(container: AppContainer) {
  */
 @Composable
 private fun InstantDeliveryBlock(container: AppContainer) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
     val subscription by container.pushSubscriptionStore.subscription.collectAsState()
     val storedServer by container.pushSubscriptionStore.ntfyServer.collectAsState()
+    val socket by InstantDeliveryBus.state.collectAsState()
 
     var serverInput by remember(storedServer) { mutableStateOf(storedServer) }
     var topicInput by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var copied by remember { mutableStateOf(false) }
+    // Re-read on resume, like RecordingHealthCard does: the battery exemption is changed in
+    // system settings, so the row below it must be re-evaluated when the user comes back.
+    var resumed by remember { mutableIntStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumed++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val exempt = remember(resumed) {
+        runCatching {
+            context.getSystemService(PowerManager::class.java)
+                .isIgnoringBatteryOptimizations(context.packageName)
+        }.getOrDefault(false)
+    }
 
     val current = subscription ?: return
     // Relays before 8i mint no manage token, so there is no authorized way to configure this.
     val supported = current.manageToken != null
     val enabledNow = current.instantEnabled
-    val topic = current.ntfyTopic
     val server = serverInput.trim().ifEmpty { PushSubscriptionStore.DEFAULT_NTFY }
 
     Column(modifier = Modifier.padding(top = 10.dp)) {
         Text(
-            "Instant delivery via ntfy (optional)",
+            "Instant delivery (optional)",
             style = MaterialTheme.typography.titleSmall,
         )
         Text(
-            "Instead of waiting for the ~15 minute check, the mailbox relay decrypts each " +
-                "notification the moment it arrives and republishes the readable text to a " +
-                "private ntfy topic, which the ntfy app shows within seconds — even when this " +
-                "app is closed. The key uploaded for this is the same one already on this " +
-                "device: it can only decrypt notification payloads, it cannot access your " +
-                "account, and it never leaves the relay you chose. Switching this off (or " +
-                "disabling mailbox push) deletes it from the relay right away.",
+            "Instead of waiting for the ~15 minute check, FP Client keeps a connection open to " +
+                "your ntfy server itself — no second app, nothing to configure elsewhere. The " +
+                "relay forwards each notification still encrypted, and this phone decrypts it. " +
+                "Your key never leaves this phone, not even for instant delivery.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
@@ -487,16 +506,23 @@ private fun InstantDeliveryBlock(container: AppContainer) {
                 scope.launch {
                     busy = true
                     error = null
-                    copied = false
-                    // Remember the ntfy address either way — it is where the user has to point
-                    // their ntfy app regardless of what the relay answers.
+                    // Remember the ntfy address either way: it is where the receiver connects
+                    // regardless of what the relay answers.
                     container.pushSubscriptionStore.setNtfyServer(serverInput)
                     error = if (on) {
                         when (val result = container.pushRepository.enableInstant(topicInput)) {
-                            is ApiResult.Success -> null
+                            is ApiResult.Success -> {
+                                // Only now is there something to listen to, so only now does
+                                // the socket start.
+                                InstantDeliveryService.start(context)
+                                null
+                            }
                             is ApiResult.Error -> result.message
                         }
                     } else {
+                        // Stop the socket first: leaving it running would keep a permanent
+                        // notification and an open connection for a feature the user just off.
+                        InstantDeliveryService.stop(context)
                         when (val result = container.pushRepository.disableInstant()) {
                             is ApiResult.Success -> null
                             is ApiResult.Error -> result.message
@@ -515,30 +541,128 @@ private fun InstantDeliveryBlock(container: AppContainer) {
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
-        if (enabledNow && topic != null) {
-            InstantTopicDetails(
-                server = server,
-                topic = topic,
-                copied = copied,
-                busy = busy,
-                onServerChange = { serverInput = it },
-                onCopy = {
-                    clipboard.setText(AnnotatedString(topic))
-                    copied = true
-                },
-            )
-        } else {
-            InstantTopicForm(
+        if (!enabledNow) {
+            InstantConfigureForm(
                 topicInput = topicInput,
                 serverInput = serverInput,
                 busy = busy,
                 onTopicChange = { topicInput = it },
                 onServerChange = { serverInput = it },
             )
+            return@Column
+        }
+
+        // --- the live state, which is the whole point of an in-app receiver -------------
+        Text(
+            "Status",
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        InstantSocketStatus(state = socket)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "ntfy server: $server",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(onClick = { InstantDeliveryService.start(context) }) {
+                Text("Restart")
+            }
+        }
+        Text(
+            "The topic is generated on this device and never has to be copied anywhere. It is " +
+                "still a secret: anyone who knows it can read these notifications, so do not " +
+                "share it. Notifications older than about 12 hours (or older than the " +
+                "~15 minute check's own queue) are picked up by that check instead.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        InstantBatteryRow(exempt = exempt)
+    }
+}
+
+/** "Connecting / connected since / retrying", plus the last-message stamp. */
+@Composable
+private fun InstantSocketStatus(state: InstantDeliveryState) {
+    val (headline, detail) = when (state) {
+        is InstantDeliveryState.Stopped ->
+            "Not listening" to
+                "The receiver is not running. Turn instant delivery off and on, or restart the app."
+        is InstantDeliveryState.Connecting ->
+            "Connecting…" to "Opening the connection to your ntfy server."
+        is InstantDeliveryState.Connected ->
+            "Connected" to buildString {
+                append("Listening since ")
+                append(Format.dateTime(isoAt(state.since)))
+                state.lastMessageAt?.let {
+                    append(" · last notification ")
+                    append(Format.relative(isoAt(it)))
+                }
+            }
+        is InstantDeliveryState.Retrying ->
+            "Retrying" to buildString {
+                append("Attempt ${state.attempts}, next try in ${Format.duration(state.nextRetryInMs / 1000)}")
+                state.lastError?.let { append(" — $it") }
+            }
+    }
+    Text(headline, style = MaterialTheme.typography.bodyMedium)
+    Text(
+        detail,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+}
+
+/** Epoch millis → the ISO-8601 string `Format` speaks, or null when unset. */
+private fun isoAt(epochMillis: Long?): String? =
+    epochMillis?.let { runCatching { Instant.ofEpochMilli(it).toString() }.getOrNull() }
+
+/**
+ * The battery row, modeled on `RecordingHealthCard`: seconds-long delivery needs a connection
+ * Android does not kill, and a foreground service alone is not enough once Doze starts.
+ * Modelled on it because the same explanation has already been shown to this user once, for
+ * recording, and the two exemptions are the same Android setting.
+ */
+@Composable
+private fun InstantBatteryRow(exempt: Boolean) {
+    val context = LocalContext.current
+    Text(
+        if (exempt) "Battery optimization: unrestricted." else
+            "Battery optimization is enabled. Android may delay or drop the connection when " +
+                "the screen is off, which is the difference between instant and ~15 minutes.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Text(
+        "A permanent \"listening for notifications\" notification is required for instant " +
+            "delivery — it is what Android shows for a foreground service. Turn instant " +
+            "delivery off above to remove it. The ongoing notification itself can be hidden in " +
+            "Android's app notification settings; doing so does not stop the connection.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+    if (!exempt) {
+        TextButton(onClick = { openInstantBatterySettings(context) }) {
+            Text("Battery settings")
         }
     }
 }
 
+private fun openInstantBatterySettings(context: Context) {
+    // Best effort: some OEM builds have no such screen, and a crash here would be far worse
+    // than the user having to find the setting themselves.
+    runCatching {
+        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+    }
+}
 
 /** The 8i switch row, kept separate so both the enabled and the configuring state share it. */
 @Composable
@@ -556,54 +680,9 @@ private fun InstantToggleRow(enabledNow: Boolean, busy: Boolean, onToggle: (Bool
     }
 }
 
-/** Shown while instant delivery is on: where the topic lives and how to copy it. */
-@Composable
-private fun InstantTopicDetails(
-    server: String,
-    topic: String,
-    copied: Boolean,
-    busy: Boolean,
-    onServerChange: (String) -> Unit,
-    onCopy: () -> Unit,
-) {
-    OutlinedTextField(
-        value = server,
-        onValueChange = onServerChange,
-        label = { Text("ntfy server") },
-        singleLine = true,
-        enabled = !busy,
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-    )
-    Text(
-        "Your topic is a private capability — anyone who knows it can read these " +
-            "notifications, so keep it to yourself:",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 6.dp),
-    )
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(topic, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        OutlinedButton(onClick = onCopy, enabled = !busy) {
-            Text(if (copied) "Copied" else "Copy topic")
-        }
-    }
-    Text(
-        "In the ntfy app: add a subscription for \"$server\" (use the ntfy.sh app, " +
-            "\"Use a different server\", WebSocket mode) and subscribe to the topic above. " +
-            "Exempt ntfy from battery optimisation, otherwise Android may delay it. The 15 " +
-            "minute check stays on as a fallback.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 6.dp),
-    )
-}
-
 /** Shown while instant delivery is off: the optional custom topic and the ntfy server. */
 @Composable
-private fun InstantTopicForm(
+private fun InstantConfigureForm(
     topicInput: String,
     serverInput: String,
     busy: Boolean,
@@ -633,4 +712,3 @@ private fun InstantTopicForm(
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     )
 }
-

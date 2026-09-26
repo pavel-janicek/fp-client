@@ -18,6 +18,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -229,7 +230,7 @@ class PushRepositoryTest {
     }
 
     @Test
-    fun enableInstant_uploadsTheStoredKeypairWithTheManageTokenAndRemembersTheTopic() = runTest {
+    fun enableInstant_uploadsNoPrivateScalarAndRemembersTheTopic() = runTest {
         `when`(sessionStore.currentSession()).thenReturn(session)
         val endpoint = server.url("/push/abc").toString()
         store.save(subscription(endpoint))
@@ -245,8 +246,12 @@ class PushRepositoryTest {
         val body = request.body.readUtf8()
         assertTrue(body.contains("\"topic\":\"my-topic\""))
         assertTrue(body.contains("\"clickBase\":\"https://fitpub.test\""))
-        // The private key really is sent — the relay has to decrypt to forward readable text.
-        assertTrue(body.contains("\"privkey\":\"${PushFixture.PRIVATE}\""))
+        // 8j: the relay forwards the untouched ciphertext, so the private scalar
+        // never leaves the phone. This assertion is the whole point of the step.
+        assertFalse("the private key must never be uploaded", body.contains(PushFixture.PRIVATE))
+        assertFalse("privkey must not even be named", body.contains("privkey"))
+        // The public half is still sent so a pre-8j relay can be configured; it
+        // cannot read anything.
         assertTrue(body.contains("\"p256dh\":\"${PushFixture.P256DH}\""))
         assertTrue(body.contains("\"auth\":\"${PushFixture.AUTH}\""))
 
