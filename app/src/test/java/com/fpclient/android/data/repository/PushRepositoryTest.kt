@@ -63,6 +63,7 @@ class PushRepositoryTest {
         // platform-typed results are null-checked by the Kotlin call site).
         `when`(prefs.edit()).thenReturn(editor)
         `when`(editor.putString(Mockito.anyString(), Mockito.any())).thenReturn(editor)
+        `when`(editor.putBoolean(Mockito.anyString(), Mockito.anyBoolean())).thenReturn(editor)
         `when`(editor.remove(Mockito.anyString())).thenReturn(editor)
         store = PushSubscriptionStore(prefs)
         repository = PushRepository(api, MailboxClient(), store, sessionStore)
@@ -206,8 +207,162 @@ class PushRepositoryTest {
     }
 
     // ------------------------------------------------------------------
-    // fetch → decrypt → parse
+    // instant delivery (8i)
     // ------------------------------------------------------------------
+
+    @Test
+    fun enable_storesTheManageTokenSoInstantDeliveryCanBeAuthorizedLater() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        val base = server.url("/").toString().trimEnd('/')
+        server.enqueue(
+            MockResponse().setResponseCode(201)
+                .setBody("""{"endpoint":"$base/push/new-id","manageToken":"$MANAGE_TOKEN"}"""),
+        )
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"status":"subscribed"}"""))
+
+        assertTrue(repository.enable(base) is ApiResult.Success)
+
+        val saved = store.subscription.value ?: throw AssertionError("nothing stored")
+        assertEquals(MANAGE_TOKEN, saved.manageToken)
+        assertEquals("8h must not turn instant delivery on by itself", false, saved.instantEnabled)
+        assertNull(saved.ntfyTopic)
+    }
+
+    @Test
+    fun enableInstant_uploadsTheStoredKeypairWithTheManageTokenAndRemembersTheTopic() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        val endpoint = server.url("/push/abc").toString()
+        store.save(subscription(endpoint))
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        val result = repository.enableInstant("my-topic")
+
+        assertEquals(ApiResult.Success("my-topic"), result)
+        val request = server.takeRequest()
+        assertEquals("PUT", request.method)
+        assertEquals("/push/abc/forward", request.path)
+        assertEquals("Bearer $MANAGE_TOKEN", request.getHeader("Authorization"))
+        val body = request.body.readUtf8()
+        assertTrue(body.contains("\"topic\":\"my-topic\""))
+        assertTrue(body.contains("\"clickBase\":\"https://fitpub.test\""))
+        // The private key really is sent — the relay has to decrypt to forward readable text.
+        assertTrue(body.contains("\"privkey\":\"${PushFixture.PRIVATE}\""))
+        assertTrue(body.contains("\"p256dh\":\"${PushFixture.P256DH}\""))
+        assertTrue(body.contains("\"auth\":\"${PushFixture.AUTH}\""))
+
+        val saved = store.subscription.value ?: throw AssertionError("subscription vanished")
+        assertTrue(saved.instantEnabled)
+        assertEquals("my-topic", saved.ntfyTopic)
+    }
+
+    @Test
+    fun enableInstant_generatesAnUnguessableTopicWhenTheUserLeavesItEmpty() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        store.save(subscription(server.url("/push/abc").toString()))
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        val topic = (repository.enableInstant("   ") as ApiResult.Success).data
+
+        assertTrue(PushSubscriptionStore.isValidNtfyTopic(topic))
+        assertTrue("topic must not be guessable", topic.length >= 20)
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"topic\":\"$topic\""))
+    }
+
+    @Test
+    fun enableInstant_refusesATopicTheRelayWouldReject() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        store.save(subscription(server.url("/push/abc").toString()))
+
+        val result = repository.enableInstant("bad topic!")
+
+        assertTrue(result is ApiResult.Error)
+        assertEquals(false, store.subscription.value?.instantEnabled)
+        assertEquals("no key may be uploaded", 0, server.requestCount)
+    }
+
+    @Test
+    fun enableInstant_reportsARelayWithoutNtfyAndLeavesTheSwitchOff() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        store.save(subscription(server.url("/push/abc").toString()))
+        server.enqueue(
+            MockResponse().setResponseCode(503)
+                .setBody("""{"error":"instant delivery is not configured on this relay"}"""),
+        )
+
+        val result = repository.enableInstant()
+
+        assertTrue("expected error, got $result", result is ApiResult.Error)
+        val saved = store.subscription.value ?: throw AssertionError("subscription vanished")
+        assertEquals(false, saved.instantEnabled)
+        assertNull(saved.ntfyTopic)
+    }
+
+    @Test
+    fun enableInstant_refusesOnARelayThatMintedNoManageToken() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        store.save(subscription(server.url("/push/abc").toString()).copy(manageToken = null))
+
+        val result = repository.enableInstant()
+
+        assertTrue(result is ApiResult.Error)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun enableInstant_refusesWhenPushBelongsToAnotherAccount() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session.copy(username = "someone-else"))
+        store.save(subscription(server.url("/push/abc").toString()))
+
+        val result = repository.enableInstant()
+
+        assertTrue(result is ApiResult.Error)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun disableInstant_deletesTheForwardConfigAndClearsTheTopic() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        val endpoint = server.url("/push/abc").toString()
+        store.save(subscription(endpoint).copy(instantEnabled = true, ntfyTopic = "my-topic"))
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        val result = repository.disableInstant()
+
+        assertTrue("expected success, got $result", result is ApiResult.Success)
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        assertEquals("/push/abc/forward", request.path)
+        assertEquals("Bearer $MANAGE_TOKEN", request.getHeader("Authorization"))
+
+        val saved = store.subscription.value ?: throw AssertionError("subscription vanished")
+        assertEquals(false, saved.instantEnabled)
+        assertNull("the topic must not linger", saved.ntfyTopic)
+        // 8h itself must survive: instant delivery is an option, not a requirement.
+        assertEquals(endpoint, saved.endpoint)
+    }
+
+    @Test
+    fun disableInstant_isANoOpWhenInstantDeliveryWasNeverOn() = runTest {
+        store.save(subscription(server.url("/push/abc").toString()))
+
+        assertTrue(repository.disableInstant() is ApiResult.Success)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun disable_wipesTheInstantStateAlongWithTheKeys() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        store.save(
+            subscription(server.url("/push/abc").toString())
+                .copy(instantEnabled = true, ntfyTopic = "my-topic"),
+        )
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"status":"unsubscribed"}"""))
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        assertTrue(repository.disable() is ApiResult.Success)
+
+        assertNull("everything must be wiped", store.subscription.value)
+    }
 
     @Test
     fun fetchPayloads_decryptsTheServerFixtureQueuedByTheRelay() = runTest {
@@ -241,6 +396,47 @@ class PushRepositoryTest {
         assertEquals(410, (result as ApiResult.Error).statusCode)
     }
 
+    @Test
+    fun enableInstant_needsAMailboxSubscriptionFirst() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+
+        val result = repository.enableInstant()
+
+        assertTrue("expected error, got $result", result is ApiResult.Error)
+        assertEquals("no key may be uploaded", 0, server.requestCount)
+    }
+
+    @Test
+    fun enable_onAPre8iRelayStoresNoManageTokenAndKeeps8hWorking() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        val base = server.url("/").toString().trimEnd('/')
+        server.enqueue(
+            MockResponse().setResponseCode(201)
+                .setBody("""{"endpoint":"$base/push/new-id"}"""),
+        )
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"status":"subscribed"}"""))
+
+        assertTrue(repository.enable(base) is ApiResult.Success)
+
+        // 8h still works; only 8i is unavailable, and the card says so instead of failing.
+        assertNull(store.subscription.value?.manageToken)
+    }
+
+    @Test
+    fun disableInstant_clearsTheLocalSwitchEvenWhenTheRelayIsUnreachable() = runTest {
+        `when`(sessionStore.currentSession()).thenReturn(session)
+        store.save(subscription(server.url("/push/abc").toString()))
+        server.enqueue(MockResponse().setResponseCode(204))
+        repository.enableInstant("my-topic")
+        server.takeRequest()
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        val result = repository.disableInstant()
+
+        assertTrue("the failure is reported", result is ApiResult.Error)
+        assertTrue(store.subscription.value?.instantEnabled == false)
+    }
+
     private fun subscription(endpoint: String) = PushSubscription(
         owner = NotificationPolling.cursorOwner("https://fitpub.test", "sam"),
         mailboxBase = "https://push.example.test",
@@ -248,7 +444,12 @@ class PushRepositoryTest {
         publicKey = PushFixture.P256DH,
         privateKey = PushFixture.PRIVATE,
         authSecret = PushFixture.AUTH,
+        manageToken = MANAGE_TOKEN,
     )
+
+    private companion object {
+        const val MANAGE_TOKEN = "manage-secret"
+    }
 
     private fun runTest(block: suspend () -> Unit) = kotlinx.coroutines.test.runTest { block() }
 }

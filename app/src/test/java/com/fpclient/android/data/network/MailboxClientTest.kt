@@ -1,8 +1,13 @@
 package com.fpclient.android.data.network
 
 import java.util.Base64
+import kotlinx.coroutines.test.runTest
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,5 +51,57 @@ class MailboxClientTest {
     fun parseMessages_emptyQueueMeansNoPushMessageWasEverSent() {
         val messages = client.parseMessages("""{"messages":[]}""")
         assertTrue(messages.isEmpty())
+    }
+
+    @Test
+    fun mint_readsTheManageTokenTheRelayMintsAlongsideTheEndpoint() = runTest {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(
+                MockResponse().setResponseCode(201)
+                    .setBody("""{"endpoint":"${server.url("/push/abc")}","manageToken":"mt-secret"}"""),
+            )
+            val result = client.mint(server.url("/").toString())
+            server.takeRequest()
+
+            val minted = (result as ApiResult.Success).data
+            assertEquals("${server.url("/push/abc")}", minted.endpoint)
+            assertEquals("mt-secret", minted.manageToken)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun mint_onAPre8iRelayWithoutATokenIsStillUsableFor8h() = runTest {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(
+                MockResponse().setResponseCode(201)
+                    .setBody("""{"endpoint":"${server.url("/push/abc")}"}"""),
+            )
+            val minted = (client.mint(server.url("/").toString()) as ApiResult.Success).data
+            server.takeRequest()
+
+            assertEquals("${server.url("/push/abc")}", minted.endpoint)
+            assertNull("a relay before 8i mints no token", minted.manageToken)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun parseForwardStatus_readsTheRelayShapeWithAndWithoutATopic() {
+        val on = client.parseForwardStatus("""{"enabled":true,"topic":"fp-abc123"}""")
+        assertTrue(on.enabled)
+        assertEquals("fp-abc123", on.topic)
+
+        // The relay omits `topic` when forwarding is off — it must decode to "disabled",
+        // not to an error (omitempty is on the Go side).
+        val off = client.parseForwardStatus("""{"enabled":false}""")
+        assertFalse(off.enabled)
+        assertNull(off.topic)
     }
 }

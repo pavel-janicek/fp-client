@@ -4,6 +4,11 @@ import com.fpclient.android.BuildConfig
 import com.fpclient.android.data.dto.MailboxCreateDto
 import com.fpclient.android.data.dto.MailboxMessageDto
 import com.fpclient.android.data.dto.MailboxMessagesDto
+import com.fpclient.android.data.dto.ForwardRequestDto
+import com.fpclient.android.data.dto.ForwardStatusDto
+import kotlinx.serialization.encodeToString
+import okhttp3.MediaType.Companion.toMediaType
+
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.Json
 import okhttp3.Call
@@ -16,6 +21,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+/** Result of `POST /mailbox`: the push endpoint plus the manage token authorising 8i forward configuration. */
+data class MintedMailbox(val endpoint: String, val manageToken: String? = null)
 
 /**
  * HTTP client for the Iteration 8g push relay (RFC 8030 mailbox) — deliberately **not**
@@ -42,8 +50,8 @@ class MailboxClient {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    /** Mints a mailbox on [mailboxBase] and returns the endpoint to register instance-side. */
-    suspend fun mint(mailboxBase: String): ApiResult<String> {
+    /** Mints a mailbox on [mailboxBase] and returns the endpoint and optional manage token. */
+    suspend fun mint(mailboxBase: String): ApiResult<MintedMailbox> {
         val base = normalizeBaseUrl(mailboxBase)
         if (base.isEmpty()) {
             return ApiResult.Error("Enter the URL of your push mailbox.")
@@ -59,13 +67,13 @@ class MailboxClient {
             if (response.code != 201 && response.code != 200) {
                 ApiResult.Error("The mailbox rejected the request (HTTP ${response.code}).", response.code)
             } else {
-                val endpoint = runCatching {
-                    json.decodeFromString<MailboxCreateDto>(body).endpoint
+                val created = runCatching {
+                    json.decodeFromString<MailboxCreateDto>(body)
                 }.getOrNull()
-                if (endpoint.isNullOrBlank()) {
+                if (created?.endpoint.isNullOrBlank()) {
                     ApiResult.Error("The mailbox did not return an endpoint.")
                 } else {
-                    ApiResult.Success(endpoint)
+                    ApiResult.Success(MintedMailbox(created!!.endpoint, created.manageToken))
                 }
             }
         }
@@ -100,10 +108,120 @@ class MailboxClient {
             when {
                 response.isSuccessful -> ApiResult.Success(Unit)
                 response.code == 404 || response.code == 410 -> ApiResult.Success(Unit)
-                else -> ApiResult.Error("The mailbox could not be reached (HTTP ${response.code}).", response.code)
+                else -> ApiResult.Error(
+                    "The mailbox could not be reached (HTTP ${response.code}).",
+                    response.code,
+                )
             }
         }
     }
+
+    /**
+     * Enables or replaces instant delivery via ntfy (`PUT /push/{id}/forward`).
+     * Requires the [manageToken] returned by [mint]. 503 means instant delivery is not
+     * configured on the relay server.
+     */
+    suspend fun setForward(
+        endpoint: String,
+        manageToken: String,
+        request: ForwardRequestDto,
+    ): ApiResult<Unit> {
+        val httpUrl = endpoint.toHttpUrlOrNull()
+            ?: return ApiResult.Error("The stored mailbox endpoint is not a valid URL.")
+        val forwardUrl = httpUrl.newBuilder().addPathSegment("forward").build()
+        val body = json.encodeToString(request).toRequestBody("application/json; charset=utf-8".toMediaType())
+        val req = headersBuilder(forwardUrl)
+            .header("Authorization", "Bearer $manageToken")
+            .put(body)
+            .build()
+        return execute(req) { response, responseBody ->
+            when {
+                response.isSuccessful -> ApiResult.Success(Unit)
+                response.code == 503 -> ApiResult.Error(
+                    "Instant delivery is not configured on this relay.",
+                    response.code,
+                )
+                response.code == 401 -> ApiResult.Error(
+                    "The relay rejected the authorization token.",
+                    response.code,
+                )
+                else -> ApiResult.Error(
+                    ErrorMessages.extract(
+                        responseBody,
+                        "Could not configure instant delivery on the relay (HTTP ${response.code}).",
+                    ),
+                    response.code,
+                )
+            }
+        }
+    }
+
+    /**
+     * Reads forward status from the relay (`GET /push/{id}/forward`).
+     * Returns whether forwarding is active and which ntfy topic it publishes to.
+     */
+    suspend fun getForward(
+        endpoint: String,
+        manageToken: String,
+    ): ApiResult<ForwardStatusDto> {
+        val httpUrl = endpoint.toHttpUrlOrNull()
+            ?: return ApiResult.Error("The stored mailbox endpoint is not a valid URL.")
+        val forwardUrl = httpUrl.newBuilder().addPathSegment("forward").build()
+        val req = headersBuilder(forwardUrl)
+            .header("Authorization", "Bearer $manageToken")
+            .get()
+            .build()
+        return execute(req) { response, responseBody ->
+            when {
+                response.isSuccessful -> runCatching {
+                    ApiResult.Success(parseForwardStatus(responseBody))
+                }.getOrElse { ApiResult.Error("Unreadable forward status from relay.") }
+                response.code == 401 -> ApiResult.Error(
+                    "The relay rejected the authorization token.",
+                    response.code,
+                )
+                else -> ApiResult.Error(
+                    "The mailbox could not be reached (HTTP ${response.code}).",
+                    response.code,
+                )
+            }
+        }
+    }
+
+    /**
+     * Disables instant forwarding and clears the decryption key from the relay (`DELETE /push/{id}/forward`).
+     * 204 or 404/410 count as success.
+     */
+    suspend fun clearForward(
+        endpoint: String,
+        manageToken: String,
+    ): ApiResult<Unit> {
+        val httpUrl = endpoint.toHttpUrlOrNull()
+            ?: return ApiResult.Success(Unit)
+        val forwardUrl = httpUrl.newBuilder().addPathSegment("forward").build()
+        val req = headersBuilder(forwardUrl)
+            .header("Authorization", "Bearer $manageToken")
+            .delete()
+            .build()
+        return execute(req) { response, _ ->
+            when {
+                response.isSuccessful -> ApiResult.Success(Unit)
+                response.code == 404 || response.code == 410 -> ApiResult.Success(Unit)
+                response.code == 401 -> ApiResult.Error(
+                    "The relay rejected the authorization token.",
+                    response.code,
+                )
+                else -> ApiResult.Error(
+                    "The mailbox could not be reached (HTTP ${response.code}).",
+                    response.code,
+                )
+            }
+        }
+    }
+
+    /** Parses `GET /push/<id>/forward` — visible for unit tests. */
+    internal fun parseForwardStatus(body: String): ForwardStatusDto =
+        json.decodeFromString<ForwardStatusDto>(body)
 
     /** Parses `GET /push/<id>` — visible for unit tests (the relay's exact response shape). */
     internal fun parseMessages(body: String): List<MailboxMessageDto> =

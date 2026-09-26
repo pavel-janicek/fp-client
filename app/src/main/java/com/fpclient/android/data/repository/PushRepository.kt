@@ -1,5 +1,7 @@
 package com.fpclient.android.data.repository
 
+import com.fpclient.android.data.dto.ForwardKeysDto
+import com.fpclient.android.data.dto.ForwardRequestDto
 import com.fpclient.android.data.dto.PushKeysDto
 import com.fpclient.android.data.dto.PushPayloadDto
 import com.fpclient.android.data.dto.PushSubscribeRequest
@@ -68,10 +70,11 @@ class PushRepository(
         // down first so neither the instance nor the old mailbox keeps a stale endpoint.
         if (store.subscription.value != null) disable()
 
-        val endpoint = when (val minted = mailbox.mint(mailboxBase)) {
-            is ApiResult.Error -> return minted
-            is ApiResult.Success -> minted.data
+        val minted = when (val result = mailbox.mint(mailboxBase)) {
+            is ApiResult.Error -> return result
+            is ApiResult.Success -> result.data
         }
+        val endpoint = minted.endpoint
 
         val keys = WebPushCrypto.generateRecipientKeys()
         val subscribe = try {
@@ -109,9 +112,93 @@ class PushRepository(
                 publicKey = WebPushCrypto.toBase64Url(keys.publicKey),
                 privateKey = WebPushCrypto.toBase64Url(keys.privateKey),
                 authSecret = WebPushCrypto.toBase64Url(keys.authSecret),
+                // Only 8i-aware relays mint one; null means instant delivery stays off.
+                manageToken = minted.manageToken,
             ),
         )
         return ApiResult.Success(Unit)
+    }
+
+    /**
+     * Iteration 8i — switches the already-enabled mailbox from "the phone drains the queue every
+     * ~15 minutes" to "the relay decrypts each message on arrival and publishes the readable text
+     * to a private ntfy topic", so notifications land within seconds while the app is closed.
+     *
+     * The relay receives the *same* keypair that already lives on the phone, so it can do nothing
+     * except decrypt notification payloads — no account, password or session material is involved.
+     * Turning the switch off again ([disableInstant]) deletes that key from the relay.
+     *
+     * @param customTopic an ntfy topic of the user's choosing, or null to generate an
+     *   unguessable one. Only the charset ntfy itself accepts is allowed.
+     * @return the topic that was configured, so the UI can show and let the user copy it.
+     */
+    suspend fun enableInstant(customTopic: String? = null): ApiResult<String> {
+        val subscription = store.subscription.value
+            ?: return ApiResult.Error("Turn on mailbox push notifications first.")
+        if (subscription.owner != currentOwner()) {
+            return ApiResult.Error(
+                "Mailbox push belongs to a different account on this device. Turn it off there first.",
+            )
+        }
+        val manageToken = subscription.manageToken
+            ?: return ApiResult.Error(
+                "This mailbox relay does not support instant delivery. Ask its operator to update " +
+                    "it, or keep the ~15 minute delivery.",
+            )
+        val session = sessionStore.currentSession()
+        if (!session.isLoggedIn) return ApiResult.Error("Sign in to enable instant delivery.")
+
+        val topic = customTopic?.trim()?.takeIf { it.isNotEmpty() }
+            ?: PushSubscriptionStore.generateNtfyTopic()
+        if (!PushSubscriptionStore.isValidNtfyTopic(topic)) {
+            return ApiResult.Error(
+                "An ntfy topic may only use a-z, 0-9, '-' and '_', and be at most 64 characters.",
+            )
+        }
+        // Uploading the private key is the point: the relay has to decrypt to forward readable
+        // text. It is the same key the phone already holds — notification payloads, nothing else.
+        val result = mailbox.setForward(
+            endpoint = subscription.endpoint,
+            manageToken = manageToken,
+            request = ForwardRequestDto(
+                topic = topic,
+                clickBase = session.serverUrl,
+                keys = ForwardKeysDto(
+                    p256dh = subscription.publicKey,
+                    auth = subscription.authSecret,
+                    privkey = subscription.privateKey,
+                ),
+            ),
+        )
+        if (result is ApiResult.Error) return result
+        store.setInstantForward(true, topic)
+        return ApiResult.Success(topic)
+    }
+
+    /**
+     * Iteration 8i teardown: `DELETE /push/<id>/forward` makes the relay discard the uploaded key
+     * and stop publishing. Like [disable], the local mirror is updated even when the relay cannot
+     * be reached — anything left there only ever decrypted notifications for a mailbox this
+     * device no longer polls, and the relay expires it on its own.
+     */
+    suspend fun disableInstant(): ApiResult<Unit> {
+        val subscription = store.subscription.value ?: return ApiResult.Success(Unit)
+        if (!subscription.instantEnabled) return ApiResult.Success(Unit)
+        val manageToken = subscription.manageToken
+        val relayResult = if (manageToken == null) {
+            ApiResult.Success(Unit)
+        } else {
+            mailbox.clearForward(subscription.endpoint, manageToken)
+        }
+        store.setInstantForward(false, null)
+        return relayResult
+    }
+
+    /** The owner key of the signed-in session, or null when signed out. */
+    private suspend fun currentOwner(): String? {
+        val session = sessionStore.currentSession()
+        if (!session.isLoggedIn) return null
+        return PushSubscriptionStore.ownerOf(session.serverUrl, session.username)
     }
 
     /**
@@ -137,6 +224,8 @@ class PushRepository(
                 failures += "the instance could not be reached"
             }
         }
+        // Unregistering the mailbox also drops its forward config, so the key uploaded for 8i
+        // instant delivery leaves the relay in the same call.
         if (mailbox.unregister(subscription.endpoint) is ApiResult.Error) {
             failures += "the mailbox could not be reached"
         }

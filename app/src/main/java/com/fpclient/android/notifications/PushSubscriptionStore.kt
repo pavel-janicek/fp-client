@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.security.SecureRandom
 
 /**
  * What Iteration 8h remembers between runs: the mailbox endpoint registered with the FitPub
@@ -37,6 +38,16 @@ data class PushSubscription(
     val privateKey: String,
     /** base64url 16-byte RFC 8291 auth secret. */
     val authSecret: String,
+    /**
+     * Bearer token minted by `POST /mailbox` that authorises `PUT|GET|DELETE /push/<id>/forward`
+     * (Iteration 8i). Null on relays predating 8i — instant delivery then simply cannot be
+     * switched on, and 8h delivery is unaffected.
+     */
+    val manageToken: String? = null,
+    /** True while the relay forwards decrypted notifications to the ntfy topic below. */
+    val instantEnabled: Boolean = false,
+    /** The private ntfy topic the relay publishes to — shown (and copyable) in Settings. */
+    val ntfyTopic: String? = null,
 )
 
 class PushSubscriptionStore internal constructor(private val prefs: SharedPreferences) {
@@ -59,6 +70,10 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
         const val PUBLIC_KEY = "public_key"
         const val PRIVATE_KEY = "private_key"
         const val AUTH_SECRET = "auth_secret"
+        const val MANAGE_TOKEN = "manage_token"
+        const val INSTANT_ENABLED = "instant_enabled"
+        const val NTFY_TOPIC = "ntfy_topic"
+        const val NTFY_SERVER = "ntfy_server"
     }
 
     private val _subscription = MutableStateFlow(readSubscription())
@@ -84,6 +99,9 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
             publicKey = publicKey,
             privateKey = privateKey,
             authSecret = authSecret,
+            manageToken = prefs.getString(Keys.MANAGE_TOKEN, null),
+            instantEnabled = prefs.getBoolean(Keys.INSTANT_ENABLED, false),
+            ntfyTopic = prefs.getString(Keys.NTFY_TOPIC, null),
         )
     }
 
@@ -96,10 +114,32 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
             .putString(Keys.PUBLIC_KEY, subscription.publicKey)
             .putString(Keys.PRIVATE_KEY, subscription.privateKey)
             .putString(Keys.AUTH_SECRET, subscription.authSecret)
+            .putString(Keys.MANAGE_TOKEN, subscription.manageToken)
+            .putBoolean(Keys.INSTANT_ENABLED, subscription.instantEnabled)
+            .putString(Keys.NTFY_TOPIC, subscription.ntfyTopic)
             .apply()
         _mailboxBase.value = subscription.mailboxBase
         _subscription.value = subscription
     }
+
+    /**
+     * Records the 8i instant-forward state on the active subscription (the relay is already
+     * updated by then — this is the local mirror, so a restart keeps showing the topic).
+     */
+    suspend fun setInstantForward(enabled: Boolean, topic: String?) =
+        withContext(Dispatchers.IO) {
+            val current = _subscription.value
+            prefs.edit()
+                .putBoolean(Keys.INSTANT_ENABLED, enabled)
+                .putString(Keys.NTFY_TOPIC, if (enabled) topic else null)
+                .apply()
+            if (current != null) {
+                _subscription.value = current.copy(
+                    instantEnabled = enabled,
+                    ntfyTopic = if (enabled) topic else null,
+                )
+            }
+        }
 
     /** Remembers the mailbox URL the user typed, even before enabling. */
     suspend fun setMailboxBase(raw: String) = withContext(Dispatchers.IO) {
@@ -107,9 +147,26 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
         _mailboxBase.value = raw
     }
 
+    private val _ntfyServer = MutableStateFlow(prefs.getString(Keys.NTFY_SERVER, DEFAULT_NTFY) ?: DEFAULT_NTFY)
     /**
-     * Wipes the keypair, auth secret, endpoint and owner — the local half of "disable push".
-     * The configured mailbox URL survives so re-enabling starts from the same base.
+     * The ntfy server the user's phone subscribes to (Iteration 8i). Informational only — the
+     * relay publishes to whatever `RELAY_NTFY_URL` points at, and the ntfy app is configured by
+     * hand, so the card just shows (and remembers) the address the topic lives on.
+     */
+    val ntfyServer: StateFlow<String> = _ntfyServer.asStateFlow()
+
+    /** Remembers the ntfy server address so it survives restarts of the Settings screen. */
+    suspend fun setNtfyServer(raw: String) = withContext(Dispatchers.IO) {
+        val value = raw.trim()
+        prefs.edit().putString(Keys.NTFY_SERVER, value).apply()
+        _ntfyServer.value = value
+    }
+
+    /**
+     * Wipes the keypair, auth secret, endpoint, manage token and owner — the local half of
+     * "disable push". The configured mailbox URL survives so re-enabling starts from the same
+     * base. The relay's forward config is dropped first by
+     * [com.fpclient.android.data.repository.PushRepository.disable].
      */
     suspend fun clear() = withContext(Dispatchers.IO) {
         prefs.edit()
@@ -118,6 +175,9 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
             .remove(Keys.PUBLIC_KEY)
             .remove(Keys.PRIVATE_KEY)
             .remove(Keys.AUTH_SECRET)
+            .remove(Keys.MANAGE_TOKEN)
+            .remove(Keys.INSTANT_ENABLED)
+            .remove(Keys.NTFY_TOPIC)
             .apply()
         _subscription.value = null
     }
@@ -129,8 +189,31 @@ class PushSubscriptionStore internal constructor(private val prefs: SharedPrefer
          */
         const val DEFAULT_MAILBOX = "https://push.paveljanicek.cz"
 
+        /**
+         * The ntfy server shipped with the dockerized-server stack (`NTFY_BASE_URL`); the ntfy
+         * Android app has to be pointed at the same address, so the card shows it by default.
+         */
+        const val DEFAULT_NTFY = "https://ntfy.paveljanicek.cz"
+
         /** Owner string shared with the 8f cursor so all push pieces scope to one session. */
         fun ownerOf(serverUrl: String, username: String): String =
             NotificationPolling.cursorOwner(serverUrl, username)
+
+        /** ntfy allows 1-64 chars of `[-_a-z0-9]`; the relay enforces the same pattern. */
+        private val NTFY_TOPIC_PATTERN = Regex("^[-_a-z0-9]{1,64}$")
+
+        /** True when [topic] can be sent to the relay as-is (mirrors `ntfyTopicPattern` in forward.go). */
+        fun isValidNtfyTopic(topic: String): Boolean = NTFY_TOPIC_PATTERN.matches(topic)
+
+        /**
+         * Mints an unguessable private ntfy topic for this device (16 random bytes as lowercase
+         * hex behind a readable `fp-` prefix — 35 chars, inside ntfy's 64-char limit).
+         */
+        fun generateNtfyTopic(): String {
+            val bytes = ByteArray(16)
+            SecureRandom().nextBytes(bytes)
+            val hex = bytes.joinToString("") { "%02x".format(it) }
+            return "fp-$hex"
+        }
     }
 }

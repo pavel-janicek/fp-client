@@ -18,6 +18,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,7 +31,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.app.ActivityCompat
@@ -331,6 +334,8 @@ internal fun MailboxPushCard(container: AppContainer) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                // The optional 8i fast path only makes sense while this account owns the mailbox.
+                InstantDeliveryBlock(container)
                 OutlinedButton(
                     onClick = {
                         scope.launch {
@@ -413,3 +418,219 @@ internal fun MailboxPushCard(container: AppContainer) {
         }
     }
 }
+
+/**
+ * Settings → Push, the optional instant fast path (Iteration 8i).
+ *
+ * Mailbox push alone is "eventual": the phone drains the queue about every 15 minutes. With this
+ * switch on, the relay instead decrypts each message *as it arrives* and republishes the readable
+ * `{title, body, url}` to a private ntfy topic, which the ntfy Android app (subscribed over
+ * WebSocket) shows within seconds even while FP Client is closed.
+ *
+ * The card states the trust boundary verbatim, because this is the one switch that moves a key
+ * off the device: the uploaded key is the same one the phone already holds and can only decrypt
+ * notification payloads (it cannot read your account, your messages or the session token), it is
+ * stored on the relay you chose, and turning the switch off — or disabling mailbox push — deletes
+ * it from the relay in the same request.
+ */
+@Composable
+private fun InstantDeliveryBlock(container: AppContainer) {
+    val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    val subscription by container.pushSubscriptionStore.subscription.collectAsState()
+    val storedServer by container.pushSubscriptionStore.ntfyServer.collectAsState()
+
+    var serverInput by remember(storedServer) { mutableStateOf(storedServer) }
+    var topicInput by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var copied by remember { mutableStateOf(false) }
+
+    val current = subscription ?: return
+    // Relays before 8i mint no manage token, so there is no authorized way to configure this.
+    val supported = current.manageToken != null
+    val enabledNow = current.instantEnabled
+    val topic = current.ntfyTopic
+    val server = serverInput.trim().ifEmpty { PushSubscriptionStore.DEFAULT_NTFY }
+
+    Column(modifier = Modifier.padding(top = 10.dp)) {
+        Text(
+            "Instant delivery via ntfy (optional)",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            "Instead of waiting for the ~15 minute check, the mailbox relay decrypts each " +
+                "notification the moment it arrives and republishes the readable text to a " +
+                "private ntfy topic, which the ntfy app shows within seconds — even when this " +
+                "app is closed. The key uploaded for this is the same one already on this " +
+                "device: it can only decrypt notification payloads, it cannot access your " +
+                "account, and it never leaves the relay you chose. Switching this off (or " +
+                "disabling mailbox push) deletes it from the relay right away.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        if (!supported) {
+            Text(
+                "This mailbox relay does not support instant delivery — ask its operator to " +
+                    "update it. Notifications keep arriving through the ~15 minute check.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            return@Column
+        }
+        InstantToggleRow(
+            enabledNow = enabledNow,
+            busy = busy,
+            onToggle = { on ->
+                scope.launch {
+                    busy = true
+                    error = null
+                    copied = false
+                    // Remember the ntfy address either way — it is where the user has to point
+                    // their ntfy app regardless of what the relay answers.
+                    container.pushSubscriptionStore.setNtfyServer(serverInput)
+                    error = if (on) {
+                        when (val result = container.pushRepository.enableInstant(topicInput)) {
+                            is ApiResult.Success -> null
+                            is ApiResult.Error -> result.message
+                        }
+                    } else {
+                        when (val result = container.pushRepository.disableInstant()) {
+                            is ApiResult.Success -> null
+                            is ApiResult.Error -> result.message
+                        }
+                    }
+                    topicInput = ""
+                    busy = false
+                }
+            },
+        )
+        error?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        if (enabledNow && topic != null) {
+            InstantTopicDetails(
+                server = server,
+                topic = topic,
+                copied = copied,
+                busy = busy,
+                onServerChange = { serverInput = it },
+                onCopy = {
+                    clipboard.setText(AnnotatedString(topic))
+                    copied = true
+                },
+            )
+        } else {
+            InstantTopicForm(
+                topicInput = topicInput,
+                serverInput = serverInput,
+                busy = busy,
+                onTopicChange = { topicInput = it },
+                onServerChange = { serverInput = it },
+            )
+        }
+    }
+}
+
+
+/** The 8i switch row, kept separate so both the enabled and the configuring state share it. */
+@Composable
+private fun InstantToggleRow(enabledNow: Boolean, busy: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Deliver instantly through ntfy",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = enabledNow, enabled = !busy, onCheckedChange = onToggle)
+    }
+}
+
+/** Shown while instant delivery is on: where the topic lives and how to copy it. */
+@Composable
+private fun InstantTopicDetails(
+    server: String,
+    topic: String,
+    copied: Boolean,
+    busy: Boolean,
+    onServerChange: (String) -> Unit,
+    onCopy: () -> Unit,
+) {
+    OutlinedTextField(
+        value = server,
+        onValueChange = onServerChange,
+        label = { Text("ntfy server") },
+        singleLine = true,
+        enabled = !busy,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    Text(
+        "Your topic is a private capability — anyone who knows it can read these " +
+            "notifications, so keep it to yourself:",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(topic, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        OutlinedButton(onClick = onCopy, enabled = !busy) {
+            Text(if (copied) "Copied" else "Copy topic")
+        }
+    }
+    Text(
+        "In the ntfy app: add a subscription for \"$server\" (use the ntfy.sh app, " +
+            "\"Use a different server\", WebSocket mode) and subscribe to the topic above. " +
+            "Exempt ntfy from battery optimisation, otherwise Android may delay it. The 15 " +
+            "minute check stays on as a fallback.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+}
+
+/** Shown while instant delivery is off: the optional custom topic and the ntfy server. */
+@Composable
+private fun InstantTopicForm(
+    topicInput: String,
+    serverInput: String,
+    busy: Boolean,
+    onTopicChange: (String) -> Unit,
+    onServerChange: (String) -> Unit,
+) {
+    Text(
+        "Leave the topic empty to have an unguessable one generated on this device.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+    OutlinedTextField(
+        value = topicInput,
+        onValueChange = onTopicChange,
+        label = { Text("ntfy topic (optional)") },
+        singleLine = true,
+        enabled = !busy,
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+    )
+    OutlinedTextField(
+        value = serverInput,
+        onValueChange = onServerChange,
+        label = { Text("ntfy server") },
+        singleLine = true,
+        enabled = !busy,
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+    )
+}
+
