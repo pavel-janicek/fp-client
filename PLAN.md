@@ -447,12 +447,109 @@ Landed: the optional fast path is entirely opt-in and additively scoped — turn
 
 > (Settings → Push)."
 
+**8j — In-app ntfy receiver (no second app: FP Client subscribes itself)**
+> "Replace the 'install the ntfy Android app' step of 8i with a receiver inside FP
+> Client, so a user who wants instant delivery never has to install a second app.
+> The relay already publishes to the private ntfy topic; all that is missing is a
+> client that subscribes to it and posts the notification itself. Use the ntfy
+> subscribe API over plain OkHttp (already a dependency) — `GET
+> {ntfyServer}/{topic}/json` as an NDJSON stream, with `since=<lastNtfyMessageId>`
+> for gap replay after a dropped connection (`/ws` WebSocket is an acceptable
+> alternative but the NDJSON stream is preferred: it is plain OkHttp, resumes
+> naturally, and is trivially mockable with the `mockwebserver` already in
+> `testImplementation`). No new dependency, no Firebase, nothing proprietary —
+> the F-Droid audit stays clean.
+>
+> The receiver is a foreground service (`InstantDeliveryService`, modeled on the
+> existing `TrackRecordingService`: `LifecycleService`, `START_STICKY`,
+> `ServiceCompat.startForeground`), because seconds-long latency on Android is only
+> achievable with a long-lived socket. It must: (1) connect only while a session is
+> logged in AND owns a `PushSubscription` with `instantEnabled`, mirroring how
+> `PushFetchWorker` and `NotificationPollWorker` bail out — a signed-out device or
+> another account's subscription must never connect; (2) reconnect with exponential
+> backoff and jitter, honouring ntfy's `poll_request` event; (3) treat a silent
+> connection as dead via a read timeout (ntfy sends `keepalive`; also set
+> `pingInterval` on the OkHttp client for WebSocket mode) and reconnect rather than
+> linger; (4) on reconnect, fetch `?poll=1&since=<lastNtfyMessageId>` so messages
+> that arrived while the socket was down are not lost (ntfy caches 12h by default —
+> beyond that the events are simply gone, same class of loss as 8f, and the copy
+> must say so); (5) keep the last seen ntfy message id in `PushSubscriptionStore`
+> (EncryptedSharedPreferences, alongside `ntfyTopic`/`instantEnabled`, cleared by
+> `clear()` and by `setInstantForward(false, …)`); (6) post each message through
+> the existing `PushNotifications.postItem`, which already owns the channel, the
+> POST_NOTIFICATIONS gate, the collapse tag and the tap deep-link; (7) do its work
+> in a coroutine scope cancelled in `onDestroy` and never leak the subscription
+> across process death.
+>
+> **Change the relay to forward ciphertext, not plaintext, and drop the key upload
+> entirely (this is the point of the whole step).** Today `forwardToNtfy` decrypts
+> and the phone uploads `ForwardKeysDto.privkey` (see
+> `dockerized-server/fitpub-push-relay/forward.go`), which is the single switch in
+> the whole app that moves a key off the device. With the client in-repo, the relay
+> must publish the untouched RFC 8291 aes128gcm blob instead: POST
+> `{topic, message: <standard base64 of the blob>, click}` and **stop requiring
+> `keys.privkey`**. The app decrypts with the `WebPushCrypto` it already ships
+> (the same mirror of the server's `WebPushService.encrypt` that `PushFetchWorker`
+> uses) via `PushRepository.fetchPayloads`' existing key-triple path. Keep
+> `PUT /push/<id>/forward` accepting the `keys` object for one release (a
+> pre-8j relay or an older phone may still send it) but never read `privkey` from
+> it, and have `PushRepository.enableInstant` stop uploading the private scalar.
+> The result: instant delivery changes **nothing** about what leaves the phone
+> versus mailbox push — same key-stays-local story, same 15-minute `fitpub_push`
+> check as the fallback, no orphan key on the VPS when a user switches instant off.
+>
+> Also close the two delivery-correctness gaps this exposes: (a) the relay currently
+> does NOT enqueue the ciphertext when a forward succeeds (`handlers.go` ~L123-126),
+> so a message accepted by ntfy but missed by a dead socket can never be recovered
+> by `fitpub_push_mailbox_check` — make the app dedupe by the ntfy message id and
+> have the relay enqueue as well, so the 15-minute check is a genuine backstop;
+> (b) the collapse tag is lost because the relay publishes only
+> `title/body/click/priority` — publish the payload tag as a second ntfy `tags`
+> entry (`["fitpub", "fitpub-activity_liked"]`; ntfy treats unknown tags as
+> non-emoji names and ignores them, FP Client reads them) so `postItem` keeps
+> collapsing per event type exactly as it does on the 8h path.
+>
+> Rewrite the Settings → Push `InstantDeliveryBlock` (it currently instructs the
+> user to install ntfy, add a subscription, copy the topic, and grant ntfy a
+> battery-optimization exemption — all of that text must go): show the live socket
+> state instead (connecting / connected since / retrying, with a last-message
+> timestamp), a start/stop control, and a battery-exemption row modeled on
+> `RecordingHealthCard` (`isIgnoringBatteryOptimizations`) that explains that a
+> permanent 'listening for notifications' notification is required and how to turn
+> it off. Keep the existing one-sentence trust explanation, rewritten to the
+> stronger claim ('your key never leaves this phone — not even for instant
+> delivery'). The ntfy server field and topic remain (a self-hosted ntfy address
+> is still the operator's choice), but the topic is no longer something the user
+> copies anywhere.
+>
+> Foreground-service constraints to get right, since `targetSdk = 36`: declare the
+> service with an explicit `foregroundServiceType` plus the matching
+> `FOREGROUND_SERVICE_*` permission, and implement `Service.onTimeout()` —
+> `dataSync` is capped at 6h/24h on API 35+. Prefer `specialUse` (no cap) with
+> the `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` property, and note in the code comment why.
+> The ongoing notification needs its own channel, separate from `fitpub_push` and
+> `track_recording`, so the OS-level toggles stay independent.
+>
+> Tests (JVM, no new deps): `NtfyMessages` parses `open`/`keepalive`/`message`/
+> `poll_request` and ignores unknown events and unknown keys; the URL builder
+> produces `{base}/{topic}/json` and `{base}/{topic}/json?poll=1&since=<id>` and
+> rejects a topic outside ntfy's own `[-_a-z0-9]{1,64}` rule; a MockWebServer
+> NDJSON stream is consumed correctly and a malformed line is dropped without
+> killing the stream; base64 blob → `WebPushCrypto.decrypt` → `PushPayloads.decode`
+> round-trips against the same fixture `PushRepositoryTest` uses; dedupe drops a
+> re-delivered ntfy id; the service no-ops for a guest, a signed-out session and
+> another account's subscription. Update `docs/PUSH-NOTIFICATIONS.md` (the three
+> delivery paths, the new trust boundary, the removed ntfy-app step, the FGS
+> prompt, and a troubleshooting row for 'instant delivery is not connecting'),
+> rewrite `PRIVACY.md` §1/§3/§4/§6 so instant mode no longer claims the operator
+> can read your notifications, and add the 8j row to the Iteration 8 notes."
+
 Notes:
 - Reuses existing pieces: osmdroid (live map), Format.kt (stat formatting),
   ActivityTypes icons, upload endpoint/multipart plumbing from CreateViewModel.
 - New dependencies to consider (keep minimal): none strictly required — Room
   optional (could start with a simple file-backed log); avoid play-services-location.
-- Push sub-steps 8f–8i ride the server's **existing** Web Push subscription API
+- Push sub-steps 8f–8j ride the server's **existing** Web Push subscription API
   (verified in the FitPub server source: `social/fitpub/push/PushSubscriptionResource`
   — `POST/DELETE /api/web/push/subscribe`, `GET /api/web/push/vapid-key`; and
   `WebPushService` — RFC 8291 `aes128gcm` encryption + VAPID per RFC 8292): no
@@ -461,7 +558,13 @@ Notes:
   is outbound and sessionless. 8f is the universal fallback when an instance has
   push disabled.
 - Dependency impact: 8f introduces `androidx.work` (WorkManager); 8h adds none
-  (JCA crypto only); the VPS services (8g/8i) live outside this repo.
+  (JCA crypto only); 8j adds none (OkHttp NDJSON + a foreground service); the VPS
+  services (8g/8i) live outside this repo.
+- 8j reverses 8i's key-upload trade-off: with the client in-repo the relay
+  forwards ciphertext and `keys.privkey` is no longer sent anywhere, so instant
+  delivery stops being the one switch that moves a key off the device
+  (`PRIVACY.md` §4). It is the reason to prefer it over telling users to install
+  the ntfy app.
 
 > 🚩 Release gate: this iteration ships as **v3.0**.
 
