@@ -17,8 +17,6 @@ import com.fpclient.android.MainActivity
 import com.fpclient.android.R
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import kotlin.math.min
-import kotlin.math.pow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -174,11 +172,13 @@ class InstantDeliveryService : LifecycleService() {
 
     private suspend fun runLoop(target: InstantTarget) {
         val current = scope ?: return
-        var attempt = 0
-        // A `poll_request` means "re-poll and reconnect", not "wait out the backoff".
-        var forceReplay = false
+        val policy = NtfyReconnectPolicy(
+            elapsedRealtime = SystemClock::elapsedRealtime,
+            baseBackoffMs = BASE_BACKOFF_MS,
+            maxBackoffMs = MAX_BACKOFF_MS,
+        )
         while (current.isActive) {
-            val replaying = forceReplay || attempt > 0
+            val replaying = policy.isGapReplay
             val url = if (replaying) {
                 NtfyMessages.pollUrl(target.ntfyServer, target.topic, deduper.lastId)
             } else {
@@ -189,7 +189,7 @@ class InstantDeliveryService : LifecycleService() {
                 // card surfaces this reason and the user changes the field.
                 InstantDeliveryBus.publish(
                     InstantDeliveryState.Retrying(
-                        attempt,
+                        0,
                         0,
                         "The ntfy server or topic in Settings is not valid.",
                     ),
@@ -197,7 +197,7 @@ class InstantDeliveryService : LifecycleService() {
                 return
             }
             InstantDeliveryBus.publish(InstantDeliveryState.Connecting)
-            val result = try {
+            val outcome = try {
                 consume(url, target)
             } catch (e: CancellationException) {
                 throw e
@@ -205,39 +205,24 @@ class InstantDeliveryService : LifecycleService() {
                 NtfyStreamResult.Failed(describe(e))
             }
             if (!current.isActive) return
-            when (result) {
-                // A clean end of stream is still an end of stream: reconnect, but do not
-                // charge it as a failure attempt (a server that closes idle streams should
-                // not escalate the backoff forever).
-                is NtfyStreamResult.Ended -> {
-                    attempt = 0
-                    forceReplay = true
-                }
-
-                is NtfyStreamResult.Failed -> {
-                    attempt++
-                    forceReplay = true
-                }
-
-                is NtfyStreamResult.Replay -> {
-                    attempt = 0
-                    forceReplay = true
-                }
+            // All of the reconnect reasoning (including the poll-vs-subscribe rule that stops
+            // the app from flooding its own ntfy server) lives in the policy, so it can be
+            // tested without a socket. See NtfyReconnectPolicy for why that matters.
+            val wait = policy.record(outcome.toPolicyOutcome(), wasGapReplay = replaying)
+            if (outcome is NtfyStreamResult.Failed) {
+                InstantDeliveryBus.publish(
+                    InstantDeliveryState.Retrying(policy.attempt, wait, outcome.reason),
+                )
             }
-            if (result !is NtfyStreamResult.Failed) {
-                // Replay or clean end: go straight back up, no sleep. A gap is time-critical.
-                continue
-            }
-            val backoff = backoffMillis(attempt)
-            InstantDeliveryBus.publish(
-                InstantDeliveryState.Retrying(
-                    attempt,
-                    backoff,
-                    (result as NtfyStreamResult.Failed).reason,
-                ),
-            )
-            delay(backoff)
+            if (wait > 0) delay(wait)
         }
+    }
+
+    /** Maps the service's stream result onto the policy's outcome vocabulary. */
+    private fun NtfyStreamResult.toPolicyOutcome(): NtfyReconnectPolicy.Outcome = when (this) {
+        is NtfyStreamResult.Ended -> NtfyReconnectPolicy.Outcome.Ended
+        is NtfyStreamResult.Replay -> NtfyReconnectPolicy.Outcome.Replay
+        is NtfyStreamResult.Failed -> NtfyReconnectPolicy.Outcome.Failed
     }
 
     /** What ended one pass over the stream. */
@@ -381,18 +366,6 @@ class InstantDeliveryService : LifecycleService() {
             subscription = container.pushSubscriptionStore.subscription.value,
             ntfyServer = container.pushSubscriptionStore.ntfyServer.value,
         )
-    }
-
-    /**
-     * Exponential backoff with full jitter, capped at [MAX_BACKOFF_MS]. Jitter is not a
-     * nicety: without it, every device behind one self-hosted ntfy reconnects in lockstep
-     * after a server restart and knocks it over again.
-     */
-    internal fun backoffMillis(attempt: Int): Long {
-        if (attempt <= 0) return 0
-        val exponential = BASE_BACKOFF_MS.toDouble() * 2.0.pow((attempt - 1).coerceAtMost(16))
-        val capped = min(exponential, MAX_BACKOFF_MS.toDouble()).toLong()
-        return (SystemClock.elapsedRealtime() % (capped + 1)).coerceAtLeast(BASE_BACKOFF_MS)
     }
 
     // ------------------------------------------------------- the notification

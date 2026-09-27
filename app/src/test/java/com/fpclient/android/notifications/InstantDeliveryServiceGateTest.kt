@@ -76,20 +76,6 @@ class InstantDeliveryServiceGateTest {
         assertTrue(target.subscription.instantEnabled)
     }
 
-    @Test
-    fun backoffGrowsAndIsCapped() {
-        val service = InstantDeliveryService()
-        assertEquals(0, service.backoffMillis(0))
-        val first = service.backoffMillis(1)
-        // Jitter means only the bounds are assertable; the cap is the real contract.
-        assertTrue("first retry must wait at least the base delay", first >= InstantDeliveryService.BASE_BACKOFF_MS)
-        for (attempt in 1..40) {
-            val delay = service.backoffMillis(attempt)
-            assertTrue("attempt $attempt waited $delay", delay >= InstantDeliveryService.BASE_BACKOFF_MS)
-            assertTrue("attempt $attempt waited $delay", delay <= InstantDeliveryService.MAX_BACKOFF_MS)
-        }
-    }
-
     // ------------------------------------------------------------------ helpers
 
     private fun resolve(

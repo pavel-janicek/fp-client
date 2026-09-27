@@ -117,6 +117,11 @@ API 35+ and the correct response is the same in every case: stop cleanly.
   and reconnects, rather than lingering as a connected-looking zombie.
 - Reconnects use exponential backoff with full jitter, and ntfy's `poll_request` triggers an
   immediate `?poll=1&since=<lastId>` gap replay instead of a wait.
+- **A gap-replay poll is one-shot, not a subscription.** ntfy answers `?poll=1` in ~0.3 s and
+  closes, so the app returns to the long-lived subscribe stream as soon as the replay is done,
+  and never issues two clean reconnects less than 2 s apart. Getting this wrong once made the
+  app flood its own ntfy server, which answered **HTTP 429** — see `NtfyReconnectPolicy`, whose
+  unit tests reproduce the loop and assert the request rate stays bounded.
 - **The relay enqueues the ciphertext even when a forward succeeds.** That is what makes the
   15-minute check a real backstop: a message the socket missed is still waiting for it, and
   the app drops the duplicate ntfy message id.
@@ -157,6 +162,7 @@ existing `PushSubscriptionResource` and `WebPushService`.
 | "Push is switched off on this instance" | server-side `FITPUB_PUSH_ENABLED`/VAPID missing; 8f keeps working |
 | "Instant delivery is not configured on this relay" | `RELAY_NTFY_URL` empty (or the relay not restarted); set it and `docker compose up -d push-relay` |
 | "This mailbox relay does not support instant delivery" | pre-8i relay (no manage token); update the relay |
+| **Status says "ntfy answered HTTP 429"** | ntfy's rate limiter refused the app. This was a client bug (fixed): the app looped `?poll=1`, which answers in ~0.3 s, and flooded its own server. Update to the current build. Nothing on the server needs changing, and no reinstall is needed. |
 | **Instant delivery is not connecting** | the card names the reason, and it is worth reading: *Retrying — the ntfy server could not be resolved / refused the connection / the TLS connection failed* → check the **ntfy server** field against `RELAY_NTFY_URL` (the public `https://…` address, not the internal `http://ntfy:80`). *Retrying — ntfy answered HTTP 404* → the relay's topic and this phone's topic disagree; switch instant delivery off and on to re-register. *Retrying — the connection went quiet (no keep-alive)* → Android closed the socket: grant the battery-optimization exemption and make sure the **FitPub instant delivery** notification is not blocked. *Not listening* → the service is not running: toggle instant delivery off and on, or restart the app. |
 | Notifications arrive twice | shouldn't happen — 8f stops announcing while a matching 8h subscription is active, and the ntfy path dedupes by ntfy message id. The relay deliberately also queues the ciphertext as a backstop, so a duplicate collapses onto the same notification instead of stacking. |
 | Nothing after switching to a new mailbox | the old mailbox is unregistered first; re-enable if the new one looks dead |
