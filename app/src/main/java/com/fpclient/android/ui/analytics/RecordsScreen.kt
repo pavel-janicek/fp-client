@@ -1,4 +1,4 @@
-fix lapackage com.fpclient.android.ui.analytics
+package com.fpclient.android.ui.analytics
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
