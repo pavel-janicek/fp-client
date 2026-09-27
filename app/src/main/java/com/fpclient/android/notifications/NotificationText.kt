@@ -83,7 +83,15 @@ object NotificationText {
             NotificationTypes.ACTIVITY_SHARED -> "$actor shared your activity"
             NotificationTypes.USER_FOLLOWED -> "$actor started following you"
             NotificationTypes.FOLLOW_REQUEST -> "$actor requested to follow you"
-            NotificationTypes.FOLLOW_REQUEST_ACCEPTED -> "$actor accepted your follow request"
+            NotificationTypes.FOLLOW_ACCEPTED, NotificationTypes.FOLLOW_REQUEST_ACCEPTED ->
+                "$actor accepted your follow request"
+            NotificationTypes.MENTIONED_IN_COMMENT ->
+                "$actor mentioned you: \"${notification.commentText ?: ""}\""
+            // These have no actor: they are the instance telling the user something
+            // finished, and "Someone interacted with you" would be actively unhelpful.
+            NotificationTypes.DATA_EXPORT_READY -> "Your data export is ready to download"
+            NotificationTypes.BATCH_IMPORT_COMPLETED -> "Your batch import has finished"
+            NotificationTypes.FEEDBACK_RECEIVED -> "There is a reply to your feedback"
             else -> "$actor interacted with you"
         }
     }

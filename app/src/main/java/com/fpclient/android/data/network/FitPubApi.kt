@@ -14,7 +14,7 @@ import com.fpclient.android.data.dto.DashboardDto
 import com.fpclient.android.data.dto.EmailChangeStatusResponse
 import com.fpclient.android.data.dto.FollowResultDto
 import com.fpclient.android.data.dto.FollowStatusDto
-import com.fpclient.android.data.dto.HeatmapResponse
+import com.fpclient.android.data.dto.HeatmapFeatureCollectionDto
 import com.fpclient.android.data.dto.LikeDto
 import com.fpclient.android.data.dto.LocationSuggestionDto
 import com.fpclient.android.data.dto.LoginRequest
@@ -372,11 +372,12 @@ interface FitPubApi {
     // Heatmap
     // ------------------------------------------------------------------
 
+    // The server exposes ONLY `/me` — there is no per-user heatmap endpoint, so the app must
+    // not invent one. (The old `api/web/heatmap/user/{username}` call 404'd on every profile,
+    // own included, and the GeoJSON payload it should have been reading is mapped by
+    // `HeatmapMapper`.)
     @GET("api/web/heatmap/me")
-    suspend fun myHeatmap(): Response<HeatmapResponse>
-
-    @GET("api/web/heatmap/user/{username}")
-    suspend fun userHeatmap(@Path("username") username: String): Response<HeatmapResponse>
+    suspend fun myHeatmap(): Response<HeatmapFeatureCollectionDto>
 
     @POST("api/web/heatmap/me/rebuild")
     suspend fun rebuildHeatmap(): Response<Unit>

@@ -29,7 +29,12 @@ data class ActivityDto(
     val createdAt: String? = null,
     val updatedAt: String? = null,
     val activityLocation: String? = null,
-    val entryMethod: String? = null,
+    /**
+     * The server's `ActivityDTO.creationSource` (FIT/GPX/TCX upload, manual entry, ...).
+     * It used to be declared here as `entryMethod`, which is not a name the server ever
+     * sends, so the field was permanently null.
+     */
+    @SerialName("creationSource") val creationSource: String? = null,
     val username: String? = null,
     val displayName: String? = null,
     val avatarUrl: String? = null,
@@ -174,7 +179,6 @@ data class TimelineActivityDto(
     val visibility: String? = null,
     val createdAt: String? = null,
     val activityLocation: String? = null,
-    val entryMethod: String? = null,
     val username: String? = null,
     val displayName: String? = null,
     val avatarUrl: String? = null,

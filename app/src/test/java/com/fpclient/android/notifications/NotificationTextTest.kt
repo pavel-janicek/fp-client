@@ -79,6 +79,52 @@ class NotificationTextTest {
         )
     }
 
+    /**
+     * The server's enum is `FOLLOW_ACCEPTED`. The app only knew
+     * `FOLLOW_REQUEST_ACCEPTED`, so a real "accepted your follow request" notification fell
+     * through to the generic sentence.
+     */
+    @Test
+    fun describe_understandsTheServersFollowAcceptedName() {
+        assertEquals(
+            "Sam accepted your follow request",
+            NotificationText.describe(
+                NotificationDto(type = NotificationTypes.FOLLOW_ACCEPTED, actorDisplayName = "Sam"),
+            ),
+        )
+    }
+
+    /** The instance's own "something finished" notices carry no actor at all. */
+    @Test
+    fun describe_phrasesTheActorsOwnCompletionNotices() {
+        assertEquals(
+            "Your data export is ready to download",
+            NotificationText.describe(NotificationDto(type = NotificationTypes.DATA_EXPORT_READY)),
+        )
+        assertEquals(
+            "Your batch import has finished",
+            NotificationText.describe(NotificationDto(type = NotificationTypes.BATCH_IMPORT_COMPLETED)),
+        )
+        assertEquals(
+            "There is a reply to your feedback",
+            NotificationText.describe(NotificationDto(type = NotificationTypes.FEEDBACK_RECEIVED)),
+        )
+    }
+
+    @Test
+    fun describe_phrasesAMention() {
+        assertEquals(
+            "Sam mentioned you: \"ping\"",
+            NotificationText.describe(
+                NotificationDto(
+                    type = NotificationTypes.MENTIONED_IN_COMMENT,
+                    actorDisplayName = "Sam",
+                    commentText = "ping",
+                ),
+            ),
+        )
+    }
+
     @Test
     fun actorLabel_prefersTheDisplayNameThenTheHandleThenSomeone() {
         assertEquals(

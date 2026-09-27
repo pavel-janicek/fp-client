@@ -73,7 +73,7 @@ object ActivityTypes {
     val ALL = listOf(
         "RUN", "RIDE", "HIKE", "WALK", "SWIM", "ALPINE_SKI", "BACKCOUNTRY_SKI",
         "NORDIC_SKI", "SNOWBOARD", "ROWING", "KAYAKING", "CANOEING", "INLINE_SKATING",
-        "ROCK_CLIMBING", "MOUNTAINEERING", "TENNIS", "YOGA", "WORKOUT", "OTHER",
+        "ROCK_CLIMBING", "MOUNTAINEERING", "TENNIS", "FISTBALL", "YOGA", "WORKOUT", "OTHER",
     )
     fun icon(activityType: String?): String = when (activityType?.uppercase()) {
         "RUN" -> "🏃"
@@ -89,6 +89,7 @@ object ActivityTypes {
         "ROCK_CLIMBING" -> "🧗"
         "MOUNTAINEERING" -> "⛰️"
         "TENNIS" -> "🎾"
+        "FISTBALL" -> "🏐"
         "YOGA" -> "🧘"
         "WORKOUT" -> "💪"
         else -> "🏋️"
