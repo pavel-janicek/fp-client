@@ -183,7 +183,21 @@ private fun MapCanvas(segments: List<List<org.osmdroid.util.GeoPoint>>, modifier
             val allPoints = mutableListOf<org.osmdroid.util.GeoPoint>()
             segments.forEach { seg ->
                 if (seg.isNotEmpty()) {
-                    val line = org.osmdroid.views.overlay.Polyline(map).apply { setPoints(seg) }
+                    val line = org.osmdroid.views.overlay.Polyline(map).apply {
+                        setPoints(seg)
+                        // The route is a picture, not a control: taps must fall through to the
+                        // map so panning and pinch-zooming keep working.
+                        //
+                        // osmdroid's `Polyline` inherits `onSingleTapConfirmed` from
+                        // `PolyOverlayWithIW`, and with no listener installed it *claims* every
+                        // tap near the line: it calls `onClickDefault` (which would show an
+                        // info window) and returns true, so the map never sees the gesture.
+                        // The window is never materialised — `mInfoWindow` is null and
+                        // `showInfoWindow()` is null-guarded — so the tap was swallowed with no
+                        // result at all. A listener returning false opts out of that default
+                        // and lets the tap continue to the map.
+                        setOnClickListener { _, _, _ -> false }
+                    }
                     map.overlays.add(line)
                     allPoints.addAll(seg)
                 }
