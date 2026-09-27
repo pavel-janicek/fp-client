@@ -2,6 +2,7 @@ package com.fpclient.android.ui.analytics
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,12 +23,15 @@ fun SummariesList(summaries: List<ActivitySummaryPeriodDto>, periodLabel: String
     if (summaries.isEmpty()) return EmptyState(title = "No $periodLabel summaries yet")
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        // The numbers sat hard against the left edge and the first/last card ran into the
+        // tab bar; both are a padding problem, not a layout one.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(summaries.size) { index ->
             val s = summaries[index]
-            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
                     // A bare "2026-09-01" told the reader nothing; PeriodLabels turns the
                     // same value into "September 2026" (and a week into its date range).
                     Text(

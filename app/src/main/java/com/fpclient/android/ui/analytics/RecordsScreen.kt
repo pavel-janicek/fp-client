@@ -110,7 +110,9 @@ fun RecordsScreen(
             groups.forEach { group ->
                 item(key = "header-${group.type}") {
                     Text(
-                        text = group.type,
+                        // Same emoji the Record screen's type picker uses, but in normal
+                        // capitalised English: "🏃 Run", "⛷️ Nordic Ski".
+                        text = RecordLabels.activityHeading(group.type),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -135,8 +137,7 @@ fun RecordsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = record.recordType?.replace('_', ' ')?.lowercase()
-                                    ?.replaceFirstChar { it.uppercase() } ?: "Record",
+                                text = RecordLabels.recordType(record.recordType),
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f),
                             )
@@ -149,7 +150,7 @@ fun RecordsScreen(
                             }
                         }
                         Text(
-                            text = recordValue(record, unitSystem),
+                            text = RecordLabels.value(record, unitSystem),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(top = 4.dp),
@@ -195,20 +196,6 @@ private const val OTHER_RECORD_TYPE = "Other"
 
 /** The activity types FitPub offers, in the order the user should meet them. */
 private val DEFAULT_RECORD_TYPE_ORDER = listOf("RUN", "HIKE", "WALK", "RIDE")
-
-/**
- * Formats a record value with the unit the server sent. Distances are the one metric where
- * the user's unit preference should win, so a metric distance is converted rather than
- * printed in the server's unit.
- */
-private fun recordValue(record: PersonalRecordDto, unitSystem: String): String {
-    val value = record.value ?: return "—"
-    val unit = record.unit.orEmpty()
-    val isDistance = unit.equals("m", true) || unit.equals("meter", true) ||
-        unit.equals("meters", true) || unit.equals("km", true)
-    return if (isDistance) Format.distance(value, unitSystem) else "$value $unit".trim()
-}
-
 
 /**
  * Loads the personal records for [RecordsScreen]. Tiny by design: one request, no caching,

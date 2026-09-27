@@ -53,12 +53,12 @@ fun TrainingLoadTab(loads: List<TrainingLoadDto>) {
     val latest = loads.maxByOrNull { it.date.orEmpty() }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text("How you are doing", style = MaterialTheme.typography.titleMedium)
                     Text(
                         TrainingLoadMath.describeBalance(
