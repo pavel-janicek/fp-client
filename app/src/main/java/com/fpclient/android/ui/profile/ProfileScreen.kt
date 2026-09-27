@@ -169,9 +169,17 @@ class ProfileViewModel(
                 is ApiResult.Success -> _ui.value = _ui.value.copy(activitiesList = a.data.content)
                 else -> Unit
             }
-            when (val h = users.heatmap(target)) {
-                is ApiResult.Success -> _ui.value = _ui.value.copy(heatmap = h.data)
-                else -> Unit
+            // Only the signed-in user has a heatmap: the server exposes `GET
+            // /api/web/heatmap/me` and nothing for other accounts, so asking on someone
+            // else's profile was a guaranteed 404. On another user's profile the card simply
+            // stays absent (`HeatmapCard` draws nothing without points).
+            val isOwnProfile = target.isNullOrBlank() ||
+                target.equals(appViewModel.uiState.value.username, ignoreCase = true)
+            if (isOwnProfile) {
+                when (val h = users.heatmap()) {
+                    is ApiResult.Success -> _ui.value = _ui.value.copy(heatmap = h.data)
+                    else -> Unit
+                }
             }
         }
     }

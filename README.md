@@ -16,7 +16,10 @@ later in **Settings → Instance**), sign in, and:
   on an OpenStreetMap track, and share them with followers on any instance.
 - **Timelines** — federated, public, and personal feeds of activities.
 - **Social** — comment, react, boost, and follow athletes; discover them via search.
-- **Notifications** — reactions, comments, and follows, with an unread badge.
+- **Notifications** — reactions, comments, and follows, with an unread badge. FP Client also
+  checks your instance in the background while you are signed in (roughly every 30 minutes;
+  Android may defer it further) and shows one summary notification for new activity — straight
+  against your instance, with no third-party push service in between.
 - **Analytics** — dashboard, personal records, achievements, and weekly summaries.
 - **Guest mode** — browse the public timeline without an account.
 

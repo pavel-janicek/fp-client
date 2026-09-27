@@ -2,20 +2,18 @@ package com.fpclient.android.ui.analytics
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Card
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fpclient.android.data.dto.ActivitySummaryPeriodDto
-import com.fpclient.android.data.dto.BatchImportJobStatus
-import com.fpclient.android.data.dto.TrainingLoadDto
 import com.fpclient.android.ui.components.EmptyState
 import com.fpclient.android.ui.components.StatRow
 import com.fpclient.android.util.Format
@@ -25,50 +23,26 @@ fun SummariesList(summaries: List<ActivitySummaryPeriodDto>, periodLabel: String
     if (summaries.isEmpty()) return EmptyState(title = "No $periodLabel summaries yet")
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        // The numbers sat hard against the left edge and the first/last card ran into the
+        // tab bar; both are a padding problem, not a layout one.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(summaries.size) { index ->
             val s = summaries[index]
-            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                    Text(text = s.periodStart ?: "", style = MaterialTheme.typography.titleSmall)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
+                    // A bare "2026-09-01" told the reader nothing; PeriodLabels turns the
+                    // same value into "September 2026" (and a week into its date range).
+                    Text(
+                        text = PeriodLabels.heading(s.periodStart, s.periodType),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
                     StatRow(
                         listOf(
                             "Activities" to s.activityCount.toString(),
                             "Time" to Format.duration(s.totalDurationSeconds),
                             "Distance" to Format.distanceShort(s.totalDistanceMeters),
-                        ),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun TrainingLoadContent(loads: List<TrainingLoadDto>) {
-    if (loads.isEmpty()) return EmptyState(title = "No training-load data yet")
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(loads.size) { index ->
-            val l = loads.reversed()[index]
-            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                    Text(text = l.date ?: "", style = MaterialTheme.typography.titleSmall)
-                    val stress = l.trainingStressScore?.toFloat() ?: 0f
-                    val maxStress = loads.mapNotNull { it.trainingStressScore?.toFloat() }.maxOrNull() ?: 1f
-                    LinearProgressIndicator(
-                        progress = { (stress / maxStress.coerceAtLeast(1f)).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
-                    StatRow(
-                        listOf(
-                            "Stress" to (l.trainingStressScore?.let { String.format(java.util.Locale.US, "%.0f", it) } ?: "—"),
-                            "Fitness (CTL)" to (l.chronicTrainingLoad?.let { String.format(java.util.Locale.US, "%.0f", it) } ?: "—"),
-                            "Fatigue (ATL)" to (l.acuteTrainingLoad?.let { String.format(java.util.Locale.US, "%.0f", it) } ?: "—"),
-                            "Form" to (l.trainingStressBalance?.let { String.format(java.util.Locale.US, "%+.0f", it) } ?: "—"),
                         ),
                     )
                 }

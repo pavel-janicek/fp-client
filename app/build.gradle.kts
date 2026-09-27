@@ -12,8 +12,8 @@ android {
         applicationId = "com.fpclient.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 38
-        versionName = "2.0.2"
+        versionCode = 39
+        versionName = "2.1.0"
     }
 
     signingConfigs {
@@ -95,6 +95,10 @@ dependencies {
     // Persistence
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.security:security-crypto:1.1.0")
+
+    // Background notification polling (Iteration 8f) — the only new dependency the whole
+    // push feature needs: the periodic worker that checks the instance for new notifications.
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
 
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")

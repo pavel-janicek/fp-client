@@ -12,6 +12,7 @@ import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -81,6 +82,12 @@ class SessionStore(private val context: Context) {
             guest = prefs[Keys.GUEST] ?: false,
         )
     }
+
+    /**
+     * One-shot read of the current session — for callers outside Compose that cannot collect
+     * a flow, like the background notification poll worker (Iteration 8f).
+     */
+    suspend fun currentSession(): Session = session.first()
 
     /** Persisted unit-system choice ("METRIC"/"IMPERIAL"); blank until the user picks
      *  one in Settings, so the unit system saved on the server profile can still seed it. */

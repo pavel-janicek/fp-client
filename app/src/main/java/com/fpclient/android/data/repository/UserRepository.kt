@@ -6,6 +6,8 @@ import com.fpclient.android.data.dto.ActorDto
 import com.fpclient.android.data.dto.ChangePasswordRequest
 import com.fpclient.android.data.dto.EmailChangeStatusResponse
 import com.fpclient.android.data.dto.FollowStatusDto
+import com.fpclient.android.data.dto.HeatmapFeatureCollectionDto
+import com.fpclient.android.data.dto.HeatmapMapper
 import com.fpclient.android.data.dto.HeatmapResponse
 import com.fpclient.android.data.dto.UserDto
 import com.fpclient.android.data.dto.UserSearchResultDto
@@ -255,15 +257,23 @@ class UserRepository(
         }
     }
 
-    /** Activity-location heatmap; pass null or blank for the signed-in user. */
-    suspend fun heatmap(username: String?): ApiResult<HeatmapResponse> {
+    /**
+     * The signed-in user's activity heatmap.
+     *
+     * The server has exactly one heatmap route — `GET /api/web/heatmap/me` — so this takes no
+     * username. It used to branch to a `heatmap/user/{username}` call that does not exist on
+     * the server, which meant the heatmap request failed on *every* profile, the signed-in
+     * user's included, and the card silently never appeared.
+     */
+    suspend fun heatmap(): ApiResult<HeatmapResponse> {
         return try {
-            val target = username?.trim()?.removePrefix("@")
-            val response = if (target.isNullOrBlank()) api.myHeatmap() else api.userHeatmap(target)
+            val response = api.myHeatmap()
             if (!response.isSuccessful) {
                 return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
             }
-            ApiResult.Success(response.body() ?: HeatmapResponse())
+            // The wire format is a GeoJSON FeatureCollection; the card draws the UI model.
+            val body = response.body() ?: return ApiResult.Success(HeatmapResponse())
+            ApiResult.Success(HeatmapMapper.toUi(body))
         } catch (e: Exception) {
             ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
         }

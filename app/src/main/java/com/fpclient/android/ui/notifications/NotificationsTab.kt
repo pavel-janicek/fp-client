@@ -21,19 +21,23 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fpclient.android.AppContainer
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.data.dto.NotificationDto
+import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.ui.components.EmptyState
 import com.fpclient.android.ui.components.ErrorState
 import com.fpclient.android.ui.components.LoadingIndicator
 import com.fpclient.android.util.Format
+import com.fpclient.android.notifications.NotificationText
 
 @Composable
 fun NotificationsTabContent(
@@ -44,6 +48,11 @@ fun NotificationsTabContent(
     modifier: Modifier = Modifier,
 ) {
     val ui by viewModel.ui.collectAsState()
+
+    // Opening this tab is the "already read" signal for the background summary notification:
+    // the user is looking at the very list it summarized (Iteration 8f).
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { PushNotifications.cancel(context) }
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
@@ -74,7 +83,13 @@ fun NotificationsTabContent(
                             if (!n.read) n.id?.let(viewModel::markRead)
                             val activityId = n.activityId
                             if (!activityId.isNullOrBlank()) onOpenActivity(activityId)
-                            else n.actorUsername?.let(onOpenProfile)
+                            // Federated actor: `actorUsername` is only the local part, and the
+                            // profile endpoint resolves LOCAL usernames only — navigating with
+                            // it sent every remote follower to a profile that does not exist
+                            // ("User not found"). ActorHandle carries the `@user@host` that
+                            // ProfileScreen resolves through WebFinger discovery, the same
+                            // handle Discover and the follower list already pass.
+                            else NotificationText.actorHandle(n)?.let(onOpenProfile)
                         },
                         onDelete = { n.id?.let(viewModel::delete) },
                         onAccept = { n.actorUsername?.let(viewModel::acceptFollowRequest) },
@@ -131,15 +146,9 @@ private fun NotificationRow(
     onAccept: () -> Unit = {},
     onReject: () -> Unit = {},
 ) {
-    val actor = notification.actorDisplayName ?: notification.actorUsername ?: "Someone"
-    val text = when (notification.type) {
-        "ACTIVITY_LIKED" -> "$actor reacted ${notification.reactionEmoji ?: "❤️"} to your activity"
-        "COMMENT_ADDED", "ACTIVITY_COMMENTED" -> "$actor commented: \"${notification.commentText ?: ""}\""
-        "USER_FOLLOWED" -> "$actor started following you"
-        "FOLLOW_REQUEST" -> "$actor requested to follow you"
-        "FOLLOW_REQUEST_ACCEPTED" -> "$actor accepted your follow request"
-        else -> "$actor interacted with you"
-    }
+    // Wording comes from NotificationText so the in-app row and the background push
+    // notification (Iteration 8f) always read identically.
+    val text = NotificationText.describe(notification)
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = if (notification.read) MaterialTheme.colorScheme.surface

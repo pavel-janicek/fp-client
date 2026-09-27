@@ -28,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.ui.auth.LoginContent
 import com.fpclient.android.ui.auth.LoginViewModel
@@ -47,11 +48,28 @@ class MainActivity : ComponentActivity() {
 
     private val appViewModel: AppViewModel by viewModels { AppViewModel.factory(FitPubApplication.container(this)) }
 
+    /**
+     * Bottom tab asked for by a tapped background notification (Iteration 8f), or null for a
+     * normal launch. Cleared by the main screen once it has honoured the request.
+     */
+    private val requestedTab = mutableStateOf<String?>(null)
+
+    /**
+     * Server-relative path asked for by a tapped mailbox push notification (Iteration 8h),
+     * e.g. `/activities/<id>`, or null for a normal launch. Consumed once the nav graph is up.
+     */
+    private val requestedPath = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = FitPubApplication.container(this)
         // Only on a fresh launch — on recreation the same intent would re-trigger the share flow.
         val sharedFileUri = if (savedInstanceState == null) extractSharedFileUri(intent) else null
+        requestedTab.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_TAB)
+        // Path only on a fresh launch: on recreation the same intent would re-navigate and
+        // stack a duplicate detail screen (same reasoning as the shared-file guard above).
+        requestedPath.value =
+            if (savedInstanceState == null) intent.getStringExtra(PushNotifications.EXTRA_OPEN_PATH) else null
         // Workouts whose share attempt failed (or that were recorded without a reachable
         // server, Iteration 8d) are retried silently on the next launch, once per process
         // and only for a signed-in session — the Record screen keeps the queue visible and
@@ -60,7 +78,13 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 val session = container.sessionStore.session.first()
                 if (session.isLoggedIn) {
-                    runCatching { container.recordingShareManager.retryPending() }
+                    // Only workouts the user actually asked to share. Retrying everything
+                    // here silently published recordings they had merely stopped, and made
+                    // "Discard workout" too late — the activity and its personal record were
+                    // already on the server.
+                    runCatching {
+                        container.recordingShareManager.retryPending(onlyUserRequested = true)
+                    }
                 }
             }
         }
@@ -74,11 +98,32 @@ class MainActivity : ComponentActivity() {
                         }
                         !state.configured -> ServerSetupRoute(container)
                         !state.loggedIn && !state.guest -> AuthFlowRoute(container, appViewModel)
-                        else -> MainAppRoute(container, appViewModel, sharedFileUri)
+                        else -> MainAppRoute(
+                            container = container,
+                            appViewModel = appViewModel,
+                            sharedFileUri = sharedFileUri,
+                            requestedTab = requestedTab.value,
+                            onRequestedTabHandled = { requestedTab.value = null },
+                            requestedPath = requestedPath.value,
+                            onRequestedPathHandled = { requestedPath.value = null },
+                        )
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Tapping the background poll's summary notification brings FP Client to the front
+     * (Iteration 8f). The PendingIntent uses NEW_TASK|CLEAR_TOP, so the normal path is a fresh
+     * `onCreate` carrying the extra; [onNewIntent] covers deliveries that land on a live
+     * instance instead, so the tap works either way.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        requestedTab.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_TAB)
+        requestedPath.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_PATH)
     }
 
     /** File shared into the app (share sheet: ACTION_SEND + EXTRA_STREAM) or opened via
@@ -89,6 +134,9 @@ class MainActivity : ComponentActivity() {
         else -> null
     }
 }
+
+/** Matches the server-relative activity paths mailbox push payloads carry (`/activities/<id>`). */
+private val PUSH_ACTIVITY_PATH = Regex("^/activities/([^/?#]+)")
 
 @Composable
 private fun ServerSetupRoute(
@@ -200,9 +248,22 @@ private fun MainAppRoute(
     container: AppContainer,
     appViewModel: AppViewModel,
     sharedFileUri: Uri? = null,
+    requestedTab: String? = null,
+    onRequestedTabHandled: () -> Unit = {},
+    requestedPath: String? = null,
+    onRequestedPathHandled: () -> Unit = {},
 ) {
     val navController = rememberNavController()
-    FitPubNavGraph(navController = navController, container = container, appViewModel = appViewModel, sharedFileUri = sharedFileUri)
+    FitPubNavGraph(
+        navController = navController,
+        container = container,
+        appViewModel = appViewModel,
+        sharedFileUri = sharedFileUri,
+        requestedTab = requestedTab,
+        onRequestedTabHandled = onRequestedTabHandled,
+        requestedPath = requestedPath,
+        onRequestedPathHandled = onRequestedPathHandled,
+    )
 }
 @Composable
 private fun FitPubNavGraph(
@@ -210,6 +271,10 @@ private fun FitPubNavGraph(
     container: AppContainer,
     appViewModel: AppViewModel,
     sharedFileUri: Uri? = null,
+    requestedTab: String? = null,
+    onRequestedTabHandled: () -> Unit = {},
+    requestedPath: String? = null,
+    onRequestedPathHandled: () -> Unit = {},
 ) {
     // A file arrived through the share sheet / "Open with": open the upload form with
     // that file pre-selected once, right after the main screen is up.
@@ -217,6 +282,18 @@ private fun FitPubNavGraph(
         LaunchedEffect(sharedFileUri) {
             navController.navigate(Routes.createWithSharedUri(sharedFileUri.toString()))
         }
+    }
+    // A mailbox push notification (Iteration 8h) carried a server-relative path such as
+    // /activities/<id>: open it on top of the main screen once the graph is up, so the tap
+    // lands on the activity behind the notification instead of the bare notifications tab
+    // (which the companion EXTRA_OPEN_TAB request still selects underneath).
+    LaunchedEffect(requestedPath) {
+        val path = requestedPath ?: return@LaunchedEffect
+        val activityId = PUSH_ACTIVITY_PATH.matchEntire(path)?.groupValues?.get(1)
+        if (!activityId.isNullOrBlank()) {
+            navController.navigate(Routes.activityDetail(activityId))
+        }
+        onRequestedPathHandled()
     }
     NavHost(navController = navController, startDestination = Routes.MAIN) {
         composable(Routes.MAIN) {
@@ -231,6 +308,9 @@ private fun FitPubNavGraph(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
                 onOpenFollowing = { username -> navController.navigate(Routes.followList(username, "following")) },
+                onOpenRecords = { navController.navigate(Routes.RECORDS) },
+                requestedTab = requestedTab,
+                onRequestedTabHandled = onRequestedTabHandled,
             )
         }
         composable(
@@ -244,6 +324,16 @@ private fun FitPubNavGraph(
                 appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
+            )
+        }
+        // Personal records, reached from the Analytics "Personal records" tile.
+        composable(Routes.RECORDS) {
+            val unitSystem by appViewModel.unitSystem.collectAsState()
+            com.fpclient.android.ui.analytics.RecordsScreen(
+                container = container,
+                unitSystem = unitSystem,
+                onBack = { navController.popBackStack() },
+                onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
             )
         }
         composable(

@@ -169,7 +169,7 @@ fun BatchImportScreen(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         )
                         Text(
-                            "${job.status} · ${job.processedFiles}/${job.totalFiles} files · ${job.successful} ok · ${job.failed} failed",
+                            "${job.status} · ${job.processedFiles}/${job.totalFiles} files · ${job.successCount} ok · ${job.failedCount} failed",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 6.dp),
@@ -190,7 +190,7 @@ fun BatchImportScreen(
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(j.createdAt ?: "Import", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "${j.status} · ${j.successful} ok · ${j.failed} failed of ${j.totalFiles}",
+                            "${j.status} · ${j.successCount} ok · ${j.failedCount} failed of ${j.totalFiles}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
