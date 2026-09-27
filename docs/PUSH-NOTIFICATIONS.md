@@ -96,9 +96,23 @@ and `PRIVACY.md` in the relay repo says so.)
    delivery degrades to "whenever Android wakes the app".
 
 The ongoing notification sits on its own `fitpub_instant_delivery` channel, so silencing
-"FitPub instant delivery" in Android's notification settings does not also silence your
-activity notifications. Turning the switch off (or disabling mailbox push) removes the
-service, the notification and the connection in one go.
+"FitPub instant delivery" in Android's notification settings does not also silence your activity
+notifications. Turning the switch off (or disabling mailbox push) removes the service, the
+notification and the connection in one go.
+
+**"Can I just get rid of that notification?"** — not while instant delivery is on: Android does
+not allow a foreground service without one, and that requirement *is* what buys you seconds
+instead of minutes. But it does not have to be *seen*:
+
+| Want | Do this | Effect |
+| --- | --- | --- |
+| Hide it, keep instant delivery | Settings → Push → **Hide it** (or Android → Apps → FP Client → Notifications → *FitPub instant delivery* → off) | The notification disappears; the connection keeps running. Your activity notifications are unaffected, because this is a separate channel. |
+| Swipe it away | Swipe the notification (Android 13 and later) | Same. It is not re-posted until the service restarts. |
+| Get rid of it entirely | Tap **Stop** on the notification, or switch instant delivery off in Settings | Removes the service and the notification — and takes you back to ~15-minute delivery. |
+
+Turning off the channel does **not** stop the connection; turning off the feature does. The app
+says which one it is doing, because the difference is the difference between "instant" and
+"eventual".
 
 ### The foreground service, and why `specialUse`
 

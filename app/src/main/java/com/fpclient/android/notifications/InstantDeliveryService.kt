@@ -115,7 +115,24 @@ class InstantDeliveryService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_STOP) {
-            stopSelf()
+            // Stopping the socket while Settings still showed "instant delivery: on" would
+            // leave a switch that silently does nothing — the exact kind of dishonesty the
+            // live status line exists to prevent. So a stop also clears the switch on the
+            // relay, which is idempotent when the caller already did it.
+            val current = scope
+            if (current == null) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            current.launch {
+                runCatching {
+                    (application as? FitPubApplication)
+                        ?.container
+                        ?.pushRepository
+                        ?.disableInstant()
+                }
+                stopSelf()
+            }
             return START_NOT_STICKY
         }
         // The gate needs the session, which is a suspending read of the DataStore-backed
@@ -401,6 +418,21 @@ class InstantDeliveryService : LifecycleService() {
      * receive) and `track_recording` — a user who silences "FitPub instant delivery" should
      * not also lose their activity notifications.
      */
+    /**
+     * The "listening for notifications" notification. Deliberately on its own channel so the
+     * OS-level toggle is independent of `fitpub_push` (the notifications you receive) and
+     * `track_recording` — a user who silences "FitPub instant delivery" should not also lose
+     * their activity notifications.
+     *
+     * It **cannot be removed while instant delivery is on** — Android requires a foreground
+     * service to have one, and that is the whole trade for seconds-long delivery. It can,
+     * however, be made as quiet as the platform allows:
+     *  - `IMPORTANCE_MIN` on its own channel, so the user can switch that one channel off in
+     *    Android's settings and the connection keeps running (see `InstantDeliveryRow` in
+     *    Settings, which links straight there);
+     *  - dismissible by a swipe from Android 13, where the platform explicitly allows it;
+     *  - a **Stop** action, so turning the whole thing off does not require finding Settings.
+     */
     private fun buildNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
@@ -408,10 +440,34 @@ class InstantDeliveryService : LifecycleService() {
             .setContentText("Instant delivery is on. Tap to open the app.")
             .setContentIntent(openAppIntent())
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setOngoing(true)
+            // On Android 13+ the platform made foreground-service notifications dismissible
+            // on purpose, and an ongoing one defies that. Below 13 a foreground-service
+            // notification is not dismissible anyway, so it is marked ongoing there.
+            .setOngoing(!notificationIsDismissible(Build.VERSION.SDK_INT))
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Stop",
+                stopIntent(),
+            )
             .build()
+
+    private fun stopIntent(): PendingIntent = PendingIntent.getService(
+        this,
+        1,
+        Intent(this, InstantDeliveryService::class.java).setAction(ACTION_STOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /**
+     * Whether the ongoing notification may be swiped away on [sdkInt].
+     *
+     * Android 13 (API 33) made foreground-service notifications dismissible by design, and an
+     * `ongoing` notification opts out of that. Before 13 the platform did not allow it, so
+     * asking is pointless and the notification stays ongoing.
+     */
+    internal fun notificationIsDismissible(sdkInt: Int): Boolean = sdkInt >= 33
 
     private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
         this,

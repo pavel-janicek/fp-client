@@ -583,6 +583,7 @@ private fun InstantDeliveryBlock(container: AppContainer) {
             modifier = Modifier.padding(top = 6.dp),
         )
         InstantBatteryRow(exempt = exempt)
+        InstantNotificationRow()
     }
 }
 
@@ -640,18 +641,67 @@ private fun InstantBatteryRow(exempt: Boolean) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp),
     )
-    Text(
-        "A permanent \"listening for notifications\" notification is required for instant " +
-            "delivery — it is what Android shows for a foreground service. Turn instant " +
-            "delivery off above to remove it. The ongoing notification itself can be hidden in " +
-            "Android's app notification settings; doing so does not stop the connection.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 2.dp),
-    )
     if (!exempt) {
         TextButton(onClick = { openInstantBatterySettings(context) }) {
             Text("Battery settings")
+        }
+    }
+}
+
+/**
+ * The ongoing notification, and what can actually be done about it.
+ *
+ * Android will not let a foreground service exist without a notification — that is the
+ * contract, and it is the same contract that makes "seconds instead of 15 minutes" possible.
+ * So the honest answer is: it cannot be deleted, but it does not have to be *seen*. Two
+ * things are offered, both of which keep the connection running:
+ *
+ *  - **Hide it** opens this one channel's settings, where switching *this channel* off makes
+ *    it disappear entirely without touching the notifications you actually receive. That
+ *    isolation is the entire reason the ongoing notification has its own channel.
+ *  - **Stop** (also on the notification itself) turns instant delivery off properly, which
+ *    does remove it — at the cost of going back to ~15-minute delivery.
+ */
+@Composable
+private fun InstantNotificationRow() {
+    val context = LocalContext.current
+    Text(
+        "\"Listening for notifications\" is required while instant delivery is on — Android " +
+            "does not allow a foreground service without one, and that is what buys the " +
+            "\"seconds instead of minutes\". It does not have to be visible though.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Row(modifier = Modifier.fillMaxWidth()) {
+        TextButton(onClick = { openInstantChannelSettings(context) }) {
+            Text("Hide it")
+        }
+    }
+    Text(
+        "\"Hide it\" switches off this one notification and nothing else — your activity " +
+            "notifications and instant delivery both keep working. You can also swipe the " +
+            "notification away on Android 13 and later, or use its Stop button to turn " +
+            "instant delivery off completely.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Opens the settings page for the ongoing notification's own channel. */
+private fun openInstantChannelSettings(context: Context) {
+    val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        .putExtra(Settings.EXTRA_CHANNEL_ID, InstantDeliveryService.CHANNEL_ID)
+    // Best effort: some builds lack the per-channel screen, so fall back to the app's
+    // notification list rather than crashing on a settings intent.
+    val opened = runCatching { context.startActivity(intent) }.isSuccess
+    if (!opened) {
+        runCatching {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+            )
         }
     }
 }

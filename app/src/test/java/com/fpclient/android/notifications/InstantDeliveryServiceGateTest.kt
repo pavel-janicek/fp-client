@@ -1,6 +1,7 @@
 package com.fpclient.android.notifications
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -74,6 +75,41 @@ class InstantDeliveryServiceGateTest {
         assertEquals("fp-abc123", target!!.topic)
         assertEquals("https://ntfy.example", target.ntfyServer)
         assertTrue(target.subscription.instantEnabled)
+    }
+
+    // ------------------------------------------------------- the ongoing notification
+
+    /**
+     * The ongoing notification has to be independently switchable, because that is the answer
+     * the app gives to "can I make this go away?": hide this channel, keep the connection.
+     * If it shared a channel with the notifications the user actually wants, hiding it would
+     * silence those too and the claim would be a lie.
+     */
+    @Test
+    fun theOngoingNotificationHasItsOwnChannel() {
+        assertEquals(InstantDeliveryService.CHANNEL_ID, "fitpub_instant_delivery")
+        assertTrue(
+            "must not share a channel with the notifications the user wants to receive",
+            InstantDeliveryService.CHANNEL_ID != PushNotifications.CHANNEL_ID,
+        )
+        assertTrue(
+            "must not share the track-recording channel either",
+            InstantDeliveryService.CHANNEL_ID != "track_recording",
+        )
+    }
+
+    /**
+     * Android 13 (API 33) made foreground-service notifications dismissible on purpose, and an
+     * `ongoing` notification opts out of that. Below 33 the platform does not allow it, so
+     * claiming dismissibility there would be a promise the OS breaks.
+     */
+    @Test
+    fun theOngoingNotificationIsDismissibleWhereAndroidAllowsIt() {
+        val service = InstantDeliveryService()
+        assertTrue("API 33+ allows it", service.notificationIsDismissible(33))
+        assertTrue("and later", service.notificationIsDismissible(36))
+        assertFalse("API 32 does not", service.notificationIsDismissible(32))
+        assertFalse("and below", service.notificationIsDismissible(26))
     }
 
     // ------------------------------------------------------------------ helpers
