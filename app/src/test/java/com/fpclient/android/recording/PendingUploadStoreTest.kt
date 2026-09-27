@@ -86,4 +86,54 @@ class PendingUploadStoreTest {
         assertEquals(7L, PendingUploadStore(file).all().single().sessionId)
         file.delete()
     }
+
+    /**
+     * The bug behind "a discarded recording still has a personal record": the app-start
+     * retry pass uploaded every recording the user had merely stopped, so Discard arrived
+     * too late — the activity and its record were already on the server.
+     *
+     * A stopped-but-never-shared workout must therefore be invisible to the automatic pass,
+     * while a *failed* share must remain retryable, because that is the whole point of an
+     * automatic retry.
+     */
+    @Test
+    fun `a stopped recording is not user requested but a failed share is`() {
+        val store = newStore()
+        store.upsert(entry(1L))  // recorded, never shared
+
+        assertEquals(
+            "a merely-stopped workout must not count as requested",
+            false,
+            store.get(1L)?.requestedByUser,
+        )
+
+        // The user pressed "Share to FitPub" and the upload failed.
+        store.markFailed(
+            sessionId = 1L,
+            error = "offline",
+            title = "Morning Run",
+            description = null,
+            visibility = null,
+            activityType = "RIDE",
+        )
+        assertEquals(
+            "a failed share must stay retryable on its own",
+            true,
+            store.get(1L)?.requestedByUser,
+        )
+        assertEquals("Morning Run", store.get(1L)?.title)
+    }
+
+    /** Old on-disk entries predate the flag; they must still parse, as "not requested". */
+    @Test
+    fun `entries written before the flag still parse and default to not requested`() {
+        val file = Files.createTempFile("pending", ".json").toFile()
+        file.writeText(
+            """[{"sessionId":7,"startedAtEpochMs":7,"activityType":"RUN","createdAtEpochMs":7}]""",
+        )
+        val store = PendingUploadStore(file)
+        val restored = store.get(7L)
+        assertEquals(7L, restored?.sessionId)
+        assertEquals(false, restored?.requestedByUser)
+    }
 }

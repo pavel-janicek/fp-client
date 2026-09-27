@@ -78,7 +78,13 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 val session = container.sessionStore.session.first()
                 if (session.isLoggedIn) {
-                    runCatching { container.recordingShareManager.retryPending() }
+                    // Only workouts the user actually asked to share. Retrying everything
+                    // here silently published recordings they had merely stopped, and made
+                    // "Discard workout" too late — the activity and its personal record were
+                    // already on the server.
+                    runCatching {
+                        container.recordingShareManager.retryPending(onlyUserRequested = true)
+                    }
                 }
             }
         }

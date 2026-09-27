@@ -98,33 +98,46 @@ fun RecordsScreen(
             }
             return@Scaffold
         }
+        val groups = recordsByActivityType(records)
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(records.size) { index ->
-                val record = records[index]
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            // Tapping a record opens the activity that set it, when the
-                            // server gave us one to open.
-                            if (record.activityId.isNullOrBlank()) {
-                                Modifier
-                            } else {
-                                Modifier.clickable { onOpenActivity(record.activityId) }
-                            },
-                        ),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Grouped by activity type: a run and a hike of the same distance are not
+            // comparable, and burying the type on every card made the list read as one
+            // undifferentiated pile.
+            groups.forEach { group ->
+                item(key = "header-${group.type}") {
+                    Text(
+                        text = group.type,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                items(group.records.size, key = { index -> "record-${group.records[index].id ?: index}" }) { index ->
+                    val record = group.records[index]
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                // Tapping a record opens the activity that set it, when the
+                                // server gave us one to open.
+                                if (record.activityId.isNullOrBlank()) {
+                                    Modifier
+                                } else {
+                                    Modifier.clickable { onOpenActivity(record.activityId) }
+                                },
+                            ),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
                                 text = record.recordType?.replace('_', ' ')?.lowercase()
                                     ?.replaceFirstChar { it.uppercase() } ?: "Record",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f),
                             )
                             record.achievedAt?.let {
@@ -138,21 +151,50 @@ fun RecordsScreen(
                         Text(
                             text = recordValue(record, unitSystem),
                             style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(top = 4.dp),
                         )
-                        record.activityType?.let {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                     }
                 }
             }
         }
     }
 }
+
+/** One activity type and the records set under it. */
+internal data class RecordGroup(val type: String, val records: List<PersonalRecordDto>)
+
+/**
+ * Groups records under their activity type, with an explicit order so the list does not
+ * reshuffle between visits. The server's own order is preserved within a group (newest
+ * record first), and any type that arrives without a name lands in an "Other" group rather
+ * than being dropped.
+ */
+internal fun recordsByActivityType(
+    records: List<PersonalRecordDto>,
+    preferredOrder: List<String> = DEFAULT_RECORD_TYPE_ORDER,
+): List<RecordGroup> {
+    // A record with no type would otherwise vanish from the list entirely; it gets its own
+    // "Other" group at the end instead.
+    val byType = records.groupBy { record ->
+        record.activityType?.trim()?.takeIf { it.isNotEmpty() } ?: OTHER_RECORD_TYPE
+    }
+    val known = preferredOrder.filter { byType.containsKey(it) }
+    val rest = byType.keys.filterNot { it in preferredOrder }.sorted()
+    return (known + rest).map { type ->
+        RecordGroup(
+            type = type,
+            // groupBy preserves encounter order, so the newest record stays on top.
+            records = byType.getValue(type),
+        )
+    }
+}
+
+/** Group heading for records the server sent without an activity type. */
+private const val OTHER_RECORD_TYPE = "Other"
+
+/** The activity types FitPub offers, in the order the user should meet them. */
+private val DEFAULT_RECORD_TYPE_ORDER = listOf("RUN", "HIKE", "WALK", "RIDE")
 
 /**
  * Formats a record value with the unit the server sent. Distances are the one metric where

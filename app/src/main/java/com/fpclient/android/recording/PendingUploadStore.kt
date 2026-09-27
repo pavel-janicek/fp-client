@@ -20,6 +20,19 @@ data class PendingUpload(
     /** Activity type chosen on the Record pre-start screen (default fallback kept too). */
     val activityType: String,
     val createdAtEpochMs: Long,
+    /**
+     * Whether the **user** asked for this workout to be shared.
+     *
+     * This is false for a recording that was merely stopped and never submitted: it sits in
+     * the pending list so the user can share it later, but it must not be published without
+     * being asked for. It becomes true the moment an upload is actually attempted (see
+     * `markFailed`), which is what makes a *failed* share still retryable automatically.
+     *
+     * Without this flag the app-start retry pass uploaded every recording the user had ever
+     * made, so discarding one afterwards was futile — the activity (and the personal record
+     * it earned) already existed on the server.
+     */
+    val requestedByUser: Boolean = false,
     /** How many upload attempts already failed. */
     val attempts: Int = 0,
     /** Message of the most recent failed attempt, shown in the pending list. */
@@ -59,7 +72,14 @@ class PendingUploadStore(private val file: File) {
         write(read().filterNot { it.sessionId == sessionId })
     }
 
-    /** Marks a failed attempt, remembering the metadata the user chose for the retry. */
+    /**
+     * Marks a failed attempt, remembering the metadata the user chose for the retry.
+     *
+     * Reaching this method at all means an upload was genuinely attempted for this session,
+     * which is exactly "the user asked for this to be shared" — so it is also where
+     * [PendingUpload.requestedByUser] is set, and from then on the app-start retry pass
+     * picks this entry up on its own.
+     */
     fun markFailed(
         sessionId: Long,
         error: String?,
@@ -73,6 +93,7 @@ class PendingUploadStore(private val file: File) {
                 entry
             } else {
                 entry.copy(
+                    requestedByUser = true,
                     attempts = entry.attempts + 1,
                     lastError = error,
                     title = title ?: entry.title,

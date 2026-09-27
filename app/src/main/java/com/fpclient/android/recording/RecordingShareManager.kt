@@ -195,10 +195,18 @@ class RecordingShareManager(
      * Retries pending uploads oldest-first, stopping at the first failure (a dead network
      * would otherwise turn every entry's attempt counter into noise). Returns the number of
      * workouts that made it to the server.
+     *
+     * [onlyUserRequested] is the fix for workouts being published without being asked for.
+     * The app-start pass sets it, so it retries only entries the user actually tried to
+     * share — a failed share still recovers on its own, which is what the pass is *for*. A
+     * user-driven "share"/"retry" from the Record or summary screen leaves it false and
+     * uploads everything pending, because at that point the user is explicitly saying "yes,
+     * all of these".
      */
-    suspend fun retryPending(): Int {
+    suspend fun retryPending(onlyUserRequested: Boolean = false): Int {
         var uploaded = 0
         for (entry in pendingStore.all().sortedBy { it.createdAtEpochMs }) {
+            if (onlyUserRequested && !entry.requestedByUser) continue
             val result = upload(
                 sessionId = entry.sessionId,
                 activityType = entry.activityType,
