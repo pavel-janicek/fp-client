@@ -27,14 +27,12 @@ import com.fpclient.android.util.Format
 import java.util.Locale
 
 /**
- * The **Load** tab (Iteration: Analytics redesign, option C).
+ * The **Load** tab (Analytics redesign, option C).
  *
- * Chosen over the alternatives after a three-way comparison on real data
- * (`docs/ANALYTICS-TAB-REDESIGN.md` §5, §8.1): the two rejected candidates were the
- * status quo (a flat list of 90 daily rows labelled *Stress* / *Fitness (CTL)* /
- * *Fatigue (ATL)* / *Form*, which the brief described as "data nonsense") and a
- * jargon-free variant that dropped the numbers entirely. This one keeps every number
- * and makes them legible.
+ * Chosen over the two candidates it was compared against on real data: the status quo
+ * (a flat list of 90 daily rows labelled *Stress* / *Fitness (CTL)* / *Fatigue (ATL)* /
+ * *Form*, which the brief described as "data nonsense") and a jargon-free variant that
+ * dropped the numbers entirely. This one keeps every number and makes them legible.
  *
  * What changed, and why it is the difference:
  *  - a plain-English verdict leads, from the server's own `description` when present

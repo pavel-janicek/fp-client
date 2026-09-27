@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The arithmetic behind the Analytics mockups.
+ * The arithmetic behind the Analytics Load tab.
  *
  * The week bucketing is the part that is easy to get wrong — an off-by-one there silently
  * merges two weeks or splits one, and the "vs last week" numbers then lie. These pin it.
