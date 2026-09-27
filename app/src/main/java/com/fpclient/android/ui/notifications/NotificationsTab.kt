@@ -37,6 +37,7 @@ import com.fpclient.android.ui.components.EmptyState
 import com.fpclient.android.ui.components.ErrorState
 import com.fpclient.android.ui.components.LoadingIndicator
 import com.fpclient.android.util.Format
+import com.fpclient.android.notifications.NotificationText
 
 @Composable
 fun NotificationsTabContent(
@@ -82,7 +83,13 @@ fun NotificationsTabContent(
                             if (!n.read) n.id?.let(viewModel::markRead)
                             val activityId = n.activityId
                             if (!activityId.isNullOrBlank()) onOpenActivity(activityId)
-                            else n.actorUsername?.let(onOpenProfile)
+                            // Federated actor: `actorUsername` is only the local part, and the
+                            // profile endpoint resolves LOCAL usernames only — navigating with
+                            // it sent every remote follower to a profile that does not exist
+                            // ("User not found"). ActorHandle carries the `@user@host` that
+                            // ProfileScreen resolves through WebFinger discovery, the same
+                            // handle Discover and the follower list already pass.
+                            else NotificationText.actorHandle(n)?.let(onOpenProfile)
                         },
                         onDelete = { n.id?.let(viewModel::delete) },
                         onAccept = { n.actorUsername?.let(viewModel::acceptFollowRequest) },
@@ -141,7 +148,7 @@ private fun NotificationRow(
 ) {
     // Wording comes from NotificationText so the in-app row and the background push
     // notification (Iteration 8f) always read identically.
-    val text = com.fpclient.android.notifications.NotificationText.describe(notification)
+    val text = NotificationText.describe(notification)
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = if (notification.read) MaterialTheme.colorScheme.surface

@@ -3,6 +3,9 @@ package com.fpclient.android.notifications
 import com.fpclient.android.data.dto.NotificationDto
 import com.fpclient.android.data.dto.NotificationTypes
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -97,5 +100,105 @@ class NotificationTextTest {
                 ),
             ),
         )
+    }
+
+    // ---------------------------------------------------------------- federation
+    //
+    // Regression: a federated follower was announced as a bare local username and, when
+    // tapped, navigated to a local profile that does not exist ("User not found"). The server
+    // always sends `actorUri`, so the instance is recoverable - it just was not being used.
+
+    private fun remoteFollower(displayName: String? = null) = NotificationDto(
+        type = NotificationTypes.USER_FOLLOWED,
+        actorUsername = "sam",
+        actorUri = "https://makni.cz/users/sam",
+        actorDisplayName = displayName,
+        actorLocal = false,
+    )
+
+    @Test
+    fun aFederatedFollowerKeepsTheirInstanceInTheText() {
+        val text = NotificationText.describe(remoteFollower())
+        assertTrue("must not read as a local user: $text", text.contains("sam@makni.cz"))
+        assertTrue(text.endsWith("started following you"))
+    }
+
+    @Test
+    fun aFederatedFollowerWithADisplayNameStillShowsWhichInstance() {
+        // "Alice started following you" hides the one fact federation exists for.
+        val text = NotificationText.describe(remoteFollower(displayName = "Alice"))
+        assertTrue("display name should still be used: $text", text.contains("Alice"))
+        assertTrue("but the instance must be visible: $text", text.contains("sam@makni.cz"))
+    }
+
+    @Test
+    fun aLocalFollowerIsNotBuriedUnderItsOwnHostname() {
+        val local = NotificationDto(
+            type = NotificationTypes.USER_FOLLOWED,
+            actorUsername = "sam",
+            actorUri = "https://fitpub.example/users/sam",
+            actorLocal = true,
+        )
+        // With a display name: just the name.
+        assertEquals(
+            "Sam started following you",
+            NotificationText.describe(local.copy(actorDisplayName = "Sam")),
+        )
+        // Without one: the plain handle, but not `@sam@<the reader's own host>`.
+        assertEquals("@sam started following you", NotificationText.describe(local))
+    }
+
+    @Test
+    fun actorHandleIsTheFullFederatedHandleTheProfileScreenCanResolve() {
+        // This is the value the row navigates with. It must be @user@host, because the local
+        // profile endpoint resolves local usernames only.
+        assertEquals("@sam@makni.cz", NotificationText.actorHandle(remoteFollower()))
+        assertEquals(
+            "@sam@fitpub.example",
+            NotificationText.actorHandle(
+                NotificationDto(actorUsername = "sam", actorUri = "https://fitpub.example/users/sam"),
+            ),
+        )
+    }
+
+    @Test
+    fun actorHandleNeverProducesABareLocalPartForARemoteActor() {
+        // The exact failure: a remote actor rendered/navigated as "@sam", which lands on a
+        // non-existent local profile.
+        val handle = NotificationText.actorHandle(remoteFollower())
+        assertNotNull(handle)
+        // A second '@' is what separates a real handle from a bare local name.
+        assertTrue("must be a full handle, was $handle", handle!!.count { it == '@' } == 2)
+        assertEquals("@sam@makni.cz", handle)
+    }
+
+    @Test
+    fun actorHandleDegradesGracefullyWhenTheServerSendsNoActorUri() {
+        assertEquals("@sam", NotificationText.actorHandle(NotificationDto(actorUsername = "sam")))
+        assertEquals("@sam", NotificationText.actorHandle(NotificationDto(actorUsername = "@sam")))
+        assertNull(NotificationText.actorHandle(NotificationDto()))
+    }
+
+    @Test
+    fun aRowWithNoActorAtAllStillRenders() {
+        val orphan = NotificationDto(type = NotificationTypes.USER_FOLLOWED)
+        assertNull("there is no actor to navigate to", NotificationText.actorHandle(orphan))
+        assertEquals("Someone started following you", NotificationText.describe(orphan))
+    }
+
+    @Test
+    fun everyDeliverableTypeQualifiesAFederatedActor() {
+        val remote = mapOf(
+            NotificationTypes.ACTIVITY_LIKED to "reacted",
+            NotificationTypes.ACTIVITY_COMMENTED to "commented",
+            NotificationTypes.ACTIVITY_SHARED to "shared",
+            NotificationTypes.USER_FOLLOWED to "started following you",
+            NotificationTypes.FOLLOW_REQUEST to "requested to follow you",
+        )
+        remote.forEach { (type, tail) ->
+            val text = NotificationText.describe(remoteFollower().copy(type = type))
+            assertTrue("$type lost the instance: $text", text.contains("sam@makni.cz"))
+            assertTrue("$type lost its wording: $text", text.contains(tail))
+        }
     }
 }
