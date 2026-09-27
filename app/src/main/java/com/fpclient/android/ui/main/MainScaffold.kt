@@ -59,6 +59,7 @@ fun MainScaffold(
     onOpenSettings: () -> Unit,
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
+    onOpenRecords: () -> Unit = {},
     requestedTab: String? = null,
     onRequestedTabHandled: () -> Unit = {},
 ) {
@@ -146,6 +147,7 @@ fun MainScaffold(
             Routes.BottomTab.ANALYTICS -> AnalyticsTabContent(
                 container = container,
                 unitSystem = unitSystem,
+                onOpenRecords = onOpenRecords,
                 modifier = modifier,
             )
             Routes.BottomTab.NOTIFICATIONS -> NotificationsTabContent(

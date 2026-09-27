@@ -28,7 +28,12 @@ fun SummariesList(summaries: List<ActivitySummaryPeriodDto>, periodLabel: String
             val s = summaries[index]
             Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                    Text(text = s.periodStart ?: "", style = MaterialTheme.typography.titleSmall)
+                    // A bare "2026-09-01" told the reader nothing; PeriodLabels turns the
+                    // same value into "September 2026" (and a week into its date range).
+                    Text(
+                        text = PeriodLabels.heading(s.periodStart, s.periodType),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
                     StatRow(
                         listOf(
                             "Activities" to s.activityCount.toString(),

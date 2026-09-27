@@ -11,6 +11,8 @@ object Routes {
     // Optional query arg carries a file URI shared into the app (share sheet / "Open with").
     const val CREATE = "create?sharedUri={sharedUri}"
     const val PROFILE = "profile/{username}"
+    /** Personal records; reached from the Analytics "Personal records" tile. */
+    const val RECORDS = "records"
     const val ME = "me"
     const val EDIT_PROFILE = "edit_profile"
     const val PRIVACY_ZONES = "privacy_zones"

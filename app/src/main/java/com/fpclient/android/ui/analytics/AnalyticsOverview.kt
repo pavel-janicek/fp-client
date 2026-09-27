@@ -1,6 +1,7 @@
 package com.fpclient.android.ui.analytics
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,11 @@ import com.fpclient.android.ui.components.StatRow
 import com.fpclient.android.util.Format
 
 @Composable
-internal fun OverviewContent(ui: AnalyticsViewModel.UiState, unitSystem: String) {
+internal fun OverviewContent(
+    ui: AnalyticsViewModel.UiState,
+    unitSystem: String,
+    onOpenRecords: () -> Unit = {},
+) {
     val dash = ui.dashboard ?: return EmptyState(title = "No analytics yet")
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -56,7 +61,14 @@ internal fun OverviewContent(ui: AnalyticsViewModel.UiState, unitSystem: String)
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MiniStatCard("Personal records", dash.personalRecordsCount.toString(), Modifier.weight(1f))
+                MiniStatCard(
+                    "Personal records",
+                    dash.personalRecordsCount.toString(),
+                    Modifier.weight(1f),
+                    // A count that looks like a link and is not is worse than no tile:
+                    // this one now opens the full list.
+                    onClick = onOpenRecords,
+                )
                 MiniStatCard("Achievements", dash.achievementsCount.toString(), Modifier.weight(1f))
                 MiniStatCard(
                     "Form",
@@ -118,8 +130,13 @@ private fun AchievementRow(achievement: AchievementDto) {
 }
 
 @Composable
-private fun MiniStatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+private fun MiniStatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    Card(modifier = modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

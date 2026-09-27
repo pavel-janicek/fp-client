@@ -36,6 +36,7 @@ private val TABS = listOf("Overview", "Weekly", "Monthly", "Yearly", "Load")
 fun AnalyticsTabContent(
     container: AppContainer,
     unitSystem: String,
+    onOpenRecords: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val vm: AnalyticsViewModel = viewModel(factory = AnalyticsViewModel.factory(container))
@@ -55,7 +56,7 @@ fun AnalyticsTabContent(
             ui.loading -> LoadingIndicator()
             ui.error != null -> ErrorState(message = ui.error, onRetry = vm::refresh)
             else -> when (tab) {
-                0 -> OverviewContent(ui, unitSystem)
+                0 -> OverviewContent(ui, unitSystem, onOpenRecords)
                 1 -> SummariesList(ui.weekly.reversed(), "week")
                 2 -> SummariesList(ui.monthly.reversed(), "month")
                 3 -> SummariesList(ui.yearly.reversed(), "year")

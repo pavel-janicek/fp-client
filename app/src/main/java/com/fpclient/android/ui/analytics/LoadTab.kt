@@ -19,7 +19,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fpclient.android.data.dto.TrainingLoadDto
 import com.fpclient.android.ui.components.EmptyState
@@ -102,18 +101,26 @@ fun TrainingLoadTab(loads: List<TrainingLoadDto>) {
             val day = loads.getOrNull(loads.lastIndex - index) ?: return@items
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                    // The three columns were butted up against each other, and the middle
+                    // one was bodyMedium + Medium weight against two bodySmall values, so
+                    // the duration read as a headline. One weight, and real spacing.
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(day.date ?: "", style = MaterialTheme.typography.bodySmall)
                     Text(
-                        if (day.activityCount == 0) "rest day" else Format.duration(day.totalDurationSeconds),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
+                        text = day.date ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = if (day.activityCount == 0) "rest day"
+                        else Format.duration(day.totalDurationSeconds),
+                        style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
-                        TrainingLoadMath.whole(day.trainingStressScore),
+                        text = TrainingLoadMath.whole(day.trainingStressScore),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

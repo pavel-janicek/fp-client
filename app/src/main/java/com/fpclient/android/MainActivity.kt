@@ -302,6 +302,7 @@ private fun FitPubNavGraph(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
                 onOpenFollowing = { username -> navController.navigate(Routes.followList(username, "following")) },
+                onOpenRecords = { navController.navigate(Routes.RECORDS) },
                 requestedTab = requestedTab,
                 onRequestedTabHandled = onRequestedTabHandled,
             )
@@ -317,6 +318,16 @@ private fun FitPubNavGraph(
                 appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
+            )
+        }
+        // Personal records, reached from the Analytics "Personal records" tile.
+        composable(Routes.RECORDS) {
+            val unitSystem by appViewModel.unitSystem.collectAsState()
+            com.fpclient.android.ui.analytics.RecordsScreen(
+                container = container,
+                unitSystem = unitSystem,
+                onBack = { navController.popBackStack() },
+                onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
             )
         }
         composable(

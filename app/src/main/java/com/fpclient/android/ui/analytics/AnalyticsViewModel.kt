@@ -31,6 +31,7 @@ import com.fpclient.android.AppContainer
 import com.fpclient.android.data.dto.AchievementDto
 import com.fpclient.android.data.dto.ActivitySummaryPeriodDto
 import com.fpclient.android.data.dto.DashboardDto
+import com.fpclient.android.data.dto.PersonalRecordDto
 import com.fpclient.android.data.dto.TrainingLoadDto
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.repository.AnalyticsRepository
@@ -65,6 +66,12 @@ class AnalyticsViewModel(
          * (`GET …/analytics/achievements` returns the complete list, uncapped).
          */
         val achievements: List<AchievementDto> = emptyList(),
+        /**
+         * Every personal record the server knows about. Like [achievements] this was a
+         * fully implemented repository method nothing called, which is why the Overview
+         * showed a record *count* that led nowhere.
+         */
+        val personalRecords: List<PersonalRecordDto> = emptyList(),
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -86,6 +93,7 @@ class AnalyticsViewModel(
             // sentence is an explanation, not the data behind the charts.
             val formCall = async { repository.formStatus() }
             val achievementsCall = async { repository.achievements() }
+            val recordsCall = async { repository.personalRecords() }
             var error: String? = null
             when (val d = dashboardCall.await()) {
                 is ApiResult.Success -> _ui.value = _ui.value.copy(dashboard = d.data)
@@ -119,6 +127,11 @@ class AnalyticsViewModel(
                 is ApiResult.Success -> _ui.value = _ui.value.copy(achievements = a.data)
                 // Supplementary like form-status: a missing achievements list must not
                 // blank the tab, and the count on the dashboard is still shown.
+                is ApiResult.Error -> Unit
+            }
+            when (val r = recordsCall.await()) {
+                is ApiResult.Success -> _ui.value = _ui.value.copy(personalRecords = r.data)
+                // Supplementary, like the other two: the tile keeps showing the count.
                 is ApiResult.Error -> Unit
             }
             _ui.value = _ui.value.copy(loading = false, error = error)
