@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -35,13 +36,18 @@ internal fun OverviewContent(
     onOpenRecords: () -> Unit = {},
 ) {
     val dash = ui.dashboard ?: return EmptyState(title = "No analytics yet")
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // Same outer rhythm as the other Analytics tabs, which were padded first.
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         item {
             WeeklyDistanceChart(weeks = ui.weekly.takeLast(12))
         }
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text("This week", style = MaterialTheme.typography.titleMedium)
                     val w = dash.currentWeekSummary
                     StatRow(
@@ -82,7 +88,7 @@ internal fun OverviewContent(
         if (ui.achievements.isNotEmpty()) {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Text(
                             "Achievements (${ui.achievements.size})",
                             style = MaterialTheme.typography.titleMedium,
@@ -152,7 +158,7 @@ private fun MiniStatCard(
 private fun WeeklyDistanceChart(weeks: List<ActivitySummaryPeriodDto>) {
     if (weeks.none { (it.totalDistanceMeters ?: 0.0) > 0.0 }) return
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Text("Last ${weeks.size} weeks", style = MaterialTheme.typography.titleMedium)
             val maxDistance = weeks.maxOf { it.totalDistanceMeters ?: 0.0 }.coerceAtLeast(1.0)
             Row(

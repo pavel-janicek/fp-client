@@ -152,19 +152,29 @@ fun MetricItem(
     }
 }
 
+/**
+ * A row of statistic tiles: a big value with its label underneath.
+ *
+ * The tiles are laid out with `weight(1f)`, which makes them consume *all* the free space —
+ * which in turn makes `Arrangement.SpaceEvenly` a no-op that was silently doing nothing. The
+ * first and last tile therefore sat hard against the edges of whatever contained them, which
+ * is what made the numbers look crammed to the left. The spacing is now explicit: real outer
+ * padding, and a real gap between tiles.
+ */
 @Composable
 fun StatRow(
     items: List<Pair<String, String>>,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        // Gaps between tiles, which weight(1f) alone does not provide.
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         for ((label, value) in items) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                modifier = Modifier.weight(1f),
             ) {
                 Column(
                     modifier = Modifier.padding(vertical = 10.dp),

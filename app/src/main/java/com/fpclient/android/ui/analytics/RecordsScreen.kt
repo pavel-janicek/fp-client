@@ -1,4 +1,4 @@
-package com.fpclient.android.ui.analytics
+fix lapackage com.fpclient.android.ui.analytics
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -132,29 +132,38 @@ fun RecordsScreen(
                                 },
                             ),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        // `Card` has no content padding of its own, and the value used to be a
+                        // direct child of it, so it rendered flush against the card edge — and
+                        // therefore against the screen edge. Everything inside the card now
+                        // shares one padded Column, so the label, the date and the value all
+                        // line up.
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         ) {
-                            Text(
-                                text = RecordLabels.recordType(record.recordType),
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f),
-                            )
-                            record.achievedAt?.let {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text(
-                                    text = Format.relative(it),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    text = RecordLabels.recordType(record.recordType),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f),
                                 )
+                                record.achievedAt?.let {
+                                    Text(
+                                        text = Format.relative(it),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
+                            Text(
+                                text = RecordLabels.value(record, unitSystem),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
                         }
-                        Text(
-                            text = RecordLabels.value(record, unitSystem),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
                     }
                 }
             }
