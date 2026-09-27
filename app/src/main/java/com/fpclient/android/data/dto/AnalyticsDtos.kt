@@ -84,9 +84,20 @@ data class AnalyticsPendingStatusDto(
     val message: String? = null,
 )
 
+/**
+ * `GET …/analytics/form-status` -> `{"formStatus":"FATIGUED","description":"High fatigue
+ * detected. Consider taking a rest day."}`.
+ *
+ * [description] is the server's own plain-English wording for the state
+ * (`AnalyticsResource.getFormStatusDescription`). It was absent from this DTO and the
+ * endpoint was never called, which is why the app had to present the raw enum and the
+ * CTL/ATL/TSB acronyms with no explanation at all.
+ */
 @Serializable
 data class FormStatusDto(
+    val formStatus: String? = null,
     val status: String? = null,
+    val description: String? = null,
     val trainingStressBalance: Double? = null,
 )
 

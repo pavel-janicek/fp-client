@@ -59,7 +59,7 @@ fun AnalyticsTabContent(
                 1 -> SummariesList(ui.weekly.reversed(), "week")
                 2 -> SummariesList(ui.monthly.reversed(), "month")
                 3 -> SummariesList(ui.yearly.reversed(), "year")
-                else -> TrainingLoadContent(ui.trainingLoad)
+                else -> TrainingLoadTab(ui.trainingLoad)
             }
         }
     }

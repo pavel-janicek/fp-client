@@ -28,6 +28,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fpclient.android.AppContainer
+import com.fpclient.android.data.dto.AchievementDto
 import com.fpclient.android.data.dto.ActivitySummaryPeriodDto
 import com.fpclient.android.data.dto.DashboardDto
 import com.fpclient.android.data.dto.TrainingLoadDto
@@ -55,6 +56,15 @@ class AnalyticsViewModel(
         val monthly: List<ActivitySummaryPeriodDto> = emptyList(),
         val yearly: List<ActivitySummaryPeriodDto> = emptyList(),
         val trainingLoad: List<TrainingLoadDto> = emptyList(),
+        /** The server's plain-English reading of the current form, e.g. "Consider a rest day." */
+        val formStatus: String? = null,
+        /**
+         * The user's earned achievements, newest first. This was a fully implemented
+         * repository method that no ViewModel ever called, which is why the Overview showed
+         * "8 achievements" and could not say which eight
+         * (`GET …/analytics/achievements` returns the complete list, uncapped).
+         */
+        val achievements: List<AchievementDto> = emptyList(),
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -72,6 +82,10 @@ class AnalyticsViewModel(
             val monthlyCall = async { repository.monthlySummaries(months = 12) }
             val yearlyCall = async { repository.yearlySummaries(years = 5) }
             val loadCall = async { repository.trainingLoad(days = 90) }
+            // Supplementary, so a failure here must not blank the whole tab: the form
+            // sentence is an explanation, not the data behind the charts.
+            val formCall = async { repository.formStatus() }
+            val achievementsCall = async { repository.achievements() }
             var error: String? = null
             when (val d = dashboardCall.await()) {
                 is ApiResult.Success -> _ui.value = _ui.value.copy(dashboard = d.data)
@@ -92,6 +106,20 @@ class AnalyticsViewModel(
             when (val t = loadCall.await()) {
                 is ApiResult.Success -> _ui.value = _ui.value.copy(trainingLoad = t.data)
                 is ApiResult.Error -> if (error == null) error = t.message
+            }
+            when (val f = formCall.await()) {
+                is ApiResult.Success ->
+                    _ui.value = _ui.value.copy(
+                        formStatus = f.data.description ?: f.data.formStatus ?: f.data.status,
+                    )
+                // Deliberately silent: see the comment on formCall.
+                is ApiResult.Error -> Unit
+            }
+            when (val a = achievementsCall.await()) {
+                is ApiResult.Success -> _ui.value = _ui.value.copy(achievements = a.data)
+                // Supplementary like form-status: a missing achievements list must not
+                // blank the tab, and the count on the dashboard is still shown.
+                is ApiResult.Error -> Unit
             }
             _ui.value = _ui.value.copy(loading = false, error = error)
         }

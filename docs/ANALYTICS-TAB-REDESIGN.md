@@ -1,6 +1,7 @@
 # Analytics tab — redesign notes
 
-> **Status: exploration. Nothing here is implemented yet.**
+> **Status: Load tab decided and shipped (see §0). The rest of the tab is Option C,
+> in progress — questions in §8.**
 > This document records what the Analytics tab is wired to today, what the server
 > already gives us, and which redesigns are possible *without touching the server*
 > (which is a black box — see §6).
@@ -10,6 +11,19 @@
 > *which* achievements; "Load" is not understood at all.
 
 ---
+
+## 0. Decisions taken
+
+1. **Load tab — keep the "Explained" design.** Three candidates were compared in-app on
+   real data; the status quo (90 raw rows, *CTL*/*ATL*/*TSB*) and the jargon-free
+   variant were both rejected. The switcher and the rejected variants are **deleted**;
+   `ui/analytics/LoadTab.kt` is now the tab, unconditionally, with no dev-only
+   affordance anywhere.
+2. **The tab as a whole — Option C**, with **Load kept as its own section**, precisely
+   because in Explained mode it makes sense to a reader who is not a coach.
+3. **Achievements** are now listed by name and description on Overview (complaint 1),
+   and **form status** uses the server's own plain-English sentence rather than a bare
+   enum (complaint 4). Both were dead data on the wire; no server change.
 
 ## 1. The brief, in the user's words
 
@@ -251,14 +265,13 @@ honest limits of that.
 
 ## 8. Open questions
 
-1. **The "Load" tab — the biggest single unknown.** Options: keep and explain;
-   demote to a card on Overview; remove from the user-facing surface entirely. The
-   brief suggests the user does not want it, but it is a legitimate feature for
-   someone training seriously.
+1. ~~**The "Load" tab.**~~ **DECIDED: keep "Explained"**, as its own section.
 2. **"8 of 25"?** Is showing only the earned achievements enough, or is progress
    towards the locked ones wanted (which needs a server catalogue endpoint)?
-3. **How far do we go?** Option A is a contained afternoon; Option C is a redesign
-   of the tab. Is a staged A-then-B acceptable, or should it be one coherent pass?
+3. ~~**How far do we go?**~~ **DECIDED: Option C.** The open part is now *which tabs
+   survive*: Option C argues for collapsing Weekly/Monthly/Yearly into a single
+   trends view, which means deleting tabs the app has always had. That is a product
+   decision, not a refactor, and is the next thing to settle.
 4. **What is the headline metric?** Strava leads with weekly distance. Is that
    right here, or should the top of Trends be driven by whichever metric the user
    actually trains by (time, or sessions)?
