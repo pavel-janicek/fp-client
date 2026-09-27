@@ -21,7 +21,8 @@
    affordance anywhere.
 2. **The tab as a whole — Option C**, with **Load kept as its own section**, precisely
    because in Explained mode it makes sense to a reader who is not a coach.
-3. **Achievements** are now listed by name and description on Overview (complaint 1),
+3. **Weeks start on Monday, everywhere, and that is the server's call.** See §3.1.
+4. **Achievements** are now listed by name and description on Overview (complaint 1),
    and **form status** uses the server's own plain-English sentence rather than a bare
    enum (complaint 4). Both were dead data on the wire; no server change.
 
@@ -89,7 +90,30 @@ What each screen actually renders:
 
 Everything below is available **today, unmodified** (`analytics/boundary/AnalyticsResource.java`).
 
-### 3.1 Achievements — the whole story is already on the wire
+### 3.1 Who decides when a week starts
+
+**The server does, it is always Monday, and it is not user-settable.**
+
+- `ActivitySummaryAnalyticsService.getCurrentWeekSummary` and
+  `ActivitySummaryAnalyticsModule` both hardcode
+  `TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)`. There is no configuration
+  property, no locale lookup and no per-user preference anywhere in the codebase.
+- The user's **timezone** *is* honoured — `currentDate(userId)` resolves "today" in the
+  user's zone, falling back to UTC — so the boundary is "Monday, in my timezone". The
+  day of the week is not negotiable.
+- Therefore **no app setting is needed, and adding one would be wrong**: an app-only
+  toggle could not change the rows the server sends, so the app would label weeks the
+  server did not produce. Sunday-start weeks would be a **server** change first, an
+  app setting second.
+
+The app is therefore explicitly *not* locale-aware about week boundaries, in
+`PeriodLabels` (heading) and `TrainingLoadMath.toWeeks` (the Load/Trends bars). Two
+unit tests pin this: one asserts a Sunday-first and a Monday-first locale produce
+identical week boundaries, the other asserts a Sunday is bucketed with the Monday that
+started its week. Both exist because the "obvious improvement" here — making it follow
+the locale — is precisely the bug.
+
+### 3.2 Achievements — the whole story is already on the wire
 
 `GET /analytics/achievements` (:153) returns the user's **complete** list,
 newest first, **no cap** (`findByUserIdOrderByEarnedAtDesc`). Each item

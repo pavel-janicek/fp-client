@@ -15,6 +15,16 @@ import java.util.Locale
  *
  * Unknown or unparsable input degrades to the raw string rather than showing an error
  * or an empty heading: a slightly ugly heading beats a missing one.
+ *
+ * **Weeks always start on Monday, in every locale.** That is not a stylistic choice: the
+ * server hardcodes it — `TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)` in both
+ * `ActivitySummaryAnalyticsService` and `ActivitySummaryAnalyticsModule`, with no
+ * configuration and no locale involved — so the `periodStart` it sends for a `WEEK` row
+ * is always a Monday, and the user cannot change it. The app therefore must not consult
+ * the locale here. Doing so would be the "obvious improvement" and a real bug: a
+ * Sunday-first locale would label the server's Mon–Sun row "21 – 27" against a Sunday
+ * boundary, and the two would disagree by a day. If Sunday-start weeks are ever wanted,
+ * that is a **server** change first, and an app setting after — never an app-only one.
  */
 object PeriodLabels {
 
@@ -69,6 +79,9 @@ object PeriodLabels {
      * "21 – 27 Sep 2026". A week spanning a month or year boundary is written out in full
      * on both sides ("28 Dec 2026 – 3 Jan 2027") rather than pretending the month is the
      * same, which would quietly misdate the week.
+     *
+     * [monday] is whatever the server sent as `periodStart`, which is **always a Monday** —
+     * see the note on the companion `heading`. This only ever adds six days to it.
      */
     private fun weekHeading(monday: LocalDate, locale: Locale): String {
         val sunday = monday.plusDays(6)

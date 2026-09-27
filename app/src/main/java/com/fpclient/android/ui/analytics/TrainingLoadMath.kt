@@ -49,6 +49,12 @@ object TrainingLoadMath {
      * Folds the server's daily rows into whole weeks, oldest first, skipping empty days so
      * the chart is not padded with rest days. A trailing partial week is kept — it is the
      * one the user is living in.
+     *
+     * **Weeks start on Monday, like every other week in this app** — see [PeriodLabels] for
+     * why that is the server's decision and not a locale one. The daily rows arrive already
+     * bucketed by the server in the user's own timezone, so this only has to re-apply the
+     * same Monday boundary, and it must: a Sunday boundary here would make these bars
+     * disagree with the server's own weekly summaries.
      */
     fun toWeeks(loads: List<TrainingLoadDto>): List<Week> {
         // The endpoint returns oldest-first; sorting by date makes this independent of it.
@@ -62,7 +68,7 @@ object TrainingLoadMath {
         for ((date, day) in byDate) {
             // Rest days are skipped entirely: a chart padded with zero-height bars is noise.
             if (day.activityCount == 0) continue
-            val weekStart = date.minusDays(date.dayOfWeek.value.toLong() - 1L) // Monday
+            val weekStart = date.minusDays(date.dayOfWeek.value.toLong() - 1L) // ISO Monday
             val existing = current
             current = if (existing != null && existing.start == weekStart) {
                 // Same week: fold this day in.
