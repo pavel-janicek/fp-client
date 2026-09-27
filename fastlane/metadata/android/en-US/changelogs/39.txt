@@ -1,0 +1,10 @@
+2.1.0 (release 2.1.0):
+- Notifications now arrive while the app is closed: likes, comments, shares and new followers are delivered in the background to any FitPub instance, with no extra setup. A Settings → Push section lets you re-arm the schedule and shows when the last check happened.
+- Optional instant delivery: connect your own ntfy server in Settings → Push to get notifications right away instead of at the next check. No second app to install, and the connection is end-to-end encrypted — the relay only ever forwards ciphertext it cannot read.
+- Analytics: the Load tab now explains what your numbers mean in plain English instead of showing bare CTL/ATL/TSB acronyms, the overview lists the achievements you have earned, and Personal records opens a real screen listing your best times, distances, speeds and elevation climbs, grouped by activity type.
+- Personal records: values are now formatted for your unit system (km/h or mph, km or miles) and sit properly inside their card instead of against the screen edge.
+- The activity heatmap on your own profile now loads — it was calling an endpoint the server does not provide, so it silently never appeared.
+- Batch import: the success and failure counts now show the real numbers, which previously always read "0 ok · 0 failed".
+- Recording: a workout you stop but never share is no longer published to your account automatically. A share you explicitly started and that failed is still offered for retry.
+- Notifications read correctly for accepted follow requests, mentions, finished data exports, finished batch imports and replies to your feedback.
+- Fistball added as an activity type, with the right icon.
