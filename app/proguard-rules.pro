@@ -60,3 +60,26 @@
 -dontwarn com.google.errorprone.annotations.CheckReturnValue
 -dontwarn com.google.errorprone.annotations.Immutable
 -dontwarn com.google.errorprone.annotations.RestrictedApi
+
+# Room — REQUIRED by WorkManager (added in 2.1), and the cause of a hard crash loop.
+#
+# WorkManager stores its schedules in a Room database and initialises itself through
+# androidx.startup's InitializationProvider, i.e. during `handleBindApplication`, before any
+# Activity exists. It instantiates the Room-generated implementation reflectively:
+#
+#   WorkManagerInitializer -> WorkDatabase_Impl.<init>()
+#
+# R8 never sees that constructor being called (it is only reached by name, from generated
+# code), so it strips it, and the minified build dies on every single launch with:
+#
+#   java.lang.RuntimeException: Unable to get provider androidx.startup.InitializationProvider
+#   Caused by: java.lang.NoSuchMethodException: androidx.work.impl.WorkDatabase_Impl.<init> []
+#
+# The app therefore restarts in a loop and can never be opened, and nothing in the UI is
+# involved at all. Debug builds are unaffected (R8 does not run), which is why this only
+# appears in the release/F-Droid build.
+-keep class * extends androidx.room.RoomDatabase {
+    <init>();
+}
+# Room's paging integration is referenced by WorkManager but unused here.
+-dontwarn androidx.room.paging.**
