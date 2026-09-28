@@ -1,0 +1,4 @@
+2.1.1 (release 2.1.1):
+- Fixes a crash that prevented version 2.1.0 from starting at all. The release build closed immediately on launch, in a restart loop, and the app could not be opened. The background-notification feature introduced in 2.1.0 was the trigger: the release build removed a database class that the notification scheduler needs while the app is starting.
+- If you installed 2.1.0, please update to 2.1.1 — it is a small download.
+- Everything else is unchanged from 2.1.0: background notifications, optional instant delivery, the redesigned Analytics tab and personal records, the profile heatmap, and the batch-import and notification wording fixes.
