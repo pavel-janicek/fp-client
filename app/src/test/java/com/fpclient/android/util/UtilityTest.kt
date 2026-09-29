@@ -36,6 +36,19 @@ class UtilityTest {
     }
 
     @Test
+    fun format_bytesMirrorsTheServersArchiveSizes() {
+        // Same figures the instance's ByteSizeFormatter prints for an export archive.
+        assertEquals("812 B", Format.bytes(812))
+        assertEquals("1.0 KB", Format.bytes(1024))
+        assertEquals("1.5 KB", Format.bytes(1536))
+        assertEquals("2.0 MB", Format.bytes(2L * 1024 * 1024))
+        assertEquals("1.5 GB", Format.bytes(1536L * 1024 * 1024))
+        // Nothing to describe yet (no Content-Length, or no archive at all).
+        assertEquals("—", Format.bytes(null))
+        assertEquals("—", Format.bytes(-1))
+    }
+
+    @Test
     fun format_paceFallsBackToAverageSpeed() {
         // Timeline feed omits averagePaceSeconds for Hikes but sends averageSpeed (km/h);
         // 3600 / 3.95 = 911 s/km — the same value the detail endpoint reports.

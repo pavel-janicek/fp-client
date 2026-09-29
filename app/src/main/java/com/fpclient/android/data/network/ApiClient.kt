@@ -214,11 +214,33 @@ class ApiClient(
 
     private fun withSession(): Session = runBlocking { sessionStore.session.first() }
 
-    val api: FitPubApi by lazy {
+    val api: FitPubApi by lazy { createApi(client) }
+
+    /**
+     * The same API over a client that never follows redirects.
+     *
+     * The data-export routes are the server's own **web-client** routes (`/settings/export`
+     * and `/settings/export/download`) rather than JSON API endpoints, and both answer with a
+     * redirect that this app has to *see* instead of follow:
+     *  - acceptance of `POST /settings/export` is the `302` back to the export page, so
+     *    following it would replace the outcome with a `200` HTML page that says nothing
+     *    about whether the export was accepted;
+     *  - an unauthenticated `GET .../download` is redirected to `/login`, and following that
+     *    would hand the app a successful response whose body it would then write out as the
+     *    user's archive.
+     *
+     * `newBuilder()` keeps the shared connection pool, dispatcher and thread pools, so this
+     * is a different redirect policy on the same network stack — not a second one.
+     */
+    val noRedirectApi: FitPubApi by lazy {
+        createApi(client.newBuilder().followRedirects(false).build())
+    }
+
+    private fun createApi(httpClient: OkHttpClient): FitPubApi {
         val contentType = "application/json".toMediaType()
-        Retrofit.Builder()
+        return Retrofit.Builder()
             .baseUrl("https://fitpub.invalid/")
-            .client(client)
+            .client(httpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
             .create(FitPubApi::class.java)

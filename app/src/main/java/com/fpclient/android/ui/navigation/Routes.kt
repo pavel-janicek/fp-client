@@ -29,6 +29,12 @@ object Routes {
     /** Summits reached. A profile feature (mirrors the server's `templates/profile/peaks`). */
     const val PEAKS = "peaks/{username}"
     const val PEAK_DETAIL = "peaks/{username}/{peakId}"
+    /**
+     * Data export: request a portable archive of the account and download the finished ZIP.
+     * The server's own routes are `/settings/export` (GET page + POST form) and
+     * `/settings/export/download`.
+     */
+    const val DATA_EXPORT = "data_export"
     const val RECORD = "record"
     // The finished recording's session id (= its start epoch ms) selects the workout.
     const val WORKOUT_SUMMARY = "workout_summary/{sessionId}"

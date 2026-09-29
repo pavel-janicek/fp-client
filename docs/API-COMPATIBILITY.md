@@ -253,11 +253,63 @@ Tracks arrive already privacy-filtered: indoor activities, tracks hidden by `sho
 points inside the owner's privacy zones are removed before the response, so the map says what
 it is showing rather than what it might be missing.
 
+#### Data export (`/settings/export`, `/settings/export/download`)
+
+Implemented in the app (Settings → Data → "Export my data"). This is the one feature the
+server serves **only through its web client's own routes** — there is no JSON API, and no
+status route either — so the app is built around that shape rather than pretending otherwise:
+
+* **The request is the export page's form post.** `POST /settings/export` with
+  `replaceExisting=true`, `application/x-www-form-urlencoded`, not a JSON body.
+  **Acceptance is a `302` back to `/settings/export` — a `2xx` never arrives**, so treating
+  "not successful" as failure would report every accepted request as broken.
+* **The same `302` is what a refusal looks like.** `DataExportService.request` throws
+  `DataExportRequestException` when a job is already active, and the controller answers that
+  with the same redirect plus a *flash* message (`dataExportError`) bound to a server-side
+  session a stateless client does not hold. **"Accepted" and "an export is already being
+  built" are therefore indistinguishable from the app.** They also mean the same thing to the
+  user — an archive is on the way — so the screen says exactly that instead of guessing, and
+  no error is invented. The only statuses the app reports are the ones it can actually read:
+  `401`/`403` (sign in), `404` (no such feature here), anything else.
+* **`replaceExisting=true` is always sent.** The app cannot see whether a ready archive
+  exists, and the server refuses a request that would replace one unless it is confirmed
+  ("Confirm that the existing archive may be replaced."). Confirming is the safe side: the
+  existing archive stays downloadable until the replacement has been built successfully and
+  is superseded only afterwards. The screen states this instead of putting up a confirmation
+  dialog that could never be informed.
+* **The download redirects when you are not signed in.** `GET /settings/export/download`
+  answers `200` with the ZIP (`Content-Type: application/zip`, `Content-Length`, and
+  `Content-Disposition: attachment; filename="fitpub-data-export-<user>-<date>.zip"`),
+  **`404`** when nothing is downloadable (`requireDownloadable` throws → "No downloadable
+  data export is available."), and sends an anonymous caller to `/login`. Because the app asks
+  for JSON, the entry point's JSON branch turns that redirect into `403` for this path
+  (`401` is what `/api/**` answers) — both are shown as "sign in".
+* **No status route means readiness cannot be polled.** There is no JSON equivalent of
+  `DataExportService.status`, so the screen cannot show "queued / building / failed",
+  the archive's size or expiry, or the attempt history the web page shows — and it does not
+  pretend to. Asking for the archive *is* the check: a `404` is surfaced as "no archive ready
+  yet" with a pointer to the request button, and the **`DATA_EXPORT_READY` notification**
+  (already rendered by the app's notification list, and delivered by the poll or Web Push) is
+  the signal that it is worth asking again.
+* **Redirects are never followed for these two calls.** They go through
+  `ApiClient.noRedirectApi` — the same stack with `followRedirects(false)`, sharing its
+  connection pool and dispatcher. Following the request's `302` would replace the outcome with
+  a `200` HTML page, and following the download's redirect to `/login` would hand the app a
+  *successful* response whose body it would write out as the user's archive.
+* **The archive is streamed, not buffered.** `DataExportRepository.downloadArchive` writes
+  the response straight into the stream behind the storage location the user picked (SAF
+  `CreateDocument("application/zip")`), 64 KiB at a time, reporting progress against the
+  server's `Content-Length` at most once per megabyte. An account export is orders of
+  magnitude larger than the GPX route the app downloads elsewhere, so the `ByteArray` used
+  there would be a real risk here. The suggested filename is built locally
+  (`fitpub-data-export-<username>.zip`) because the server's own name only arrives *with* the
+  response, long after the picker has asked for one. A failed download can therefore leave the
+  empty document the user picked behind.
+
 #### New server capabilities the app does not use yet
 
 Not breakage — feature surface available if wanted: passkeys
-(`/api/web/auth/passkeys/**`), activity trimming (`GET /api/web/activities/{id}/trim`), and
-data export (`/settings/export/download`).
+(`/api/web/auth/passkeys/**`) and activity trimming (`GET /api/web/activities/{id}/trim`).
 
 **Passkeys are deliberately *not* implemented, and are not an oversight.** The wire format is
 standard WebAuthn JSON, but the server accepts exactly one origin — a hard-coded singleton

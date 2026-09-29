@@ -45,6 +45,7 @@ fun SettingsScreen(
     onChangeInstance: () -> Unit,
     onOpenBatchImport: () -> Unit,
     onOpenKomootImport: () -> Unit,
+    onOpenDataExport: () -> Unit,
     onOpenRecord: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenEmailChange: () -> Unit,
@@ -141,6 +142,10 @@ fun SettingsScreen(
                             onClick = onOpenKomootImport,
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Import from Komoot") }
+                        OutlinedButton(
+                            onClick = onOpenDataExport,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) { Text("Export my data") }
                     }
                 }
             }

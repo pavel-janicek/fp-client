@@ -386,6 +386,7 @@ private fun FitPubNavGraph(
                 onChangeInstance = { navController.navigate(Routes.SERVER_SETUP) },
                 onOpenBatchImport = { navController.navigate(Routes.BATCH_IMPORT) },
                 onOpenKomootImport = { navController.navigate(Routes.KOMOOT_IMPORT) },
+                onOpenDataExport = { navController.navigate(Routes.DATA_EXPORT) },
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
                 onOpenEmailChange = { navController.navigate(Routes.EMAIL_CHANGE) },
@@ -393,6 +394,13 @@ private fun FitPubNavGraph(
         }
         composable(Routes.ABOUT) {
             com.fpclient.android.ui.settings.AboutScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.DATA_EXPORT) {
+            com.fpclient.android.ui.settings.DataExportScreen(
+                container = container,
+                appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
             )
         }

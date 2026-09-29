@@ -62,6 +62,8 @@ import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.HTTP
 import retrofit2.http.Multipart
@@ -521,4 +523,37 @@ interface FitPubApi {
     // body, so the equivalent @HTTP form (hasBody = true) is used instead.
     @HTTP(method = "DELETE", hasBody = true, path = "api/web/push/subscribe")
     suspend fun pushUnsubscribe(@Body request: PushUnsubscribeRequest): Response<PushStatusDto>
+
+    // ------------------------------------------------------------------
+    // Data export (`/settings/export`)
+    //
+    // FitPub exposes NO JSON API for this feature: the only routes are the web client's own
+    // page (`GET`/`POST /settings/export`) and the ZIP itself, none of them under `/api/web`.
+    // They are reached through `ApiClient.noRedirectApi` — see that property for why
+    // following redirects here would hand the app a *successful* response it must not treat
+    // as data.
+    // ------------------------------------------------------------------
+
+    /**
+     * The account's finished archive, as a ZIP stream.
+     *
+     * Answers `200` with `Content-Length` and a `Content-Disposition` filename when an
+     * archive is downloadable, `404` when none is (never requested, still being built,
+     * failed, or expired — the server deliberately does not say which), and a redirect to
+     * `/login` (`403` here, since the app asks for JSON) when the caller is not signed in.
+     */
+    @GET("settings/export/download")
+    @Streaming
+    suspend fun dataExportDownload(): Response<ResponseBody>
+
+    /**
+     * Asks the instance to build a new archive. This is the export page's own **form** post,
+     * not a JSON endpoint: the body is `application/x-www-form-urlencoded`, and acceptance is
+     * the `302` back to `/settings/export` rather than a `2xx`.
+     */
+    @FormUrlEncoded
+    @POST("settings/export")
+    suspend fun requestDataExport(
+        @Field("replaceExisting") replaceExisting: Boolean,
+    ): Response<ResponseBody>
 }
