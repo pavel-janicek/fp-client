@@ -169,7 +169,9 @@ fun TrackMap(segments: List<List<org.osmdroid.util.GeoPoint>>, hasTrack: Boolean
  * screen and for the enlarged full-screen version — only the size differs.
  */
 @Composable
-private fun MapCanvas(segments: List<List<org.osmdroid.util.GeoPoint>>, modifier: Modifier = Modifier) {
+// Shared with the peak-detail screen, which draws the tracks of every activity that reached
+// a summit. `internal` rather than private for exactly that reason.
+internal fun MapCanvas(segments: List<List<org.osmdroid.util.GeoPoint>>, modifier: Modifier = Modifier) {
     androidx.compose.ui.viewinterop.AndroidView(
         factory = { context ->
             org.osmdroid.views.MapView(context).apply {

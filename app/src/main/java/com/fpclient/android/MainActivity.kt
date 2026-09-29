@@ -310,6 +310,8 @@ private fun FitPubNavGraph(
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
                 onOpenFollowing = { username -> navController.navigate(Routes.followList(username, "following")) },
                 onOpenRecords = { navController.navigate(Routes.RECORDS) },
+                onOpenPeaks = { u -> navController.navigate(Routes.peaks(u)) },
+                onOpenPeak = { u, peakId -> navController.navigate(Routes.peakDetail(u, peakId)) },
                 requestedTab = requestedTab,
                 onRequestedTabHandled = onRequestedTabHandled,
             )
@@ -353,6 +355,8 @@ private fun FitPubNavGraph(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenFollowers = { u -> navController.navigate(Routes.followList(u, "followers")) },
                 onOpenFollowing = { u -> navController.navigate(Routes.followList(u, "following")) },
+                onOpenPeaks = { u -> navController.navigate(Routes.peaks(u)) },
+                onOpenPeak = { u, peakId -> navController.navigate(Routes.peakDetail(u, peakId)) },
             )
         }
         composable(Routes.CREATE) { entry ->
@@ -396,6 +400,34 @@ private fun FitPubNavGraph(
             com.fpclient.android.ui.settings.BatchImportScreen(
                 container = container,
                 onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.PEAKS,
+            arguments = listOf(navArgument("username") { }),
+        ) { entry ->
+            val username = entry.arguments?.getString("username").orEmpty()
+            com.fpclient.android.ui.profile.PeaksScreen(
+                container = container,
+                username = username,
+                onBack = { navController.popBackStack() },
+                onOpenPeak = { peakId ->
+                    navController.navigate(Routes.peakDetail(username, peakId))
+                },
+            )
+        }
+        composable(
+            route = Routes.PEAK_DETAIL,
+            arguments = listOf(navArgument("username") { }, navArgument("peakId") { }),
+        ) { entry ->
+            val username = entry.arguments?.getString("username").orEmpty()
+            val peakId = entry.arguments?.getString("peakId")?.toLongOrNull() ?: 0L
+            com.fpclient.android.ui.profile.PeakDetailScreen(
+                container = container,
+                username = username,
+                peakId = peakId,
+                onBack = { navController.popBackStack() },
+                onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
             )
         }
         composable(Routes.EMAIL_CHANGE) {

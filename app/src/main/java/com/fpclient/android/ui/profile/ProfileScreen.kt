@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -47,6 +49,7 @@ import com.fpclient.android.data.dto.FollowStatusDto
 import com.fpclient.android.data.dto.HeatmapResponse
 import com.fpclient.android.data.dto.UserPreviewDto
 import com.fpclient.android.data.dto.UserDto
+import com.fpclient.android.data.dto.UserPeakDto
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.repository.UserRepository
@@ -84,6 +87,8 @@ class ProfileViewModel(
         val username: String? = null,
         /** Lightweight actor profile for remote users (populated instead of [user] for federated handles). */
         val actor: ActorDto? = null,
+        /** Summits reached, for the profile's Peaks section (max 4 from the server). */
+        val recentPeaks: List<UserPeakDto> = emptyList(),
         /**
          * Minimal card from `GET /api/web/users/{username}/preview`, used when the profile
          * itself was refused (followers-only accounts answer 403). Carries the display name
@@ -170,6 +175,17 @@ class ProfileViewModel(
             if (user == null) {
                 when (val p = users.preview(username)) {
                     is ApiResult.Success -> _ui.value = _ui.value.copy(preview = p.data)
+                    else -> Unit
+                }
+            }
+
+            // Summits reached, for the profile's Peaks section. Fetched for any viewer: the
+            // server hides them unless the owner shares them, answering with an empty list
+            // rather than a 403, so an empty section is simply not shown.
+            val peakTarget = if (username == "me") appViewModel.uiState.value.username else username
+            if (!peakTarget.isNullOrBlank()) {
+                when (val pk = users.recentPeaks(peakTarget)) {
+                    is ApiResult.Success -> _ui.value = _ui.value.copy(recentPeaks = pk.data)
                     else -> Unit
                 }
             }
@@ -264,6 +280,8 @@ fun ProfileScreen(
     onEditProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     onSendFeedback: () -> Unit = {},
+    onOpenPeaks: (String) -> Unit = {},
+    onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     onOpenCreate: () -> Unit = {},
     onOpenRecord: () -> Unit = {},
@@ -321,6 +339,8 @@ fun ProfileScreen(
                 onOpenFollowers = onOpenFollowers, onOpenFollowing = onOpenFollowing,
                 onEditProfile = onEditProfile,
                 onSendFeedback = onSendFeedback,
+                onOpenPeaks = onOpenPeaks,
+                onOpenPeak = onOpenPeak,
                 modifier = modifier,
             )
         }
@@ -415,6 +435,8 @@ private fun ProfileBody(
     onOpenFollowing: (String) -> Unit = {},
     onEditProfile: () -> Unit = {},
     onSendFeedback: () -> Unit = {},
+    onOpenPeaks: (String) -> Unit = {},
+    onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val user = ui.user ?: return
@@ -488,6 +510,24 @@ private fun ProfileBody(
         val heatmap = ui.heatmap
         item {
             HeatmapCard(points = heatmap?.points.orEmpty(), bounds = heatmap?.bounds)
+        }
+        // Summits reached — a profile feature, not an analytics one (the server's web client
+        // keeps peaks under `templates/profile/`, none under `templates/analytics/`). Hidden
+        // entirely when empty, because the server returns an empty list both for "no summits
+        // yet" and for "this owner does not share their peaks".
+        if (ui.recentPeaks.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Peaks", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { onOpenPeaks(user.username ?: "me") }) { Text("View all") }
+                }
+            }
+            items(ui.recentPeaks, key = { "peak-${it.id}" }) { peak ->
+                PeakRow(peak = peak, onClick = { onOpenPeak(user.username ?: "me", peak.id) })
+            }
         }
         if (ui.activitiesList.isEmpty()) {
             item { EmptyState(title = "No activities yet") }

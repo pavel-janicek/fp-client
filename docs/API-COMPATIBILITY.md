@@ -222,13 +222,42 @@ handshake**, not a straight update:
   server answers with the **default** avatar when no Gravatar exists, so a successful
   response is not evidence that one was found.
 
+#### Peaks (`/api/web/users/{username}/peaks/**`)
+
+Implemented as a **profile** feature, not an analytics one — the server's own web client keeps
+its peaks templates under `templates/profile/` and has none under `templates/analytics/`, so
+the app mirrors that placement: a recent-peaks section on the profile and a full paged list
+reachable from it.
+
+* `GET .../peaks/recent` → `List<UserPeakDTO>`, capped server-side at 4 (`RECENT_PEAK_COUNT`).
+* `GET .../peaks/page?page=N` → **flat** page shape (`content`, `number`, `size`, `totalPages`,
+  `totalElements`), 24 per page (`PEAK_PAGE_SIZE`). This is deliberately *not* the
+  `{content, page}` envelope used elsewhere on the server, and it is why `UserPeakPageDto`
+  exists separately: reusing the shared envelope would silently parse into an always-empty
+  list.
+* `GET .../peaks/{peakId}` → a single `UserPeakDTO`, or **404** when the owner does not share.
+* `GET /api/web/activities/user/{u}/peaks/{peakId}/tracks` → `List<PeakActivityTrackDTO>`, each
+  with the activity id and its route as **raw GeoJSON** (the server builds a `Map`, not a
+  typed DTO). The `route` is handed to the existing `TrackParser.fromGeometry`, which already
+  speaks `LineString`/`MultiLineString`.
+
+**Visibility is decided server-side** (`peaksVisible = isOwner || defaultShowsPeaks(user)`), and
+the two outcomes look different on purpose:
+
+* hidden → the **list** routes answer **200 with an empty list**, so an empty list means
+  *"not shared"*, **not** *"none reached"*. The app therefore labels the empty state
+  accordingly instead of claiming the account has no summits.
+* hidden → the **single-peak / tracks** routes answer **404**.
+
+Tracks arrive already privacy-filtered: indoor activities, tracks hidden by `showMap`, and
+points inside the owner's privacy zones are removed before the response, so the map says what
+it is showing rather than what it might be missing.
+
 #### New server capabilities the app does not use yet
 
 Not breakage — feature surface available if wanted: passkeys
-(`/api/web/auth/passkeys/**`), peaks
-(`/api/web/users/{username}/peaks/**`, `/api/web/activities/user/{u}/peaks/{id}/tracks`),
-activity trimming (`GET /api/web/activities/{id}/trim`), and data export
-(`/settings/export/download`).
+(`/api/web/auth/passkeys/**`), activity trimming (`GET /api/web/activities/{id}/trim`), and
+data export (`/settings/export/download`).
 
 **Passkeys are deliberately *not* implemented, and are not an oversight.** The wire format is
 standard WebAuthn JSON, but the server accepts exactly one origin — a hard-coded singleton

@@ -60,6 +60,8 @@ fun MainScaffold(
     onOpenFeedback: () -> Unit,
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
+    onOpenPeaks: (String) -> Unit = {},
+    onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     onOpenRecords: () -> Unit = {},
     requestedTab: String? = null,
     onRequestedTabHandled: () -> Unit = {},
@@ -186,6 +188,8 @@ fun MainScaffold(
                     onOpenRecord = onOpenRecord,
                     onOpenFollowers = onOpenFollowers,
                     onOpenFollowing = onOpenFollowing,
+                    onOpenPeaks = onOpenPeaks,
+                    onOpenPeak = onOpenPeak,
                 )
             }
         }

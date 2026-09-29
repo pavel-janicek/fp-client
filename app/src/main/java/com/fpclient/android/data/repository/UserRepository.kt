@@ -10,8 +10,11 @@ import com.fpclient.android.data.dto.HeatmapFeatureCollectionDto
 import com.fpclient.android.data.dto.HeatmapMapper
 import com.fpclient.android.data.dto.HeatmapResponse
 import com.fpclient.android.data.dto.MessageResponse
+import com.fpclient.android.data.dto.PeakActivityTrackDto
 import com.fpclient.android.data.dto.StartEmailChangeRequest
 import com.fpclient.android.data.dto.UserDto
+import com.fpclient.android.data.dto.UserPeakDto
+import com.fpclient.android.data.dto.UserPeakPageDto
 import com.fpclient.android.data.dto.UserPreviewDto
 import com.fpclient.android.data.dto.UserSearchResultDto
 import com.fpclient.android.data.dto.UserUpdateRequest
@@ -285,6 +288,68 @@ class UserRepository(
             } else {
                 ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
             }
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /**
+     * Summits reached, for the profile.
+     *
+     * Peaks live on the profile, matching the server's own web client (`templates/profile/`
+     * holds peaks + peak detail; `templates/analytics/` has none). An **empty list is not
+     * necessarily "no summits"** — the server hides peaks entirely unless the viewer owns the
+     * account or the owner has chosen to show them, and it signals that by answering 200 with
+     * an empty list rather than a 403.
+     */
+    suspend fun recentPeaks(username: String): ApiResult<List<UserPeakDto>> =
+        peakList { api.recentPeaks(peakUsername(username)) }
+
+    suspend fun peaksPage(username: String, page: Int = 0): ApiResult<UserPeakPageDto> {
+        return try {
+            val response = api.peaksPage(peakUsername(username), page.coerceAtLeast(0))
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            ApiResult.Success(response.body() ?: UserPeakPageDto())
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /** A single summit, or 404 when the owner does not share their peaks. */
+    suspend fun peak(username: String, peakId: Long): ApiResult<UserPeakDto> {
+        return try {
+            val response = api.peak(peakUsername(username), peakId)
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            ApiResult.Success(response.body() ?: UserPeakDto())
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /**
+     * The activities that reached a summit, with their tracks as raw GeoJSON.
+     *
+     * Already privacy-filtered server-side: indoor activities, tracks hidden by `showMap`,
+     * and points inside privacy zones are all removed.
+     */
+    suspend fun peakTracks(username: String, peakId: Long): ApiResult<List<PeakActivityTrackDto>> =
+        peakList { api.peakTracks(peakUsername(username), peakId) }
+
+    /** The route wants a plain local username — no `@`, no federated host. */
+    private fun peakUsername(username: String): String =
+        username.trim().removePrefix("@").substringBefore('@')
+
+    private suspend fun <T> peakList(call: suspend () -> retrofit2.Response<List<T>>): ApiResult<List<T>> {
+        return try {
+            val response = call()
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            ApiResult.Success(response.body() ?: emptyList())
         } catch (e: Exception) {
             ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
         }

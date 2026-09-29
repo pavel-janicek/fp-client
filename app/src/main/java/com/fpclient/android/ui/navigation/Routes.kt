@@ -26,6 +26,9 @@ object Routes {
     const val FEEDBACK = "feedback"
     /** Two-address e-mail change handshake; reached from Settings → Account. */
     const val EMAIL_CHANGE = "email_change"
+    /** Summits reached. A profile feature (mirrors the server's `templates/profile/peaks`). */
+    const val PEAKS = "peaks/{username}"
+    const val PEAK_DETAIL = "peaks/{username}/{peakId}"
     const val RECORD = "record"
     // The finished recording's session id (= its start epoch ms) selects the workout.
     const val WORKOUT_SUMMARY = "workout_summary/{sessionId}"
@@ -34,6 +37,9 @@ object Routes {
     fun activityDetail(activityId: String) = "activity/$activityId"
     fun profile(username: String) = "profile/$username"
     fun followList(username: String, type: String) = "follow_list/$username/$type"
+
+    fun peaks(username: String) = "peaks/$username"
+    fun peakDetail(username: String, peakId: Long) = "peaks/$username/$peakId"
 
     /** Privacy-zone editor: no argument creates a new zone, a zoneId edits that zone. */
     fun privacyZoneEdit(zoneId: String? = null) =

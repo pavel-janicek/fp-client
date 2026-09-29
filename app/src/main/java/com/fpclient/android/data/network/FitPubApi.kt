@@ -45,8 +45,11 @@ import com.fpclient.android.data.dto.RegisterRequest
 import com.fpclient.android.data.dto.RegistrationStatusResponse
 import com.fpclient.android.data.dto.ResendRegistrationCodeRequest
 import com.fpclient.android.data.dto.UnreadCountDto
+import com.fpclient.android.data.dto.PeakActivityTrackDto
 import com.fpclient.android.data.dto.StartEmailChangeRequest
 import com.fpclient.android.data.dto.UserDto
+import com.fpclient.android.data.dto.UserPeakDto
+import com.fpclient.android.data.dto.UserPeakPageDto
 import com.fpclient.android.data.dto.UserPreviewDto
 import com.fpclient.android.data.dto.VerifyEmailChangeRequest
 import com.fpclient.android.data.dto.UserSearchResultDto
@@ -276,6 +279,43 @@ interface FitPubApi {
      */
     @GET("api/web/users/{username}/preview")
     suspend fun userPreview(@Path("username") username: String): Response<UserPreviewDto>
+
+    // ------------------------------------------------------------------
+    // Peaks — a profile feature (the server's web client keeps them under
+    // `templates/profile/`, not `templates/analytics/`).
+    //
+    // Visibility is decided server-side: `peaksVisible = isOwner || defaultShowsPeaks(user)`.
+    // When false, the list routes answer 200 with an EMPTY list (so an empty list means
+    // "not shared", not "none reached") and the single-peak/tracks routes answer 404.
+    // ------------------------------------------------------------------
+
+    /** Most recent summits; the server caps this at 4 (`RECENT_PEAK_COUNT`). */
+    @GET("api/web/users/{username}/peaks/recent")
+    suspend fun recentPeaks(@Path("username") username: String): Response<List<UserPeakDto>>
+
+    /** Alphabetical page of summits, 24 per page (`PEAK_PAGE_SIZE`). Flat page shape. */
+    @GET("api/web/users/{username}/peaks/page")
+    suspend fun peaksPage(
+        @Path("username") username: String,
+        @Query("page") page: Int = 0,
+    ): Response<UserPeakPageDto>
+
+    @GET("api/web/users/{username}/peaks/{peakId}")
+    suspend fun peak(
+        @Path("username") username: String,
+        @Path("peakId") peakId: Long,
+    ): Response<UserPeakDto>
+
+    /**
+     * The activities that reached this peak, with privacy-filtered tracks. Indoor activities
+     * and tracks hidden by `showMap` are already excluded server-side, as are points inside
+     * the owner's privacy zones.
+     */
+    @GET("api/web/activities/user/{username}/peaks/{peakId}/tracks")
+    suspend fun peakTracks(
+        @Path("username") username: String,
+        @Path("peakId") peakId: Long,
+    ): Response<List<PeakActivityTrackDto>>
 
     /**
      * The signed-in user's Gravatar-backed picture, as image bytes, so it can be previewed
