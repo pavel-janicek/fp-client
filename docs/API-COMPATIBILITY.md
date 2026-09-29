@@ -152,6 +152,16 @@ previews (`/api/web/users/{username}/preview`, avatar gravatar preview), peaks
 activity trimming (`GET /api/web/activities/{id}/trim`), and data export
 (`/settings/export/download`).
 
+**Passkeys are deliberately *not* implemented, and are not an oversight.** The wire format is
+standard WebAuthn JSON, but the server accepts exactly one origin — a hard-coded singleton
+derived from `fitpub.base-url` (`PasskeyRelyingPartyConfig.passkeyAllowedOrigins`, no
+environment override) — and a native Android ceremony reports
+`android:apk-key-hash:<cert hash>` as its origin, so every assertion is rejected with a
+neutral 401. Separately, Android passkeys require Credential Manager, whose passkey support
+comes from Google Play services, which the F-Droid build deliberately does not ship. The
+server-side prerequisite and the full, ordered implementation prompts are in `PLAN.md` →
+"Passkey sign-in in the app".
+
 The FitPub server is under active development; if you are running a newer or older
 version and notice breakage, please file an issue. The client targets the REST API
 as implemented by the `social.fitpub:fitpub` server artifact.

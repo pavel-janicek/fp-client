@@ -160,6 +160,114 @@ Progress ledger (kept up to date per iteration):
 > AFTER PUBLICATION: add the F-Droid badge + install link to README.md and note the package
 > identity (`com.fpclient.android`) in VERSION_CHECKLIST.md."
 
+### Passkey sign-in in the app — BLOCKED on a server change (not implementable yet)
+
+Investigated 2026-09-28 against the server sources. **Do not start the client work before
+step 1 lands on the server** — the server is the source of truth, and today it rejects a
+native-app assertion no matter how well the client is written. The endpoint family exists
+(`PasskeyResource`: `POST /api/web/auth/passkeys/login/options`, `POST
+/api/web/auth/passkeys/login`, plus `/api/web/users/me/passkeys/**` for management) and the
+wire format is **standard WebAuthn JSON** (`spring-security-webauthn` 7.1.0 / webauthn4j,
+`PublicKeyCredentialRequestOptions` over the wire), so there is no protocol
+reverse-engineering to do. The blockers are platform-level, not API-level.
+
+**Blocker 1 — the server accepts exactly one origin, and it is not a native app.**
+`PasskeyRelyingPartyConfig.passkeyAllowedOrigins` is
+`Set.of(FitPubPublicOrigin.parse(baseUrl).origin())` — a hard-coded singleton derived from
+`fitpub.base-url`, with **no** environment override (no `fitpub.passkey.*` key exists in
+`application.yml`). `FitPubWebAuthnRelyingPartyOperations` then builds webauthn4j's
+`ServerProperty` with exactly that origin set and the `rpId` derived from the same base URL.
+A native Android passkey ceremony puts `android:apk-key-hash:<base64url(SHA-256(signing
+cert))>` into `clientDataJSON.origin`, which can never equal `https://your-instance.example`,
+so every assertion fails origin validation and is answered with the deliberately neutral 401
+(`PasskeyService.NEUTRAL_LOGIN_FAILURE`). Additionally, Credential Manager only accepts an
+`rpId` for which the calling app is authorized via Digital Asset Links
+(`https://<rpId>/.well-known/assetlinks.json`) — a per-instance operational requirement that
+cannot be met for arbitrary self-hosted instances.
+
+**Blocker 2 — F-Droid builds have no FIDO2 authenticator at all.** Android exposes no
+first-class CTAP2 API; the supported route is Credential Manager
+(`androidx.credentials`, `GetPublicKeyCredentialOption`), whose passkey support is supplied by
+**Google Play services**. This app ships on F-Droid and deliberately has no Play Services
+dependency, so the F-Droid flavor would have no credential provider and no passkeys at all.
+Writing or bundling a CTAP2 stack is not a realistic option.
+
+**Also ruled out:** handing the ceremony to the instance's own web UI in a Custom Tab.
+`PasskeyLoginResponse.returnTo` is sanitised by `LoginReturnTargets.sanitize()` to a
+same-origin relative path only (it rejects absolute URLs, `//`, and any cross-origin target),
+so there is no sanctioned deep-link/custom-scheme handoff that could carry a session back to
+the app — the `JWT_TOKEN` cookie would land in the browser, where the app cannot read it.
+
+Prompts, in dependency order. Steps 1-2 are **server-side**
+(`/home/janipav/Documents/fitpub`) and are the gate; 3+ are this repo.
+
+> **(1) SERVER — make the passkey origin set configurable.**
+> "In `PasskeyRelyingPartyConfig`, replace the hard-coded
+> `Set.of(FitPubPublicOrigin.parse(baseUrl).origin())` with a set that also contains any
+> origins from a new `fitpub.passkey.additional-origins` property (env
+> `FITPUB_PASSKEY_ADDITIONAL_ORIGINS`, comma-separated). Pass the merged set to
+> `Webauthn4JRelyingPartyOperations` and to `FitPubWebAuthnRelyingPartyOperations`. Keep the
+> instance's own origin first-class and unchanged, keep `rpId` derived from
+> `fitpub.base-url`, and make sure the anonymous-login path keeps returning the neutral 401
+> rather than leaking why verification failed. Add a test that a config with one extra origin
+> still verifies a good assertion and still rejects an unlisted one."
+
+> **(2) SERVER — decide and document the native-client policy.**
+> "Document in `docs/` how a native client is expected to authenticate with a passkey: which
+> `rpId` it must request, what Digital Asset Links entry the instance must publish at
+> `/.well-known/assetlinks.json` (package `com.fpclient.android` plus the APK signing cert
+> SHA-256, per distribution channel), and how an instance admin supplies the
+> `android:apk-key-hash:` origin. State plainly what happens on an instance that has not
+> published assetlinks.json. If the answer is 'native passkeys are not supported', say so
+> explicitly so clients stop treating this as a gap."
+
+> **(3) Add the Credential Manager plumbing, feature-flagged and inert.**
+> "Add `androidx.credentials:credentials` (plus `credentials-play-services-auth`) to
+> `app/build.gradle.kts`, and a `PasskeysAvailable` helper that reports whether a passkey
+> provider is actually present at runtime, so the F-Droid build degrades to password-only
+> with no crash and no menu entry. Verify `./gradlew testDebugUnitTest assembleDebug` and
+> `./gradlew assembleRelease` (R8) still pass, and add whatever the new dependency needs to
+> `proguard-rules.pro`."
+
+> **(4) Login options plus assertion exchange.**
+> "Add `POST api/web/auth/passkeys/login/options` and `POST api/web/auth/passkeys/login` to
+> `FitPubApi`, with request/response DTOs mirroring the server's
+> `PasskeyLoginOptionsResponse` / `PasskeyLoginCompletionRequest` / `PasskeyLoginResponse`.
+> Add a `PasskeyRepository` whose `AuthResponse` cookie handling is identical to
+> `AuthRepository` — the `JWT_TOKEN` cookie must be captured from `Set-Cookie` and stored via
+> `SessionStore`; the `returnTo` field is display-only. The ceremony id is server state: keep
+> it in memory for the duration of the call only, never persisted. Add JVM unit tests for the
+> DTO mapping and the cookie capture, in the existing MockWebServer style."
+
+> **(5) Passkey sign-in UI on the login screen.**
+> "Add a 'Sign in with a passkey' action to the login screen, shown only when
+> `PasskeysAvailable` is true. On tap: fetch the options, pass the server's `publicKey` JSON
+> straight through to `CredentialManager.getCredential` with
+> `GetPublicKeyCredentialOption(requestJson = ...)`, then post the resulting assertion
+> (`clientDataJSON`, `authenticatorData`, `signature`, `userHandle`, `rawId`, all base64url)
+> back to the server. Do not parse or validate the assertion client-side. Surface the neutral
+> 401 as a plain 'Sign-in failed — try your password', never as a technical error. Wire the
+> success path into the existing post-login navigation so a passkey session is
+> indistinguishable from a password session."
+
+> **(6) Passkey management in Settings (no registration yet).**
+> "Add list / rename / delete for `GET /api/web/users/me/passkeys`,
+> `PATCH /api/web/users/me/passkeys/{id}` and `DELETE /api/web/users/me/passkeys/{id}`. Note
+> that both mutating calls take a **current password** in the body (the server re-checks it),
+> so the UI must prompt for it; the label is limited to 1-100 characters. Registration
+> (`.../registration/options` plus `.../registration`) is deliberately NOT part of this step:
+> the server requires `residentKey: REQUIRED` and `userVerification: REQUIRED`, so adding a
+> passkey is security-sensitive and deserves its own prompt once sign-in has shipped and been
+> exercised on a real device."
+
+> **(7) Docs, changelog, and release.**
+> "Record the passkey endpoints and the origin/assetlinks requirement in
+> `docs/API-COMPATIBILITY.md`, add the user-visible bullets to
+> `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` and the ledger row in
+> `PLAN.md`, then run `VERSION_CHECKLIST.md` — including the unsigned release build, since a
+> new Play Services dependency is exactly the kind of change that can break the F-Droid
+> buildserver."
+
 ### Iteration 1 — Make it compile ✅
 > "FitPub Android does not compile — `./gradlew assembleDebug` reports 28 Kotlin
 > errors (see PLAN.md table). Fix every error following existing conventions:
