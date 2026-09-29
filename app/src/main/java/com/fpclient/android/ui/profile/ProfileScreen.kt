@@ -45,6 +45,7 @@ import com.fpclient.android.data.dto.ActivitySummaryDto
 import com.fpclient.android.data.dto.ActorDto
 import com.fpclient.android.data.dto.FollowStatusDto
 import com.fpclient.android.data.dto.HeatmapResponse
+import com.fpclient.android.data.dto.UserPreviewDto
 import com.fpclient.android.data.dto.UserDto
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.repository.ActivityRepository
@@ -83,6 +84,12 @@ class ProfileViewModel(
         val username: String? = null,
         /** Lightweight actor profile for remote users (populated instead of [user] for federated handles). */
         val actor: ActorDto? = null,
+        /**
+         * Minimal card from `GET /api/web/users/{username}/preview`, used when the profile
+         * itself was refused (followers-only accounts answer 403). Carries the display name
+         * and avatar the locked screen can still show.
+         */
+        val preview: UserPreviewDto? = null,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -155,6 +162,17 @@ class ProfileViewModel(
             }
             _ui.value = _ui.value.copy(loading = false, user = user, error = error)
             if (user == null && !_ui.value.isPrivateProfile) return@launch
+
+            // A restricted profile answers 403, so the full body is unavailable — but the
+            // server still hands out a minimal card for exactly this case (display name,
+            // avatar, follow status) "without full profile access". Without it the screen
+            // could only show "@username keeps their profile private" and a padlock.
+            if (user == null) {
+                when (val p = users.preview(username)) {
+                    is ApiResult.Success -> _ui.value = _ui.value.copy(preview = p.data)
+                    else -> Unit
+                }
+            }
 
             val target = if (username == "me") appViewModel.uiState.value.username else username
             if (!target.isNullOrBlank() && target != appViewModel.uiState.value.username) {
@@ -288,6 +306,8 @@ fun ProfileScreen(
             )
             ui.user == null && ui.isPrivateProfile -> LockedProfileBody(
                 username = ui.username ?: username,
+                preview = ui.preview,
+                serverUrl = serverUrl,
                 error = ui.error,
                 status = ui.followStatus,
                 busy = ui.busy,
@@ -572,6 +592,8 @@ private fun RemoteProfileBody(
 @Composable
 private fun LockedProfileBody(
     username: String,
+    preview: UserPreviewDto?,
+    serverUrl: String,
     error: String?,
     status: FollowStatusDto?,
     busy: Boolean,
@@ -583,13 +605,34 @@ private fun LockedProfileBody(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Icons.Filled.Lock,
-            contentDescription = "Private profile",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("@$username keeps their profile private", style = MaterialTheme.typography.titleMedium)
+        // The server grants this card deliberately ("available without full profile access"),
+        // so show the real name and avatar rather than only a padlock and a handle.
+        if (preview?.avatarUrl != null) {
+            UserAvatar(
+                avatarUrl = preview.avatarUrl,
+                displayName = preview.displayName ?: username,
+                serverUrl = serverUrl,
+                size = 88,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                preview.displayName?.takeIf { it.isNotBlank() } ?: "@$username",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                "@$username",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Icon(
+                Icons.Filled.Lock,
+                contentDescription = "Private profile",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text("@$username keeps their profile private", style = MaterialTheme.typography.titleMedium)
+        }
         Text(
             "Send a follow request to see their activities.",
             style = MaterialTheme.typography.bodyMedium,

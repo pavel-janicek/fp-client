@@ -47,6 +47,7 @@ fun SettingsScreen(
     onOpenKomootImport: () -> Unit,
     onOpenRecord: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenEmailChange: () -> Unit,
 ) {
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
@@ -172,6 +173,10 @@ fun SettingsScreen(
                             onClick = { showChangePassword = true },
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Change password") }
+                        OutlinedButton(
+                            onClick = onOpenEmailChange,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) { Text("Change email address") }
                         Button(
                             onClick = {
                                 scope.launch {

@@ -9,9 +9,13 @@ import com.fpclient.android.data.dto.FollowStatusDto
 import com.fpclient.android.data.dto.HeatmapFeatureCollectionDto
 import com.fpclient.android.data.dto.HeatmapMapper
 import com.fpclient.android.data.dto.HeatmapResponse
+import com.fpclient.android.data.dto.MessageResponse
+import com.fpclient.android.data.dto.StartEmailChangeRequest
 import com.fpclient.android.data.dto.UserDto
+import com.fpclient.android.data.dto.UserPreviewDto
 import com.fpclient.android.data.dto.UserSearchResultDto
 import com.fpclient.android.data.dto.UserUpdateRequest
+import com.fpclient.android.data.dto.VerifyEmailChangeRequest
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.network.ErrorMessages
 import com.fpclient.android.data.network.FitPubApi
@@ -200,6 +204,87 @@ class UserRepository(
                 return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
             }
             ApiResult.Success(response.body() ?: EmailChangeStatusResponse())
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /**
+     * The four calls of the e-mail change flow. `start` answers **202**; the rest answer 200
+     * with a `MessageResponse` (or 204 for cancel). Errors keep the server's own wording —
+     * "That address is already in use", "Verification code is invalid or expired" — because
+     * each one tells the user what to do next.
+     */
+    suspend fun startEmailChange(newEmail: String): ApiResult<MessageResponse> =
+        messageCall { api.startEmailChange(StartEmailChangeRequest(newEmail.trim())) }
+
+    suspend fun verifyEmailChange(code: String): ApiResult<MessageResponse> =
+        messageCall { api.verifyEmailChange(VerifyEmailChangeRequest(code.trim())) }
+
+    suspend fun resendEmailChange(): ApiResult<MessageResponse> =
+        messageCall { api.resendEmailChange() }
+
+    suspend fun cancelEmailChange(): ApiResult<Unit> {
+        return try {
+            val response = api.cancelEmailChange()
+            if (response.isSuccessful) ApiResult.Success(Unit)
+            else ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /**
+     * Minimal card for a restricted profile. The profile endpoint answers 403 for those
+     * accounts, so this is the only way to learn their display name and avatar — the server
+     * grants it deliberately, "without full profile access".
+     */
+    suspend fun preview(username: String): ApiResult<UserPreviewDto> {
+        return try {
+            val response = api.userPreview(username.trim().removePrefix("@"))
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            ApiResult.Success(response.body() ?: UserPreviewDto())
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /**
+     * The signed-in user's Gravatar picture as raw bytes.
+     *
+     * Returned as bytes rather than a decoded image so the screen can hold it in state and
+     * render it however it likes; the server answers with a default avatar when no Gravatar
+     * exists, so a non-null result is not a promise that a real Gravatar was found.
+     */
+    suspend fun gravatarPreview(): ApiResult<ByteArray> {
+        return try {
+            val response = api.gravatarPreview()
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            val bytes = response.body()?.bytes()
+            if (bytes == null || bytes.isEmpty()) {
+                ApiResult.Error("The server sent an empty image.")
+            } else {
+                ApiResult.Success(bytes)
+            }
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /** Shared plumbing for the `MessageResponse` calls; [EmailChangeStatusResponse] is separate. */
+    private suspend fun messageCall(call: suspend () -> retrofit2.Response<MessageResponse>):
+        ApiResult<MessageResponse> {
+        return try {
+            val response = call()
+            if (response.isSuccessful) {
+                ApiResult.Success(response.body() ?: MessageResponse())
+            } else {
+                ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
         } catch (e: Exception) {
             ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
         }

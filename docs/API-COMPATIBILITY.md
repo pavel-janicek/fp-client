@@ -192,12 +192,40 @@ entry point sits on the signed-in profile (the Me tab shows `GuestMePanel` other
 * The admin side (`/api/web/admin/feedbacks`) is `hasRole("ADMIN")` and deliberately **not**
   exposed in the app.
 
+#### E-mail change (`/api/web/users/me/email-change`)
+
+Implemented in the app (Settings → Account → "Change email address"). A **two-address
+handshake**, not a straight update:
+
+* `GET /api/web/users/me/email-change` (already wired) → `{pending, newEmail, expiresAt}`;
+  the screen opens on this so a change started on another device is picked up.
+* `POST` `{"newEmail"}` → **202** `{"message":"Email change started"}`. The code goes to the
+  **new** address and the account keeps the old one until it is confirmed.
+* `POST /verify` `{"code"}` → 200 `"Email address changed successfully"`. The code is
+  digits-only server-side (`^\d+$`), so the field filters to digits.
+* `POST /resend` → **202**; `DELETE` → **204** to cancel.
+* All errors are 400 with `{"message": …}` and that wording is passed straight through — it
+  is what tells the user the address is taken or the code expired.
+
+#### Profile preview & Gravatar preview
+
+* `GET /api/web/users/{username}/preview` → the server's `UserPreviewDTO`
+  (`username`, `displayName`, `avatarUrl`, `profileVisibility`, `followStatus`). This is
+  granted **"available without full profile access"**, which is the point: a followers-only
+  profile answers 403, and without this the app could only show a padlock and a handle. The
+  locked-profile card now shows the real name and avatar. Note its `followStatus` is the
+  server's own `NONE`/`PENDING`/`ACCEPTED`/`REJECTED` enum, **not** the richer
+  `FollowStatusDto` shape used by `/follow-status`.
+* `GET /api/web/users/me/avatar/gravatar-preview` → the Gravatar image **as bytes**, with
+  conditional-request support (`If-None-Match` → 304). Surfaced in Edit profile so the user
+  can see what the instance would fall back to *before* deleting an uploaded avatar. The
+  server answers with the **default** avatar when no Gravatar exists, so a successful
+  response is not evidence that one was found.
+
 #### New server capabilities the app does not use yet
 
 Not breakage — feature surface available if wanted: passkeys
-(`/api/web/auth/passkeys/**`), e-mail change
-(`POST|DELETE /api/web/users/me/email-change` — the status `GET` is already used), profile
-previews (`/api/web/users/{username}/preview`, avatar gravatar preview), peaks
+(`/api/web/auth/passkeys/**`), peaks
 (`/api/web/users/{username}/peaks/**`, `/api/web/activities/user/{u}/peaks/{id}/tracks`),
 activity trimming (`GET /api/web/activities/{id}/trim`), and data export
 (`/settings/export/download`).

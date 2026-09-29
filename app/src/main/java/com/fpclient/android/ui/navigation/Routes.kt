@@ -24,6 +24,8 @@ object Routes {
     const val KOMOOT_IMPORT = "komoot_import"
     /** Feedback to the instance admins; reachable from the Me tab. Sign-in only. */
     const val FEEDBACK = "feedback"
+    /** Two-address e-mail change handshake; reached from Settings → Account. */
+    const val EMAIL_CHANGE = "email_change"
     const val RECORD = "record"
     // The finished recording's session id (= its start epoch ms) selects the workout.
     const val WORKOUT_SUMMARY = "workout_summary/{sessionId}"

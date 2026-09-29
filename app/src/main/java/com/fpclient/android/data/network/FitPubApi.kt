@@ -45,7 +45,10 @@ import com.fpclient.android.data.dto.RegisterRequest
 import com.fpclient.android.data.dto.RegistrationStatusResponse
 import com.fpclient.android.data.dto.ResendRegistrationCodeRequest
 import com.fpclient.android.data.dto.UnreadCountDto
+import com.fpclient.android.data.dto.StartEmailChangeRequest
 import com.fpclient.android.data.dto.UserDto
+import com.fpclient.android.data.dto.UserPreviewDto
+import com.fpclient.android.data.dto.VerifyEmailChangeRequest
 import com.fpclient.android.data.dto.UserSearchResultDto
 import com.fpclient.android.data.dto.UserUpdateRequest
 import com.fpclient.android.data.dto.VerifyRegistrationRequest
@@ -248,6 +251,40 @@ interface FitPubApi {
 
     @GET("api/web/users/me/email-change")
     suspend fun emailChangeStatus(): Response<EmailChangeStatusResponse>
+
+    /**
+     * E-mail change is a four-call flow: start (server answers **202** "Email change started"),
+     * verify the emailed code, resend it, or cancel. The code is digits-only and the new
+     * address is validated (`@Email`, max 255) server-side, so both are constrained here too.
+     */
+    @POST("api/web/users/me/email-change")
+    suspend fun startEmailChange(@Body body: StartEmailChangeRequest): Response<MessageResponse>
+
+    @POST("api/web/users/me/email-change/verify")
+    suspend fun verifyEmailChange(@Body body: VerifyEmailChangeRequest): Response<MessageResponse>
+
+    @POST("api/web/users/me/email-change/resend")
+    suspend fun resendEmailChange(): Response<MessageResponse>
+
+    @DELETE("api/web/users/me/email-change")
+    suspend fun cancelEmailChange(): Response<Unit>
+
+    /**
+     * Minimal profile card for a restricted account, available *without* full profile access
+     * (the profile itself answers 403). This is what lets a followers-only user still be
+     * shown with a name and an avatar.
+     */
+    @GET("api/web/users/{username}/preview")
+    suspend fun userPreview(@Path("username") username: String): Response<UserPreviewDto>
+
+    /**
+     * The signed-in user's Gravatar-backed picture, as image bytes, so it can be previewed
+     * without removing an uploaded avatar. The server supports conditional requests
+     * (`If-None-Match` -> 304), so this is a plain streaming body rather than a decoded image.
+     */
+    @GET("api/web/users/me/avatar/gravatar-preview")
+    @Streaming
+    suspend fun gravatarPreview(): Response<ResponseBody>
 
     @GET("api/web/users/discover-remote")
     suspend fun discoverRemote(@Query("handle") handle: String): Response<ActorDto>
