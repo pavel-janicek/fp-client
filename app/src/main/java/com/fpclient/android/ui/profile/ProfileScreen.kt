@@ -245,6 +245,7 @@ fun ProfileScreen(
     onOpenActivity: (String) -> Unit,
     onEditProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSendFeedback: () -> Unit = {},
     modifier: Modifier = Modifier,
     onOpenCreate: () -> Unit = {},
     onOpenRecord: () -> Unit = {},
@@ -299,6 +300,7 @@ fun ProfileScreen(
                 onOpenActivity = onOpenActivity, onToggleFollow = vm::toggleFollow,
                 onOpenFollowers = onOpenFollowers, onOpenFollowing = onOpenFollowing,
                 onEditProfile = onEditProfile,
+                onSendFeedback = onSendFeedback,
                 modifier = modifier,
             )
         }
@@ -392,6 +394,7 @@ private fun ProfileBody(
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
     onEditProfile: () -> Unit = {},
+    onSendFeedback: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val user = ui.user ?: return
@@ -432,6 +435,12 @@ private fun ProfileBody(
                 }
                 if (isMe) {
                     OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
+                    // Feedback to the instance admins. Sign-in only, which is exactly when
+                    // this branch renders (the Me tab shows GuestMePanel otherwise).
+                    OutlinedButton(
+                        onClick = onSendFeedback,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Send feedback") }
                 } else {
                     val status = ui.followStatus
                     val following = status?.isAccepted == true

@@ -18,4 +18,6 @@ object TextLimits {
     const val DISPLAY_NAME = 100
     const val TIMEZONE = 100
     const val COMMENT = 5000
+    /** Server's `FeedbackService.MAX_MESSAGE_LENGTH` (a constant, not configurable). */
+    const val FEEDBACK_MESSAGE = 5000
 }

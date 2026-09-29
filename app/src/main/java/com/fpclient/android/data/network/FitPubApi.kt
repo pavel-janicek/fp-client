@@ -7,6 +7,8 @@ import com.fpclient.android.data.dto.AuthResponse
 import com.fpclient.android.data.dto.BatchImportJobDto
 import com.fpclient.android.data.dto.BatchImportJobPageDto
 import com.fpclient.android.data.dto.BoostDto
+import com.fpclient.android.data.dto.FeedbackSubmissionRequest
+import com.fpclient.android.data.dto.FeedbackSubmissionResponse
 import com.fpclient.android.data.dto.ChangePasswordRequest
 import com.fpclient.android.data.dto.CommentCreateRequest
 import com.fpclient.android.data.dto.CommentDto
@@ -417,6 +419,16 @@ interface FitPubApi {
 
     @POST("api/web/komoot-import/activities/import")
     suspend fun komootImportActivity(@Body body: KomootActivityImportRequest): Response<KomootImportExecutionResponse>
+
+    // ------------------------------------------------------------------
+    // Feedback
+    //
+    // Sign-in only (the server's security config requires authentication for both
+    // `/feedback` and `/api/web/feedback`), and answered with 201 + `{"id": …}`.
+    // ------------------------------------------------------------------
+
+    @POST("api/web/feedback")
+    suspend fun submitFeedback(@Body body: FeedbackSubmissionRequest): Response<FeedbackSubmissionResponse>
 
     // ------------------------------------------------------------------
     // Push (Iteration 8h)

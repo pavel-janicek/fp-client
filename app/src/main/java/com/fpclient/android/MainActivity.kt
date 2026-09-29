@@ -306,6 +306,7 @@ private fun FitPubNavGraph(
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenFeedback = { navController.navigate(Routes.FEEDBACK) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
                 onOpenFollowing = { username -> navController.navigate(Routes.followList(username, "following")) },
                 onOpenRecords = { navController.navigate(Routes.RECORDS) },
@@ -392,6 +393,12 @@ private fun FitPubNavGraph(
         }
         composable(Routes.BATCH_IMPORT) {
             com.fpclient.android.ui.settings.BatchImportScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.FEEDBACK) {
+            com.fpclient.android.ui.settings.FeedbackScreen(
                 container = container,
                 onBack = { navController.popBackStack() },
             )

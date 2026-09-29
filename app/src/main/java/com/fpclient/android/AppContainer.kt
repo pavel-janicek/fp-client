@@ -7,6 +7,7 @@ import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.repository.AnalyticsRepository
 import com.fpclient.android.data.repository.AuthRepository
 import com.fpclient.android.data.repository.BatchImportRepository
+import com.fpclient.android.data.repository.FeedbackRepository
 import com.fpclient.android.data.repository.KomootImportRepository
 import com.fpclient.android.data.repository.NotificationRepository
 import com.fpclient.android.data.repository.PrivacyZoneRepository
@@ -68,6 +69,9 @@ class AppContainer(context: Context) {
      * server, so the screen must handle "not enabled here" (the repository's `KomootDisabled`).
      */
     val komootImportRepository: KomootImportRepository by lazy { KomootImportRepository(apiClient.api) }
+
+    /** Feedback to the instance admins; sign-in only, nothing persisted. */
+    val feedbackRepository: FeedbackRepository by lazy { FeedbackRepository(apiClient.api) }
 
     /**
      * Save & share of recorded workouts (Iteration 8d): GPX export from the persisted

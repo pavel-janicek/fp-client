@@ -170,10 +170,32 @@ password either.
   those, and the import endpoint rejects a repeat with 502 + a message (`IllegalStateException`
   → `BAD_GATEWAY`), which the app surfaces as the server's own text.
 
+#### Feedback (`POST /api/web/feedback`)
+
+Implemented in the app (Me tab → "Send feedback"). **Sign-in only** — the server's security
+config requires an authenticated session for both `/feedback` and `/api/web/feedback`, so the
+entry point sits on the signed-in profile (the Me tab shows `GuestMePanel` otherwise).
+
+* **Body** is `{topic, message, replyAllowed}`; `topic` is the `FeedbackTopic` enum
+  (`BUG_REPORT`, `FEATURE_REQUEST`, `SUPPORT_REQUEST`, `OTHER`) and is **required** — a null
+  topic is a 400. `message` must be non-blank and at most `FeedbackService.MAX_MESSAGE_LENGTH`
+  (5000, a constant, not configurable — the app caps the field and shows a counter).
+* **Success is 201** with just `{"id": …}`; the id is the only handle, and the only place it is
+  visible is the instance's admin page, so nothing is stored client-side.
+* **`replyAllowed` is a privacy switch, not a convenience.** `FeedbackDTO` only carries
+  `replyEmail` (and builds a `mailto:` `replyUrl`) when the submitter granted it, so the
+  instance admins otherwise never see the account's address. The UI states this before the
+  toggle rather than after.
+* Submitting also fires a `FEEDBACK_RECEIVED` notification to the author
+  (`FeedbackService.submit` → `createFeedbackReceivedNotifications`), which is the wording
+  added to `NotificationText` in 2.1.
+* The admin side (`/api/web/admin/feedbacks`) is `hasRole("ADMIN")` and deliberately **not**
+  exposed in the app.
+
 #### New server capabilities the app does not use yet
 
 Not breakage — feature surface available if wanted: passkeys
-(`/api/web/auth/passkeys/**`), user feedback (`/api/web/feedback`), e-mail change
+(`/api/web/auth/passkeys/**`), e-mail change
 (`POST|DELETE /api/web/users/me/email-change` — the status `GET` is already used), profile
 previews (`/api/web/users/{username}/preview`, avatar gravatar preview), peaks
 (`/api/web/users/{username}/peaks/**`, `/api/web/activities/user/{u}/peaks/{id}/tracks`),
