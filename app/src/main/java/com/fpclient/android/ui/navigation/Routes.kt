@@ -21,6 +21,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val BATCH_IMPORT = "batch_import"
+    const val KOMOOT_IMPORT = "komoot_import"
     const val RECORD = "record"
     // The finished recording's session id (= its start epoch ms) selects the workout.
     const val WORKOUT_SUMMARY = "workout_summary/{sessionId}"

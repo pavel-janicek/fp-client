@@ -380,6 +380,7 @@ private fun FitPubNavGraph(
                 onOpenPrivacyZones = { navController.navigate(Routes.PRIVACY_ZONES) },
                 onChangeInstance = { navController.navigate(Routes.SERVER_SETUP) },
                 onOpenBatchImport = { navController.navigate(Routes.BATCH_IMPORT) },
+                onOpenKomootImport = { navController.navigate(Routes.KOMOOT_IMPORT) },
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
             )
@@ -393,6 +394,17 @@ private fun FitPubNavGraph(
             com.fpclient.android.ui.settings.BatchImportScreen(
                 container = container,
                 onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.KOMOOT_IMPORT) {
+            val unitSystem by appViewModel.unitSystem.collectAsState()
+            com.fpclient.android.ui.settings.KomootImportScreen(
+                container = container,
+                unitSystem = unitSystem,
+                onBack = { navController.popBackStack() },
+                // Bumping the shared counter makes the timeline/profile re-fetch so the
+                // freshly imported activities actually appear.
+                onActivitiesAdded = { container.activitiesVersion.value++ },
             )
         }
         composable(Routes.RECORD) {

@@ -15,6 +15,10 @@ import com.fpclient.android.data.dto.EmailChangeStatusResponse
 import com.fpclient.android.data.dto.FollowResultDto
 import com.fpclient.android.data.dto.FollowStatusDto
 import com.fpclient.android.data.dto.HeatmapFeatureCollectionDto
+import com.fpclient.android.data.dto.KomootActivitiesResponse
+import com.fpclient.android.data.dto.KomootActivityImportRequest
+import com.fpclient.android.data.dto.KomootImportExecutionResponse
+import com.fpclient.android.data.dto.KomootImportRequest
 import com.fpclient.android.data.dto.LikeDto
 import com.fpclient.android.data.dto.LocationSuggestionDto
 import com.fpclient.android.data.dto.LoginRequest
@@ -398,6 +402,21 @@ interface FitPubApi {
 
     @DELETE("api/web/batch-import/jobs/{jobId}")
     suspend fun deleteBatchImport(@Path("jobId") jobId: String): Response<Unit>
+
+    // ------------------------------------------------------------------
+    // Komoot import
+    //
+    // Opt-in on the server: `fitpub.komoot.enabled` defaults to false and both endpoints
+    // then answer 404 `{"error":"Komoot support is disabled."}`. The repository turns that
+    // into a dedicated "not enabled on this instance" state so the screen can explain it
+    // instead of showing a raw error.
+    // ------------------------------------------------------------------
+
+    @POST("api/web/komoot-import/activities")
+    suspend fun komootActivities(@Body body: KomootImportRequest): Response<KomootActivitiesResponse>
+
+    @POST("api/web/komoot-import/activities/import")
+    suspend fun komootImportActivity(@Body body: KomootActivityImportRequest): Response<KomootImportExecutionResponse>
 
     // ------------------------------------------------------------------
     // Push (Iteration 8h)

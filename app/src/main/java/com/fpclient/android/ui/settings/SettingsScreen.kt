@@ -44,6 +44,7 @@ fun SettingsScreen(
     onOpenPrivacyZones: () -> Unit,
     onChangeInstance: () -> Unit,
     onOpenBatchImport: () -> Unit,
+    onOpenKomootImport: () -> Unit,
     onOpenRecord: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
@@ -135,6 +136,10 @@ fun SettingsScreen(
                             onClick = onOpenBatchImport,
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Batch import activities") }
+                        OutlinedButton(
+                            onClick = onOpenKomootImport,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) { Text("Import from Komoot") }
                     }
                 }
             }

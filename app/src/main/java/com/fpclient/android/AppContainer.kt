@@ -7,6 +7,7 @@ import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.repository.AnalyticsRepository
 import com.fpclient.android.data.repository.AuthRepository
 import com.fpclient.android.data.repository.BatchImportRepository
+import com.fpclient.android.data.repository.KomootImportRepository
 import com.fpclient.android.data.repository.NotificationRepository
 import com.fpclient.android.data.repository.PrivacyZoneRepository
 import com.fpclient.android.data.repository.PushRepository
@@ -61,6 +62,12 @@ class AppContainer(context: Context) {
 
     val privacyZoneRepository: PrivacyZoneRepository by lazy { PrivacyZoneRepository(apiClient.api) }
     val batchImportRepository: BatchImportRepository by lazy { BatchImportRepository(apiClient.api) }
+
+    /**
+     * Komoot import: lists and imports Komoot activities through this instance. Opt-in on the
+     * server, so the screen must handle "not enabled here" (the repository's `KomootDisabled`).
+     */
+    val komootImportRepository: KomootImportRepository by lazy { KomootImportRepository(apiClient.api) }
 
     /**
      * Save & share of recorded workouts (Iteration 8d): GPX export from the persisted

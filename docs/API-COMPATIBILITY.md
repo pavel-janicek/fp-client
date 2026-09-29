@@ -141,11 +141,39 @@ The Retrofit `Json` uses `ignoreUnknownKeys = true`, so additive server fields s
   visibility change once the activity has federated. The app never sends
   `expectedUpdatedAt`, so it cannot hit the first; the second is a genuine server rule.
 
+#### Komoot import (`POST /api/web/komoot-import/activities`, `…/activities/import`)
+
+Implemented in the app (Settings → Data → "Import from Komoot"). Two POSTs carrying the
+user's **Komoot** account credentials, which the server uses for that one request and never
+stores (`KomootImport` keeps only ids and a timestamp), so the app does not persist the
+password either.
+
+* **Opt-in per instance.** `fitpub.komoot.enabled` defaults to **false**, and both endpoints
+  then answer **404** `{"error":"Komoot support is disabled."}`. The app treats that as its
+  own state — the form is replaced by a short "not enabled on this instance" card — rather
+  than as a generic failure. This is the same shape as the 503 push probe.
+* **Request contract.** `KomootImportRequest` needs `email`, `password` and `userId` (the
+  Komoot account id, `[A-Za-z0-9]+`, found in the user's Komoot account settings).
+  `startDate`/`endDate` are optional but **all-or-nothing**: the server's
+  `isDateRangeConsistent` is an `@AssertTrue`, so a request with only one date is a 400. The
+  UI therefore offers the range behind a toggle that clears both ends when switched off.
+* **`date` is an ISO-8601 string with an offset**, e.g. `2024-05-01T10:00:00+02:00`
+  (Jackson `OffsetDateTime`), not an epoch array — worth knowing because the wrong Kotlin
+  type would make the whole list fail to deserialise, silently, as an empty result.
+* **`mappedActivityType` is already a FitPub `Activity.ActivityType` name** (the server maps
+  Komoot's sport), so the row's emoji comes straight from `ActivityTypes.icon`.
+* **Imports are one activity per request and are paced server-side**
+  (`fitpub.komoot.activity-import-delay-ms`, default 3000 ms, plus 500 ms detail→gpx). The
+  app imports sequentially, says so in the UI, and stops on the first failure rather than
+  retrying into Komoot's rate limiter.
+* **Duplicates are the server's call.** The preview marks each row `imported`, the app skips
+  those, and the import endpoint rejects a repeat with 502 + a message (`IllegalStateException`
+  → `BAD_GATEWAY`), which the app surfaces as the server's own text.
+
 #### New server capabilities the app does not use yet
 
 Not breakage — feature surface available if wanted: passkeys
-(`/api/web/auth/passkeys/**`, `/api/web/users/me/passkeys/**`), Komoot import
-(`/api/web/komoot-import/**`), user feedback (`/api/web/feedback`), e-mail change
+(`/api/web/auth/passkeys/**`), user feedback (`/api/web/feedback`), e-mail change
 (`POST|DELETE /api/web/users/me/email-change` — the status `GET` is already used), profile
 previews (`/api/web/users/{username}/preview`, avatar gravatar preview), peaks
 (`/api/web/users/{username}/peaks/**`, `/api/web/activities/user/{u}/peaks/{id}/tracks`),
