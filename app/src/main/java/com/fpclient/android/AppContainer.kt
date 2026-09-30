@@ -7,6 +7,9 @@ import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.repository.AnalyticsRepository
 import com.fpclient.android.data.repository.AuthRepository
 import com.fpclient.android.data.repository.BatchImportRepository
+import com.fpclient.android.data.repository.DataExportRepository
+import com.fpclient.android.data.repository.FeedbackRepository
+import com.fpclient.android.data.repository.KomootImportRepository
 import com.fpclient.android.data.repository.NotificationRepository
 import com.fpclient.android.data.repository.PrivacyZoneRepository
 import com.fpclient.android.data.repository.PushRepository
@@ -61,6 +64,25 @@ class AppContainer(context: Context) {
 
     val privacyZoneRepository: PrivacyZoneRepository by lazy { PrivacyZoneRepository(apiClient.api) }
     val batchImportRepository: BatchImportRepository by lazy { BatchImportRepository(apiClient.api) }
+
+    /**
+     * Komoot import: lists and imports Komoot activities through this instance. Opt-in on the
+     * server, so the screen must handle "not enabled here" (the repository's `KomootDisabled`).
+     */
+    val komootImportRepository: KomootImportRepository by lazy { KomootImportRepository(apiClient.api) }
+
+    /** Feedback to the instance admins; sign-in only, nothing persisted. */
+    val feedbackRepository: FeedbackRepository by lazy { FeedbackRepository(apiClient.api) }
+
+    /**
+     * Data export (Settings → Data): asks the instance to build a ZIP of the account and
+     * streams the finished archive to storage the user picks. The server has no JSON API for
+     * it, so this repository is built on the redirect-observing client — see
+     * [ApiClient.noRedirectApi].
+     */
+    val dataExportRepository: DataExportRepository by lazy {
+        DataExportRepository(apiClient.noRedirectApi)
+    }
 
     /**
      * Save & share of recorded workouts (Iteration 8d): GPX export from the persisted

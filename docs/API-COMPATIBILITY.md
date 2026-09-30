@@ -141,16 +141,223 @@ The Retrofit `Json` uses `ignoreUnknownKeys = true`, so additive server fields s
   visibility change once the activity has federated. The app never sends
   `expectedUpdatedAt`, so it cannot hit the first; the second is a genuine server rule.
 
+#### Komoot import (`POST /api/web/komoot-import/activities`, `…/activities/import`)
+
+Implemented in the app (Settings → Data → "Import from Komoot"). Two POSTs carrying the
+user's **Komoot** account credentials, which the server uses for that one request and never
+stores (`KomootImport` keeps only ids and a timestamp), so the app does not persist the
+password either.
+
+* **Opt-in per instance.** `fitpub.komoot.enabled` defaults to **false**, and both endpoints
+  then answer **404** `{"error":"Komoot support is disabled."}`. The app treats that as its
+  own state — the form is replaced by a short "not enabled on this instance" card — rather
+  than as a generic failure. This is the same shape as the 503 push probe.
+* **Request contract.** `KomootImportRequest` needs `email`, `password` and `userId` (the
+  Komoot account id, `[A-Za-z0-9]+`, found in the user's Komoot account settings).
+  `startDate`/`endDate` are optional but **all-or-nothing**: the server's
+  `isDateRangeConsistent` is an `@AssertTrue`, so a request with only one date is a 400. The
+  UI therefore offers the range behind a toggle that clears both ends when switched off.
+* **`date` is an ISO-8601 string with an offset**, e.g. `2024-05-01T10:00:00+02:00`
+  (Jackson `OffsetDateTime`), not an epoch array — worth knowing because the wrong Kotlin
+  type would make the whole list fail to deserialise, silently, as an empty result.
+* **`mappedActivityType` is already a FitPub `Activity.ActivityType` name** (the server maps
+  Komoot's sport), so the row's emoji comes straight from `ActivityTypes.icon`.
+* **Imports are one activity per request and are paced server-side**
+  (`fitpub.komoot.activity-import-delay-ms`, default 3000 ms, plus 500 ms detail→gpx). The
+  app imports sequentially, says so in the UI, and stops on the first failure rather than
+  retrying into Komoot's rate limiter.
+* **Duplicates are the server's call.** The preview marks each row `imported`, the app skips
+  those, and the import endpoint rejects a repeat with 502 + a message (`IllegalStateException`
+  → `BAD_GATEWAY`), which the app surfaces as the server's own text.
+
+#### Feedback (`POST /api/web/feedback`)
+
+Implemented in the app (Me tab → "Send feedback"). **Sign-in only** — the server's security
+config requires an authenticated session for both `/feedback` and `/api/web/feedback`, so the
+entry point sits on the signed-in profile (the Me tab shows `GuestMePanel` otherwise).
+
+* **Body** is `{topic, message, replyAllowed}`; `topic` is the `FeedbackTopic` enum
+  (`BUG_REPORT`, `FEATURE_REQUEST`, `SUPPORT_REQUEST`, `OTHER`) and is **required** — a null
+  topic is a 400. `message` must be non-blank and at most `FeedbackService.MAX_MESSAGE_LENGTH`
+  (5000, a constant, not configurable — the app caps the field and shows a counter).
+* **Success is 201** with just `{"id": …}`; the id is the only handle, and the only place it is
+  visible is the instance's admin page, so nothing is stored client-side.
+* **`replyAllowed` is a privacy switch, not a convenience.** `FeedbackDTO` only carries
+  `replyEmail` (and builds a `mailto:` `replyUrl`) when the submitter granted it, so the
+  instance admins otherwise never see the account's address. The UI states this before the
+  toggle rather than after.
+* Submitting also fires a `FEEDBACK_RECEIVED` notification to the author
+  (`FeedbackService.submit` → `createFeedbackReceivedNotifications`), which is the wording
+  added to `NotificationText` in 2.1.
+* The admin side (`/api/web/admin/feedbacks`) is `hasRole("ADMIN")` and deliberately **not**
+  exposed in the app.
+
+#### E-mail change (`/api/web/users/me/email-change`)
+
+Implemented in the app (Settings → Account → "Change email address"). A **two-address
+handshake**, not a straight update:
+
+* `GET /api/web/users/me/email-change` (already wired) → `{pending, newEmail, expiresAt}`;
+  the screen opens on this so a change started on another device is picked up.
+* `POST` `{"newEmail"}` → **202** `{"message":"Email change started"}`. The code goes to the
+  **new** address and the account keeps the old one until it is confirmed.
+* `POST /verify` `{"code"}` → 200 `"Email address changed successfully"`. The code is
+  digits-only server-side (`^\d+$`), so the field filters to digits.
+* `POST /resend` → **202**; `DELETE` → **204** to cancel.
+* All errors are 400 with `{"message": …}` and that wording is passed straight through — it
+  is what tells the user the address is taken or the code expired.
+
+#### Profile preview & Gravatar preview
+
+* `GET /api/web/users/{username}/preview` → the server's `UserPreviewDTO`
+  (`username`, `displayName`, `avatarUrl`, `profileVisibility`, `followStatus`). This is
+  granted **"available without full profile access"**, which is the point: a followers-only
+  profile answers 403, and without this the app could only show a padlock and a handle. The
+  locked-profile card now shows the real name and avatar. Note its `followStatus` is the
+  server's own `NONE`/`PENDING`/`ACCEPTED`/`REJECTED` enum, **not** the richer
+  `FollowStatusDto` shape used by `/follow-status`.
+* `GET /api/web/users/me/avatar/gravatar-preview` → the Gravatar image **as bytes**, with
+  conditional-request support (`If-None-Match` → 304). Surfaced in Edit profile so the user
+  can see what the instance would fall back to *before* deleting an uploaded avatar. The
+  server answers with the **default** avatar when no Gravatar exists, so a successful
+  response is not evidence that one was found.
+
+#### Peaks (`/api/web/users/{username}/peaks/**`)
+
+Implemented as a **profile** feature, not an analytics one — the server's own web client keeps
+its peaks templates under `templates/profile/` and has none under `templates/analytics/`, so
+the app mirrors that placement: a recent-peaks section on the profile and a full paged list
+reachable from it.
+
+* `GET .../peaks/recent` → `List<UserPeakDTO>`, capped server-side at 4 (`RECENT_PEAK_COUNT`).
+* `GET .../peaks/page?page=N` → **flat** page shape (`content`, `number`, `size`, `totalPages`,
+  `totalElements`), 24 per page (`PEAK_PAGE_SIZE`). This is deliberately *not* the
+  `{content, page}` envelope used elsewhere on the server, and it is why `UserPeakPageDto`
+  exists separately: reusing the shared envelope would silently parse into an always-empty
+  list.
+* `GET .../peaks/{peakId}` → a single `UserPeakDTO`, or **404** when the owner does not share.
+* `GET /api/web/activities/user/{u}/peaks/{peakId}/tracks` → `List<PeakActivityTrackDTO>`, each
+  with the activity id and its route as **raw GeoJSON** (the server builds a `Map`, not a
+  typed DTO). The `route` is handed to the existing `TrackParser.fromGeometry`, which already
+  speaks `LineString`/`MultiLineString`.
+
+**Visibility is decided server-side** (`peaksVisible = isOwner || defaultShowsPeaks(user)`), and
+the two outcomes look different on purpose:
+
+* hidden → the **list** routes answer **200 with an empty list**, so an empty list means
+  *"not shared"*, **not** *"none reached"*. The app therefore labels the empty state
+  accordingly instead of claiming the account has no summits.
+* hidden → the **single-peak / tracks** routes answer **404**.
+
+Tracks arrive already privacy-filtered: indoor activities, tracks hidden by `showMap`, and
+points inside the owner's privacy zones are removed before the response, so the map says what
+it is showing rather than what it might be missing.
+
+#### Data export (`/settings/export`, `/settings/export/download`)
+
+Implemented in the app (Settings → Data → "Export my data"). This is the one feature the
+server serves **only through its web client's own routes** — there is no JSON API, and no
+status route either — so the app is built around that shape rather than pretending otherwise:
+
+* **The request is the export page's form post.** `POST /settings/export` with
+  `replaceExisting=true`, `application/x-www-form-urlencoded`, not a JSON body.
+  **Acceptance is a `302` back to `/settings/export` — a `2xx` never arrives**, so treating
+  "not successful" as failure would report every accepted request as broken.
+* **The same `302` is what a refusal looks like.** `DataExportService.request` throws
+  `DataExportRequestException` when a job is already active, and the controller answers that
+  with the same redirect plus a *flash* message (`dataExportError`) bound to a server-side
+  session a stateless client does not hold. **"Accepted" and "an export is already being
+  built" are therefore indistinguishable from the app.** They also mean the same thing to the
+  user — an archive is on the way — so the screen says exactly that instead of guessing, and
+  no error is invented. The only statuses the app reports are the ones it can actually read:
+  `401`/`403` (sign in), `404` (no such feature here), anything else.
+* **`replaceExisting=true` is always sent.** The app cannot see whether a ready archive
+  exists, and the server refuses a request that would replace one unless it is confirmed
+  ("Confirm that the existing archive may be replaced."). Confirming is the safe side: the
+  existing archive stays downloadable until the replacement has been built successfully and
+  is superseded only afterwards. The screen states this instead of putting up a confirmation
+  dialog that could never be informed.
+* **The download redirects when you are not signed in.** `GET /settings/export/download`
+  answers `200` with the ZIP (`Content-Type: application/zip`, `Content-Length`, and
+  `Content-Disposition: attachment; filename="fitpub-data-export-<user>-<date>.zip"`),
+  **`404`** when nothing is downloadable (`requireDownloadable` throws → "No downloadable
+  data export is available."), and sends an anonymous caller to `/login`. Because the app asks
+  for JSON, the entry point's JSON branch turns that redirect into `403` for this path
+  (`401` is what `/api/**` answers) — both are shown as "sign in".
+* **No status route means readiness cannot be polled.** There is no JSON equivalent of
+  `DataExportService.status`, so the screen cannot show "queued / building / failed",
+  the archive's size or expiry, or the attempt history the web page shows — and it does not
+  pretend to. Asking for the archive *is* the check: a `404` is surfaced as "no archive ready
+  yet" with a pointer to the request button, and the **`DATA_EXPORT_READY` notification**
+  (already rendered by the app's notification list, and delivered by the poll or Web Push) is
+  the signal that it is worth asking again.
+* **Redirects are never followed for these two calls.** They go through
+  `ApiClient.noRedirectApi` — the same stack with `followRedirects(false)`, sharing its
+  connection pool and dispatcher. Following the request's `302` would replace the outcome with
+  a `200` HTML page, and following the download's redirect to `/login` would hand the app a
+  *successful* response whose body it would write out as the user's archive.
+* **The archive is streamed, not buffered.** `DataExportRepository.downloadArchive` writes
+  the response straight into the stream behind the storage location the user picked (SAF
+  `CreateDocument("application/zip")`), 64 KiB at a time, reporting progress against the
+  server's `Content-Length` at most once per megabyte. An account export is orders of
+  magnitude larger than the GPX route the app downloads elsewhere, so the `ByteArray` used
+  there would be a real risk here. The suggested filename is built locally
+  (`fitpub-data-export-<username>.zip`) because the server's own name only arrives *with* the
+  response, long after the picker has asked for one. A failed download can therefore leave the
+  empty document the user picked behind.
+
+#### Activity trimming (`GET /api/web/activities/{id}/trim`, `trim` on `PUT /api/web/activities/{id}`)
+
+The workspace behind the web editor's **Trim** button (`activities/edit.html`). The app's
+activity-detail toolbar shows a ✂ entry for own activities with a GPS track — the web gate
+`creationSource !== 'MANUAL' || !hasGpsTrack` inverted (`ActivityDto.isTrimmable`) — opening a
+dedicated screen (`ActivityTrimScreen`) with the original track on a map, two handles over it,
+and the resulting figures before saving.
+
+* **There is no "apply trim" endpoint.** The range rides along with the ordinary activity
+  update as `trim: {"startIndex": n, "endIndex": m}` — indices into the *original* track,
+  server-validated `start < end` (a violation is a 400 whose message is shown as-is). Because
+  that `PUT` replaces all metadata, the request re-sends the activity's current `title`,
+  `description`, `visibility` and `context` (`toUpdateRequest`) — a missing `context` clears a
+  COMMUTE/RACE context, and clearing RACE also drops the official result. The edit dialog was
+  fixed the same way: it now builds its request from the loaded activity too.
+* **`GET …/trim` answers with the original, untrimmed track** (`ActivityTrimDataDTO`: points
+  re-parsed from the uploaded file, plus the range currently stored and its elevation totals)
+  and is owner-only (401 otherwise). Refusals — manual activity, original file unavailable,
+  unsupported source format, fewer than three points, points without timestamps — are 400s
+  with human messages, shown verbatim like on the web.
+* **The preview is computed with the server's own rules.** `util/TrimPreview.kt` is a Kotlin
+  port of the server's `ElevationCalculationService` (5 m resampling, centred 70 m median,
+  2 m hysteresis, runs delimited by `elevationSegment` and unusable points, 1 000 000-sample
+  cap → unavailable), a haversine sum over the retained points for distance (never the
+  per-point `distance` field — that is the parser's cumulative value, while the server
+  recomputes the sub-range), `end − start` for duration, and the web editor's two stored-value
+  shortcuts (a selection equal to the stored range or the whole original track reports the
+  stored totals). `TrimPreviewTest` pins the port against output from the server's own
+  `elevation-calculation.js`, so an algorithm drift fails a test instead of showing a
+  different climb.
+* **Speed metrics, time zone and start location are recalculated by the server only**
+  (`ActivitySpeedPolicy`); rather than guessing them, the screen shows the authoritative
+  values from the update response, then re-reads the activity and the workspace and bumps
+  `activitiesVersion` so the timeline/profile screens re-fetch the new distance.
+* Slider edits debounce (150 ms) into an off-main-thread preview recomputation with an
+  identity guard, so dragging over a track with tens of thousands of points never blocks the
+  UI or races a reloaded workspace.
+
 #### New server capabilities the app does not use yet
 
 Not breakage — feature surface available if wanted: passkeys
-(`/api/web/auth/passkeys/**`, `/api/web/users/me/passkeys/**`), Komoot import
-(`/api/web/komoot-import/**`), user feedback (`/api/web/feedback`), e-mail change
-(`POST|DELETE /api/web/users/me/email-change` — the status `GET` is already used), profile
-previews (`/api/web/users/{username}/preview`, avatar gravatar preview), peaks
-(`/api/web/users/{username}/peaks/**`, `/api/web/activities/user/{u}/peaks/{id}/tracks`),
-activity trimming (`GET /api/web/activities/{id}/trim`), and data export
-(`/settings/export/download`).
+(`/api/web/auth/passkeys/**`).
+
+**Passkeys are deliberately *not* implemented, and are not an oversight.** The wire format is
+standard WebAuthn JSON, but the server accepts exactly one origin — a hard-coded singleton
+derived from `fitpub.base-url` (`PasskeyRelyingPartyConfig.passkeyAllowedOrigins`, no
+environment override) — and a native Android ceremony reports
+`android:apk-key-hash:<cert hash>` as its origin, so every assertion is rejected with a
+neutral 401. Separately, Android passkeys require Credential Manager, whose passkey support
+comes from Google Play services, which the F-Droid build deliberately does not ship. The
+server-side prerequisite and the full, ordered implementation prompts are in `PLAN.md` →
+"Passkey sign-in in the app".
 
 The FitPub server is under active development; if you are running a newer or older
 version and notice breakage, please file an issue. The client targets the REST API

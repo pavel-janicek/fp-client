@@ -33,6 +33,25 @@ object Format {
         else String.format(Locale.US, "%.1f km", meters / 1000.0)
     }
 
+    private val BYTE_UNITS = listOf("B", "KB", "MB", "GB", "TB", "PB", "EB")
+
+    /**
+     * Human-readable byte size, e.g. `"812 B"`, `"1.4 MB"`. Mirrors the server's
+     * `ByteSizeFormatter` (1024-based, one decimal above KB) so an archive is described with
+     * the same figure the web UI shows for it.
+     */
+    fun bytes(total: Long?): String {
+        if (total == null || total < 0) return "—"
+        if (total < 1024) return "$total B"
+        var value = total.toDouble()
+        var unit = 0
+        while (value >= 1024 && unit < BYTE_UNITS.lastIndex) {
+            value /= 1024
+            unit++
+        }
+        return String.format(Locale.US, "%.1f %s", value, BYTE_UNITS[unit])
+    }
+
     /** Formats seconds as h:mm:ss or m:ss when under an hour. */
     fun duration(totalSeconds: Long?): String {
         if (totalSeconds == null || totalSeconds < 0) return "—"

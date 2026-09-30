@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -48,9 +49,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.viewinterop.AndroidView
 import com.fpclient.android.AppContainer
-import com.fpclient.android.data.dto.ActivityUpdateRequest
-import com.fpclient.android.data.dto.ActivityVisibilities
 import com.fpclient.android.data.dto.ReactionPalette
+import com.fpclient.android.data.dto.toUpdateRequest
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.ui.components.ErrorState
@@ -74,6 +74,7 @@ fun ActivityDetailScreen(
     appViewModel: AppViewModel,
     onBack: () -> Unit,
     onOpenProfile: (String) -> Unit,
+    onOpenTrim: () -> Unit,
 ) {
     val vm: ActivityDetailViewModel = viewModel(factory = ActivityDetailViewModel.factory(container, appViewModel))
     val ui by vm.ui.collectAsState()
@@ -143,6 +144,11 @@ fun ActivityDetailScreen(
                             enabled = !downloading,
                         ) {
                             Icon(Icons.Filled.Download, contentDescription = "Download route as GPX")
+                        }
+                    }
+                    if (ui.isOwnActivity && ui.activity?.isTrimmable == true) {
+                        IconButton(onClick = onOpenTrim) {
+                            Icon(Icons.Filled.ContentCut, contentDescription = "Trim route")
                         }
                     }
                     if (ui.isOwnActivity) {
@@ -225,16 +231,13 @@ fun ActivityDetailScreen(
                 TextButton(
                     onClick = {
                         showEditDialog = false
-                        vm.updateActivity(
-                            activityId,
-                            ActivityUpdateRequest(
-                                title = editTitle,
-                                description = editDescription,
-                                // PUT replaces all metadata; the server requires visibility, so
-                                // preserve the activity's current value (the dialog only edits title/description).
-                                visibility = ui.activity?.visibility ?: ActivityVisibilities.PUBLIC,
-                            ),
-                        )
+                        // PUT replaces *all* metadata, not just what the dialog shows: build the
+                        // request from the loaded activity (title/description/visibility/context)
+                        // so a COMMUTE/RACE context survives an unrelated edit.
+                        val base = ui.activity?.toUpdateRequest()
+                        if (base != null) {
+                            vm.updateActivity(activityId, base.copy(title = editTitle, description = editDescription))
+                        }
                     },
                 ) { Text("Save") }
             },

@@ -44,8 +44,11 @@ fun SettingsScreen(
     onOpenPrivacyZones: () -> Unit,
     onChangeInstance: () -> Unit,
     onOpenBatchImport: () -> Unit,
+    onOpenKomootImport: () -> Unit,
+    onOpenDataExport: () -> Unit,
     onOpenRecord: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenEmailChange: () -> Unit,
 ) {
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
@@ -135,6 +138,14 @@ fun SettingsScreen(
                             onClick = onOpenBatchImport,
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Batch import activities") }
+                        OutlinedButton(
+                            onClick = onOpenKomootImport,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) { Text("Import from Komoot") }
+                        OutlinedButton(
+                            onClick = onOpenDataExport,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) { Text("Export my data") }
                     }
                 }
             }
@@ -167,6 +178,10 @@ fun SettingsScreen(
                             onClick = { showChangePassword = true },
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         ) { Text("Change password") }
+                        OutlinedButton(
+                            onClick = onOpenEmailChange,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) { Text("Change email address") }
                         Button(
                             onClick = {
                                 scope.launch {

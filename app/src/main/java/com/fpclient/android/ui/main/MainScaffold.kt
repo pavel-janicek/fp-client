@@ -57,8 +57,11 @@ fun MainScaffold(
     onOpenRecord: () -> Unit = {},
     onOpenEditProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenFeedback: () -> Unit,
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
+    onOpenPeaks: (String) -> Unit = {},
+    onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     onOpenRecords: () -> Unit = {},
     requestedTab: String? = null,
     onRequestedTabHandled: () -> Unit = {},
@@ -178,12 +181,15 @@ fun MainScaffold(
                     onBack = {},
                     onOpenActivity = onOpenActivity,
                     onEditProfile = onOpenEditProfile,
+                    onSendFeedback = onOpenFeedback,
                     onOpenSettings = onOpenSettings,
                     modifier = modifier,
                     onOpenCreate = onOpenCreate,
                     onOpenRecord = onOpenRecord,
                     onOpenFollowers = onOpenFollowers,
                     onOpenFollowing = onOpenFollowing,
+                    onOpenPeaks = onOpenPeaks,
+                    onOpenPeak = onOpenPeak,
                 )
             }
         }

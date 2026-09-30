@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Auto Backup rules for Android 12+ (android:dataExtractionRules). Same exclusions as
+     backup_rules.xml, applied to both Google's cloud backup and device-to-device transfer:
+     see that file for why the encrypted keysets must never be restored.
+
+     Both elements list only excludes, so everything else (DataStore, recordings, settings)
+     still moves with the backup.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="fitpub_push_keys.xml" />
+        <exclude domain="sharedpref" path="fitpub_secure_session.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="fitpub_push_keys.xml" />
+        <exclude domain="sharedpref" path="fitpub_secure_session.xml" />
+    </device-transfer>
+</data-extraction-rules>

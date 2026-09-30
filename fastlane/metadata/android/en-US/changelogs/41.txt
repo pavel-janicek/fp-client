@@ -1,0 +1,10 @@
+2.2.0 (release 2.2.0):
+- Send feedback to the admins of your instance: open the Me tab and tap "Send feedback" — pick a topic, write your message and choose whether the admins may reply to you by e-mail. Feedback stays on your instance.
+- Import your workouts from Komoot: Settings → Data → "Import from Komoot". Your Komoot login is used for that one request only and is never stored. The button tells you if your instance has not enabled Komoot support.
+- Export your data: Settings → Data → "Export my data" requests a portable archive of your account; when it is ready you get a notification and can download the ZIP from the same screen.
+- Change your e-mail address: Settings → Account → "Change email address". A confirmation code is sent to both your old and your new address before the change takes effect.
+- Your profile now shows the summits you have reached, with a list of all of them and a detail view per mountain.
+- Trim the route of your own activities: open an activity and tap the scissors icon to cut unwanted parts out of the GPS track, with a live preview of the new distance and elevation before you save.
+- The activity heatmap on your profile can be enlarged to full screen with one tap and closed the same way.
+- Locked (followers-only) profiles now show the person's name and profile picture instead of only a handle, and Edit profile can preview the Gravatar your instance would fall back to if you removed your uploaded picture — looking changes nothing.
+- Fixed a startup crash that could occur after the app was restored from a device backup.

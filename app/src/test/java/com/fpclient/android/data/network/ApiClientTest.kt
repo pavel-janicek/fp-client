@@ -118,6 +118,23 @@ class ApiClientTest {
     }
 
     @Test
+    fun noRedirectApi_showsTheRedirectInsteadOfFollowingIt() = runTest {
+        // The data-export routes are the server's own web-client routes: acceptance of the
+        // request POST is a 302, and an unauthenticated download redirects to /login.
+        // Following either would turn the outcome into a 200 HTML page — this client has to
+        // hand the redirect itself back so the repository can read it.
+        server.enqueue(
+            MockResponse().setResponseCode(302).addHeader("Location", "/settings/export"),
+        )
+
+        val response = apiClient.noRedirectApi.dataExportDownload()
+
+        assertEquals(302, response.code())
+        assertEquals("/settings/export/download", server.takeRequest().path)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun unauthorizedResponse_clearsTheStoredSession() = runTest {
         // The server (FitPub #474) rejects JWTs without the `authenticationVersion` claim
         // and clears its cookie — a stored stale token can never recover. The interceptor

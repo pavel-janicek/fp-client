@@ -1,8 +1,11 @@
 package com.fpclient.android.ui.profile
 
+import android.graphics.BitmapFactory
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
@@ -18,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -32,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -203,6 +208,9 @@ fun EditProfileScreen(
                     }) { Text("Remove") }
                 }
             }
+            GravatarPreviewRow(
+                load = { container.userRepository.gravatarPreview() },
+            )
             val headerUrl = com.fpclient.android.util.UrlBuilder.avatar(
                 appUi.serverUrl,
                 current?.profileHeaderUrl,
@@ -342,3 +350,89 @@ fun EditProfileScreen(
         }
     }
 }
+
+/**
+ * A one-tap preview of the Gravatar the instance would show for this account.
+ *
+ * The server resolves the Gravatar itself and streams the image, so this neither uploads
+ * anything nor removes an existing picture — the point is to see what a Gravatar-based avatar
+ * looks like *before* deleting the one you uploaded. It answers with the server's default
+ * avatar when no Gravatar exists, so the caption says so rather than implying a match.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GravatarPreviewRow(
+    load: suspend () -> ApiResult<ByteArray>,
+) {
+    var bytes by remember { mutableStateOf<ByteArray?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    Text("Gravatar", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp))
+    Text(
+        "If you remove your uploaded picture, this instance falls back to the Gravatar for " +
+            "your e-mail address. Preview it first — nothing is changed.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.padding(top = 8.dp),
+    ) {
+        val image = remember(bytes) { bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } }
+        if (image != null) {
+            coil.compose.AsyncImage(
+                model = image,
+                contentDescription = "Gravatar preview",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        "—",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    loading = true
+                    failed = false
+                    when (val r = load()) {
+                        is ApiResult.Success -> bytes = r.data
+                        is ApiResult.Error -> failed = true
+                    }
+                    loading = false
+                }
+            },
+            enabled = !loading,
+        ) { Text(if (bytes == null) "Preview" else "Reload") }
+        if (failed) {
+            Text(
+                "Could not load it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+

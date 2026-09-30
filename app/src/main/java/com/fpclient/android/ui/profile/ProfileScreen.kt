@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,7 +47,9 @@ import com.fpclient.android.data.dto.ActivitySummaryDto
 import com.fpclient.android.data.dto.ActorDto
 import com.fpclient.android.data.dto.FollowStatusDto
 import com.fpclient.android.data.dto.HeatmapResponse
+import com.fpclient.android.data.dto.UserPreviewDto
 import com.fpclient.android.data.dto.UserDto
+import com.fpclient.android.data.dto.UserPeakDto
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.repository.UserRepository
@@ -83,6 +87,14 @@ class ProfileViewModel(
         val username: String? = null,
         /** Lightweight actor profile for remote users (populated instead of [user] for federated handles). */
         val actor: ActorDto? = null,
+        /** Summits reached, for the profile's Peaks section (max 4 from the server). */
+        val recentPeaks: List<UserPeakDto> = emptyList(),
+        /**
+         * Minimal card from `GET /api/web/users/{username}/preview`, used when the profile
+         * itself was refused (followers-only accounts answer 403). Carries the display name
+         * and avatar the locked screen can still show.
+         */
+        val preview: UserPreviewDto? = null,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -155,6 +167,28 @@ class ProfileViewModel(
             }
             _ui.value = _ui.value.copy(loading = false, user = user, error = error)
             if (user == null && !_ui.value.isPrivateProfile) return@launch
+
+            // A restricted profile answers 403, so the full body is unavailable — but the
+            // server still hands out a minimal card for exactly this case (display name,
+            // avatar, follow status) "without full profile access". Without it the screen
+            // could only show "@username keeps their profile private" and a padlock.
+            if (user == null) {
+                when (val p = users.preview(username)) {
+                    is ApiResult.Success -> _ui.value = _ui.value.copy(preview = p.data)
+                    else -> Unit
+                }
+            }
+
+            // Summits reached, for the profile's Peaks section. Fetched for any viewer: the
+            // server hides them unless the owner shares them, answering with an empty list
+            // rather than a 403, so an empty section is simply not shown.
+            val peakTarget = if (username == "me") appViewModel.uiState.value.username else username
+            if (!peakTarget.isNullOrBlank()) {
+                when (val pk = users.recentPeaks(peakTarget)) {
+                    is ApiResult.Success -> _ui.value = _ui.value.copy(recentPeaks = pk.data)
+                    else -> Unit
+                }
+            }
 
             val target = if (username == "me") appViewModel.uiState.value.username else username
             if (!target.isNullOrBlank() && target != appViewModel.uiState.value.username) {
@@ -245,6 +279,9 @@ fun ProfileScreen(
     onOpenActivity: (String) -> Unit,
     onEditProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSendFeedback: () -> Unit = {},
+    onOpenPeaks: (String) -> Unit = {},
+    onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     onOpenCreate: () -> Unit = {},
     onOpenRecord: () -> Unit = {},
@@ -287,6 +324,8 @@ fun ProfileScreen(
             )
             ui.user == null && ui.isPrivateProfile -> LockedProfileBody(
                 username = ui.username ?: username,
+                preview = ui.preview,
+                serverUrl = serverUrl,
                 error = ui.error,
                 status = ui.followStatus,
                 busy = ui.busy,
@@ -299,6 +338,9 @@ fun ProfileScreen(
                 onOpenActivity = onOpenActivity, onToggleFollow = vm::toggleFollow,
                 onOpenFollowers = onOpenFollowers, onOpenFollowing = onOpenFollowing,
                 onEditProfile = onEditProfile,
+                onSendFeedback = onSendFeedback,
+                onOpenPeaks = onOpenPeaks,
+                onOpenPeak = onOpenPeak,
                 modifier = modifier,
             )
         }
@@ -392,6 +434,9 @@ private fun ProfileBody(
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
     onEditProfile: () -> Unit = {},
+    onSendFeedback: () -> Unit = {},
+    onOpenPeaks: (String) -> Unit = {},
+    onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val user = ui.user ?: return
@@ -432,6 +477,12 @@ private fun ProfileBody(
                 }
                 if (isMe) {
                     OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
+                    // Feedback to the instance admins. Sign-in only, which is exactly when
+                    // this branch renders (the Me tab shows GuestMePanel otherwise).
+                    OutlinedButton(
+                        onClick = onSendFeedback,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Send feedback") }
                 } else {
                     val status = ui.followStatus
                     val following = status?.isAccepted == true
@@ -459,6 +510,24 @@ private fun ProfileBody(
         val heatmap = ui.heatmap
         item {
             HeatmapCard(points = heatmap?.points.orEmpty(), bounds = heatmap?.bounds)
+        }
+        // Summits reached — a profile feature, not an analytics one (the server's web client
+        // keeps peaks under `templates/profile/`, none under `templates/analytics/`). Hidden
+        // entirely when empty, because the server returns an empty list both for "no summits
+        // yet" and for "this owner does not share their peaks".
+        if (ui.recentPeaks.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Peaks", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { onOpenPeaks(user.username ?: "me") }) { Text("View all") }
+                }
+            }
+            items(ui.recentPeaks, key = { "peak-${it.id}" }) { peak ->
+                PeakRow(peak = peak, onClick = { onOpenPeak(user.username ?: "me", peak.id) })
+            }
         }
         if (ui.activitiesList.isEmpty()) {
             item { EmptyState(title = "No activities yet") }
@@ -563,6 +632,8 @@ private fun RemoteProfileBody(
 @Composable
 private fun LockedProfileBody(
     username: String,
+    preview: UserPreviewDto?,
+    serverUrl: String,
     error: String?,
     status: FollowStatusDto?,
     busy: Boolean,
@@ -574,13 +645,34 @@ private fun LockedProfileBody(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Icons.Filled.Lock,
-            contentDescription = "Private profile",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("@$username keeps their profile private", style = MaterialTheme.typography.titleMedium)
+        // The server grants this card deliberately ("available without full profile access"),
+        // so show the real name and avatar rather than only a padlock and a handle.
+        if (preview?.avatarUrl != null) {
+            UserAvatar(
+                avatarUrl = preview.avatarUrl,
+                displayName = preview.displayName ?: username,
+                serverUrl = serverUrl,
+                size = 88,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                preview.displayName?.takeIf { it.isNotBlank() } ?: "@$username",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                "@$username",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Icon(
+                Icons.Filled.Lock,
+                contentDescription = "Private profile",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text("@$username keeps their profile private", style = MaterialTheme.typography.titleMedium)
+        }
         Text(
             "Send a follow request to see their activities.",
             style = MaterialTheme.typography.bodyMedium,

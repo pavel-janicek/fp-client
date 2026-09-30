@@ -8,6 +8,8 @@ object Routes {
     const val PASSWORD_RESET = "password_reset"
     const val MAIN = "main"
     const val ACTIVITY_DETAIL = "activity/{activityId}"
+    /** Trim workspace for one activity's original GPS track (detail toolbar → ContentCut). */
+    const val ACTIVITY_TRIM = "activity/{activityId}/trim"
     // Optional query arg carries a file URI shared into the app (share sheet / "Open with").
     const val CREATE = "create?sharedUri={sharedUri}"
     const val PROFILE = "profile/{username}"
@@ -21,14 +23,32 @@ object Routes {
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val BATCH_IMPORT = "batch_import"
+    const val KOMOOT_IMPORT = "komoot_import"
+    /** Feedback to the instance admins; reachable from the Me tab. Sign-in only. */
+    const val FEEDBACK = "feedback"
+    /** Two-address e-mail change handshake; reached from Settings → Account. */
+    const val EMAIL_CHANGE = "email_change"
+    /** Summits reached. A profile feature (mirrors the server's `templates/profile/peaks`). */
+    const val PEAKS = "peaks/{username}"
+    const val PEAK_DETAIL = "peaks/{username}/{peakId}"
+    /**
+     * Data export: request a portable archive of the account and download the finished ZIP.
+     * The server's own routes are `/settings/export` (GET page + POST form) and
+     * `/settings/export/download`.
+     */
+    const val DATA_EXPORT = "data_export"
     const val RECORD = "record"
     // The finished recording's session id (= its start epoch ms) selects the workout.
     const val WORKOUT_SUMMARY = "workout_summary/{sessionId}"
     const val FOLLOW_LIST = "follow_list/{username}/{type}"
 
     fun activityDetail(activityId: String) = "activity/$activityId"
+    fun activityTrim(activityId: String) = "activity/$activityId/trim"
     fun profile(username: String) = "profile/$username"
     fun followList(username: String, type: String) = "follow_list/$username/$type"
+
+    fun peaks(username: String) = "peaks/$username"
+    fun peakDetail(username: String, peakId: Long) = "peaks/$username/$peakId"
 
     /** Privacy-zone editor: no argument creates a new zone, a zoneId edits that zone. */
     fun privacyZoneEdit(zoneId: String? = null) =

@@ -2,11 +2,14 @@ package com.fpclient.android.data.network
 
 import com.fpclient.android.data.dto.ActorDto
 import com.fpclient.android.data.dto.ActivityDto
+import com.fpclient.android.data.dto.ActivityTrimDataDto
 import com.fpclient.android.data.dto.ActivityUpdateRequest
 import com.fpclient.android.data.dto.AuthResponse
 import com.fpclient.android.data.dto.BatchImportJobDto
 import com.fpclient.android.data.dto.BatchImportJobPageDto
 import com.fpclient.android.data.dto.BoostDto
+import com.fpclient.android.data.dto.FeedbackSubmissionRequest
+import com.fpclient.android.data.dto.FeedbackSubmissionResponse
 import com.fpclient.android.data.dto.ChangePasswordRequest
 import com.fpclient.android.data.dto.CommentCreateRequest
 import com.fpclient.android.data.dto.CommentDto
@@ -15,6 +18,10 @@ import com.fpclient.android.data.dto.EmailChangeStatusResponse
 import com.fpclient.android.data.dto.FollowResultDto
 import com.fpclient.android.data.dto.FollowStatusDto
 import com.fpclient.android.data.dto.HeatmapFeatureCollectionDto
+import com.fpclient.android.data.dto.KomootActivitiesResponse
+import com.fpclient.android.data.dto.KomootActivityImportRequest
+import com.fpclient.android.data.dto.KomootImportExecutionResponse
+import com.fpclient.android.data.dto.KomootImportRequest
 import com.fpclient.android.data.dto.LikeDto
 import com.fpclient.android.data.dto.LocationSuggestionDto
 import com.fpclient.android.data.dto.LoginRequest
@@ -39,7 +46,13 @@ import com.fpclient.android.data.dto.RegisterRequest
 import com.fpclient.android.data.dto.RegistrationStatusResponse
 import com.fpclient.android.data.dto.ResendRegistrationCodeRequest
 import com.fpclient.android.data.dto.UnreadCountDto
+import com.fpclient.android.data.dto.PeakActivityTrackDto
+import com.fpclient.android.data.dto.StartEmailChangeRequest
 import com.fpclient.android.data.dto.UserDto
+import com.fpclient.android.data.dto.UserPeakDto
+import com.fpclient.android.data.dto.UserPeakPageDto
+import com.fpclient.android.data.dto.UserPreviewDto
+import com.fpclient.android.data.dto.VerifyEmailChangeRequest
 import com.fpclient.android.data.dto.UserSearchResultDto
 import com.fpclient.android.data.dto.UserUpdateRequest
 import com.fpclient.android.data.dto.VerifyRegistrationRequest
@@ -50,6 +63,8 @@ import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.HTTP
 import retrofit2.http.Multipart
@@ -148,6 +163,16 @@ interface FitPubApi {
     @PUT("api/web/activities/{id}")
     suspend fun updateActivity(@Path("id") id: String, @Body request: ActivityUpdateRequest): Response<ActivityDto>
 
+    /**
+     * The trim workspace for an activity the caller owns: the original, untrimmed track plus the
+     * index range that is currently stored. There is no separate "apply trim" route — the range
+     * goes back through [updateActivity] as its `trim` field. 400 carries the server's own
+     * explanation ("Manual activities cannot be trimmed", "The original activity file is
+     * unavailable", …) when the source cannot be trimmed at all.
+     */
+    @GET("api/web/activities/{id}/trim")
+    suspend fun getActivityTrimData(@Path("id") id: String): Response<ActivityTrimDataDto>
+
     @DELETE("api/web/activities/{id}")
     suspend fun deleteActivity(@Path("id") id: String): Response<Unit>
 
@@ -242,6 +267,77 @@ interface FitPubApi {
 
     @GET("api/web/users/me/email-change")
     suspend fun emailChangeStatus(): Response<EmailChangeStatusResponse>
+
+    /**
+     * E-mail change is a four-call flow: start (server answers **202** "Email change started"),
+     * verify the emailed code, resend it, or cancel. The code is digits-only and the new
+     * address is validated (`@Email`, max 255) server-side, so both are constrained here too.
+     */
+    @POST("api/web/users/me/email-change")
+    suspend fun startEmailChange(@Body body: StartEmailChangeRequest): Response<MessageResponse>
+
+    @POST("api/web/users/me/email-change/verify")
+    suspend fun verifyEmailChange(@Body body: VerifyEmailChangeRequest): Response<MessageResponse>
+
+    @POST("api/web/users/me/email-change/resend")
+    suspend fun resendEmailChange(): Response<MessageResponse>
+
+    @DELETE("api/web/users/me/email-change")
+    suspend fun cancelEmailChange(): Response<Unit>
+
+    /**
+     * Minimal profile card for a restricted account, available *without* full profile access
+     * (the profile itself answers 403). This is what lets a followers-only user still be
+     * shown with a name and an avatar.
+     */
+    @GET("api/web/users/{username}/preview")
+    suspend fun userPreview(@Path("username") username: String): Response<UserPreviewDto>
+
+    // ------------------------------------------------------------------
+    // Peaks — a profile feature (the server's web client keeps them under
+    // `templates/profile/`, not `templates/analytics/`).
+    //
+    // Visibility is decided server-side: `peaksVisible = isOwner || defaultShowsPeaks(user)`.
+    // When false, the list routes answer 200 with an EMPTY list (so an empty list means
+    // "not shared", not "none reached") and the single-peak/tracks routes answer 404.
+    // ------------------------------------------------------------------
+
+    /** Most recent summits; the server caps this at 4 (`RECENT_PEAK_COUNT`). */
+    @GET("api/web/users/{username}/peaks/recent")
+    suspend fun recentPeaks(@Path("username") username: String): Response<List<UserPeakDto>>
+
+    /** Alphabetical page of summits, 24 per page (`PEAK_PAGE_SIZE`). Flat page shape. */
+    @GET("api/web/users/{username}/peaks/page")
+    suspend fun peaksPage(
+        @Path("username") username: String,
+        @Query("page") page: Int = 0,
+    ): Response<UserPeakPageDto>
+
+    @GET("api/web/users/{username}/peaks/{peakId}")
+    suspend fun peak(
+        @Path("username") username: String,
+        @Path("peakId") peakId: Long,
+    ): Response<UserPeakDto>
+
+    /**
+     * The activities that reached this peak, with privacy-filtered tracks. Indoor activities
+     * and tracks hidden by `showMap` are already excluded server-side, as are points inside
+     * the owner's privacy zones.
+     */
+    @GET("api/web/activities/user/{username}/peaks/{peakId}/tracks")
+    suspend fun peakTracks(
+        @Path("username") username: String,
+        @Path("peakId") peakId: Long,
+    ): Response<List<PeakActivityTrackDto>>
+
+    /**
+     * The signed-in user's Gravatar-backed picture, as image bytes, so it can be previewed
+     * without removing an uploaded avatar. The server supports conditional requests
+     * (`If-None-Match` -> 304), so this is a plain streaming body rather than a decoded image.
+     */
+    @GET("api/web/users/me/avatar/gravatar-preview")
+    @Streaming
+    suspend fun gravatarPreview(): Response<ResponseBody>
 
     @GET("api/web/users/discover-remote")
     suspend fun discoverRemote(@Query("handle") handle: String): Response<ActorDto>
@@ -400,6 +496,31 @@ interface FitPubApi {
     suspend fun deleteBatchImport(@Path("jobId") jobId: String): Response<Unit>
 
     // ------------------------------------------------------------------
+    // Komoot import
+    //
+    // Opt-in on the server: `fitpub.komoot.enabled` defaults to false and both endpoints
+    // then answer 404 `{"error":"Komoot support is disabled."}`. The repository turns that
+    // into a dedicated "not enabled on this instance" state so the screen can explain it
+    // instead of showing a raw error.
+    // ------------------------------------------------------------------
+
+    @POST("api/web/komoot-import/activities")
+    suspend fun komootActivities(@Body body: KomootImportRequest): Response<KomootActivitiesResponse>
+
+    @POST("api/web/komoot-import/activities/import")
+    suspend fun komootImportActivity(@Body body: KomootActivityImportRequest): Response<KomootImportExecutionResponse>
+
+    // ------------------------------------------------------------------
+    // Feedback
+    //
+    // Sign-in only (the server's security config requires authentication for both
+    // `/feedback` and `/api/web/feedback`), and answered with 201 + `{"id": …}`.
+    // ------------------------------------------------------------------
+
+    @POST("api/web/feedback")
+    suspend fun submitFeedback(@Body body: FeedbackSubmissionRequest): Response<FeedbackSubmissionResponse>
+
+    // ------------------------------------------------------------------
     // Push (Iteration 8h)
     // ------------------------------------------------------------------
 
@@ -413,4 +534,37 @@ interface FitPubApi {
     // body, so the equivalent @HTTP form (hasBody = true) is used instead.
     @HTTP(method = "DELETE", hasBody = true, path = "api/web/push/subscribe")
     suspend fun pushUnsubscribe(@Body request: PushUnsubscribeRequest): Response<PushStatusDto>
+
+    // ------------------------------------------------------------------
+    // Data export (`/settings/export`)
+    //
+    // FitPub exposes NO JSON API for this feature: the only routes are the web client's own
+    // page (`GET`/`POST /settings/export`) and the ZIP itself, none of them under `/api/web`.
+    // They are reached through `ApiClient.noRedirectApi` — see that property for why
+    // following redirects here would hand the app a *successful* response it must not treat
+    // as data.
+    // ------------------------------------------------------------------
+
+    /**
+     * The account's finished archive, as a ZIP stream.
+     *
+     * Answers `200` with `Content-Length` and a `Content-Disposition` filename when an
+     * archive is downloadable, `404` when none is (never requested, still being built,
+     * failed, or expired — the server deliberately does not say which), and a redirect to
+     * `/login` (`403` here, since the app asks for JSON) when the caller is not signed in.
+     */
+    @GET("settings/export/download")
+    @Streaming
+    suspend fun dataExportDownload(): Response<ResponseBody>
+
+    /**
+     * Asks the instance to build a new archive. This is the export page's own **form** post,
+     * not a JSON endpoint: the body is `application/x-www-form-urlencoded`, and acceptance is
+     * the `302` back to `/settings/export` rather than a `2xx`.
+     */
+    @FormUrlEncoded
+    @POST("settings/export")
+    suspend fun requestDataExport(
+        @Field("replaceExisting") replaceExisting: Boolean,
+    ): Response<ResponseBody>
 }

@@ -139,10 +139,25 @@ data class FollowResultDto(
     val following: Boolean = false,
 )
 
+/**
+ * `GET /api/web/users/{username}/preview` — the server's `UserPreviewDTO`.
+ *
+ * Returned for a restricted profile *without* full profile access, which is the whole point:
+ * the followers-only profile answers 403, but this still yields a display name, an avatar and
+ * the viewer's follow status. `followStatus` is the server's own enum
+ * (`NONE`/`PENDING`/`ACCEPTED`/`REJECTED`), not the richer `FollowStatusDto` shape.
+ */
 @Serializable
-data class PreviewDtosContainer(
-    val user: UserDto? = null,
-)
+data class UserPreviewDto(
+    val username: String? = null,
+    val displayName: String? = null,
+    val avatarUrl: String? = null,
+    val profileVisibility: String? = null,
+    val followStatus: String? = null,
+) {
+    val followed: Boolean get() = followStatus == "ACCEPTED"
+    val pending: Boolean get() = followStatus == "PENDING"
+}
 
 @Serializable
 data class UserListPageDto(

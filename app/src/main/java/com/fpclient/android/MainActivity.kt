@@ -306,9 +306,12 @@ private fun FitPubNavGraph(
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenFeedback = { navController.navigate(Routes.FEEDBACK) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
                 onOpenFollowing = { username -> navController.navigate(Routes.followList(username, "following")) },
                 onOpenRecords = { navController.navigate(Routes.RECORDS) },
+                onOpenPeaks = { u -> navController.navigate(Routes.peaks(u)) },
+                onOpenPeak = { u, peakId -> navController.navigate(Routes.peakDetail(u, peakId)) },
                 requestedTab = requestedTab,
                 onRequestedTabHandled = onRequestedTabHandled,
             )
@@ -324,6 +327,21 @@ private fun FitPubNavGraph(
                 appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
+                onOpenTrim = { navController.navigate(Routes.activityTrim(activityId)) },
+            )
+        }
+        // Trim workspace: pick the range of the original GPS track to keep. Its own route so
+        // Back from it returns to the activity detail with that screen's state intact.
+        composable(
+            route = Routes.ACTIVITY_TRIM,
+            arguments = listOf(navArgument("activityId") { }),
+        ) { entry ->
+            val trimActivityId = entry.arguments?.getString("activityId").orEmpty()
+            com.fpclient.android.ui.activity.ActivityTrimScreen(
+                activityId = trimActivityId,
+                container = container,
+                appViewModel = appViewModel,
+                onBack = { navController.popBackStack() },
             )
         }
         // Personal records, reached from the Analytics "Personal records" tile.
@@ -352,6 +370,8 @@ private fun FitPubNavGraph(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenFollowers = { u -> navController.navigate(Routes.followList(u, "followers")) },
                 onOpenFollowing = { u -> navController.navigate(Routes.followList(u, "following")) },
+                onOpenPeaks = { u -> navController.navigate(Routes.peaks(u)) },
+                onOpenPeak = { u, peakId -> navController.navigate(Routes.peakDetail(u, peakId)) },
             )
         }
         composable(Routes.CREATE) { entry ->
@@ -380,8 +400,11 @@ private fun FitPubNavGraph(
                 onOpenPrivacyZones = { navController.navigate(Routes.PRIVACY_ZONES) },
                 onChangeInstance = { navController.navigate(Routes.SERVER_SETUP) },
                 onOpenBatchImport = { navController.navigate(Routes.BATCH_IMPORT) },
+                onOpenKomootImport = { navController.navigate(Routes.KOMOOT_IMPORT) },
+                onOpenDataExport = { navController.navigate(Routes.DATA_EXPORT) },
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onOpenEmailChange = { navController.navigate(Routes.EMAIL_CHANGE) },
             )
         }
         composable(Routes.ABOUT) {
@@ -389,10 +412,68 @@ private fun FitPubNavGraph(
                 onBack = { navController.popBackStack() },
             )
         }
+        composable(Routes.DATA_EXPORT) {
+            com.fpclient.android.ui.settings.DataExportScreen(
+                container = container,
+                appViewModel = appViewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
         composable(Routes.BATCH_IMPORT) {
             com.fpclient.android.ui.settings.BatchImportScreen(
                 container = container,
                 onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.PEAKS,
+            arguments = listOf(navArgument("username") { }),
+        ) { entry ->
+            val username = entry.arguments?.getString("username").orEmpty()
+            com.fpclient.android.ui.profile.PeaksScreen(
+                container = container,
+                username = username,
+                onBack = { navController.popBackStack() },
+                onOpenPeak = { peakId ->
+                    navController.navigate(Routes.peakDetail(username, peakId))
+                },
+            )
+        }
+        composable(
+            route = Routes.PEAK_DETAIL,
+            arguments = listOf(navArgument("username") { }, navArgument("peakId") { }),
+        ) { entry ->
+            val username = entry.arguments?.getString("username").orEmpty()
+            val peakId = entry.arguments?.getString("peakId")?.toLongOrNull() ?: 0L
+            com.fpclient.android.ui.profile.PeakDetailScreen(
+                container = container,
+                username = username,
+                peakId = peakId,
+                onBack = { navController.popBackStack() },
+                onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
+            )
+        }
+        composable(Routes.EMAIL_CHANGE) {
+            com.fpclient.android.ui.settings.EmailChangeScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.FEEDBACK) {
+            com.fpclient.android.ui.settings.FeedbackScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.KOMOOT_IMPORT) {
+            val unitSystem by appViewModel.unitSystem.collectAsState()
+            com.fpclient.android.ui.settings.KomootImportScreen(
+                container = container,
+                unitSystem = unitSystem,
+                onBack = { navController.popBackStack() },
+                // Bumping the shared counter makes the timeline/profile re-fetch so the
+                // freshly imported activities actually appear.
+                onActivitiesAdded = { container.activitiesVersion.value++ },
             )
         }
         composable(Routes.RECORD) {
