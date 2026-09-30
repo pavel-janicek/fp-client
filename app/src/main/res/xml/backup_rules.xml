@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Auto Backup rules for Android 11 and lower (android:fullBackupContent).
+
+     The two EncryptedSharedPreferences files excluded below carry Tink keysets sealed with
+     an AndroidKeyStore key that never leaves the device. Restoring the files without that
+     key (reinstall under a different signing key, restore onto another device) made startup
+     die in AEADBadTagException — a crash loop, because both stores are built in
+     Application.onCreate. Key material that cannot travel with the backup is excluded; the
+     stores regenerate themselves on first open. Android 12+ reads data_extraction_rules.xml.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="fitpub_push_keys.xml" />
+    <exclude domain="sharedpref" path="fitpub_secure_session.xml" />
+</full-backup-content>

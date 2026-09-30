@@ -7,8 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import com.fpclient.android.util.openEncryptedPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -43,17 +42,11 @@ private val Context.fitPubDataStore: DataStore<Preferences> by preferencesDataSt
  */
 class SessionStore(private val context: Context) {
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val encryptedPrefs = EncryptedSharedPreferences.create(
-        context,
-        "fitpub_secure_session",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    /**
+     * Keystore-encrypted home of the session JWT. Wiped and recreated if the stored keyset
+     * cannot be decrypted — see [openEncryptedPrefs].
+     */
+    private val encryptedPrefs = openEncryptedPrefs(context, "fitpub_secure_session")
 
     private object Keys {
         val SERVER_URL = stringPreferencesKey("server_url")

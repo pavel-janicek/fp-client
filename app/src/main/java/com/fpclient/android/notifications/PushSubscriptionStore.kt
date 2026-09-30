@@ -2,8 +2,7 @@ package com.fpclient.android.notifications
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import com.fpclient.android.util.openEncryptedPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,16 +62,12 @@ data class PushSubscription(
 
 class PushSubscriptionStore internal constructor(private val prefs: SharedPreferences) {
 
-    /** Production path: the keystore-encrypted app-private store (same as the session token). */
-    constructor(context: Context) : this(
-        EncryptedSharedPreferences.create(
-            context,
-            "fitpub_push_keys",
-            MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        ),
-    )
+    /**
+     * Production path: the keystore-encrypted app-private store (same as the session token).
+     * The file is wiped and recreated if its keyset cannot be decrypted — see
+     * [openEncryptedPrefs] for why that must never reach `Application.onCreate` unwrapped.
+     */
+    constructor(context: Context) : this(openEncryptedPrefs(context, "fitpub_push_keys"))
 
     private object Keys {
         const val OWNER = "owner"
