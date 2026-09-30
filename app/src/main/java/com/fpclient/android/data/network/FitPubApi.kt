@@ -2,6 +2,7 @@ package com.fpclient.android.data.network
 
 import com.fpclient.android.data.dto.ActorDto
 import com.fpclient.android.data.dto.ActivityDto
+import com.fpclient.android.data.dto.ActivityTrimDataDto
 import com.fpclient.android.data.dto.ActivityUpdateRequest
 import com.fpclient.android.data.dto.AuthResponse
 import com.fpclient.android.data.dto.BatchImportJobDto
@@ -161,6 +162,16 @@ interface FitPubApi {
 
     @PUT("api/web/activities/{id}")
     suspend fun updateActivity(@Path("id") id: String, @Body request: ActivityUpdateRequest): Response<ActivityDto>
+
+    /**
+     * The trim workspace for an activity the caller owns: the original, untrimmed track plus the
+     * index range that is currently stored. There is no separate "apply trim" route — the range
+     * goes back through [updateActivity] as its `trim` field. 400 carries the server's own
+     * explanation ("Manual activities cannot be trimmed", "The original activity file is
+     * unavailable", …) when the source cannot be trimmed at all.
+     */
+    @GET("api/web/activities/{id}/trim")
+    suspend fun getActivityTrimData(@Path("id") id: String): Response<ActivityTrimDataDto>
 
     @DELETE("api/web/activities/{id}")
     suspend fun deleteActivity(@Path("id") id: String): Response<Unit>

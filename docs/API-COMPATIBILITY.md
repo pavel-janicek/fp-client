@@ -306,10 +306,48 @@ status route either — so the app is built around that shape rather than preten
   response, long after the picker has asked for one. A failed download can therefore leave the
   empty document the user picked behind.
 
+#### Activity trimming (`GET /api/web/activities/{id}/trim`, `trim` on `PUT /api/web/activities/{id}`)
+
+The workspace behind the web editor's **Trim** button (`activities/edit.html`). The app's
+activity-detail toolbar shows a ✂ entry for own activities with a GPS track — the web gate
+`creationSource !== 'MANUAL' || !hasGpsTrack` inverted (`ActivityDto.isTrimmable`) — opening a
+dedicated screen (`ActivityTrimScreen`) with the original track on a map, two handles over it,
+and the resulting figures before saving.
+
+* **There is no "apply trim" endpoint.** The range rides along with the ordinary activity
+  update as `trim: {"startIndex": n, "endIndex": m}` — indices into the *original* track,
+  server-validated `start < end` (a violation is a 400 whose message is shown as-is). Because
+  that `PUT` replaces all metadata, the request re-sends the activity's current `title`,
+  `description`, `visibility` and `context` (`toUpdateRequest`) — a missing `context` clears a
+  COMMUTE/RACE context, and clearing RACE also drops the official result. The edit dialog was
+  fixed the same way: it now builds its request from the loaded activity too.
+* **`GET …/trim` answers with the original, untrimmed track** (`ActivityTrimDataDTO`: points
+  re-parsed from the uploaded file, plus the range currently stored and its elevation totals)
+  and is owner-only (401 otherwise). Refusals — manual activity, original file unavailable,
+  unsupported source format, fewer than three points, points without timestamps — are 400s
+  with human messages, shown verbatim like on the web.
+* **The preview is computed with the server's own rules.** `util/TrimPreview.kt` is a Kotlin
+  port of the server's `ElevationCalculationService` (5 m resampling, centred 70 m median,
+  2 m hysteresis, runs delimited by `elevationSegment` and unusable points, 1 000 000-sample
+  cap → unavailable), a haversine sum over the retained points for distance (never the
+  per-point `distance` field — that is the parser's cumulative value, while the server
+  recomputes the sub-range), `end − start` for duration, and the web editor's two stored-value
+  shortcuts (a selection equal to the stored range or the whole original track reports the
+  stored totals). `TrimPreviewTest` pins the port against output from the server's own
+  `elevation-calculation.js`, so an algorithm drift fails a test instead of showing a
+  different climb.
+* **Speed metrics, time zone and start location are recalculated by the server only**
+  (`ActivitySpeedPolicy`); rather than guessing them, the screen shows the authoritative
+  values from the update response, then re-reads the activity and the workspace and bumps
+  `activitiesVersion` so the timeline/profile screens re-fetch the new distance.
+* Slider edits debounce (150 ms) into an off-main-thread preview recomputation with an
+  identity guard, so dragging over a track with tens of thousands of points never blocks the
+  UI or races a reloaded workspace.
+
 #### New server capabilities the app does not use yet
 
 Not breakage — feature surface available if wanted: passkeys
-(`/api/web/auth/passkeys/**`) and activity trimming (`GET /api/web/activities/{id}/trim`).
+(`/api/web/auth/passkeys/**`).
 
 **Passkeys are deliberately *not* implemented, and are not an oversight.** The wire format is
 standard WebAuthn JSON, but the server accepts exactly one origin — a hard-coded singleton

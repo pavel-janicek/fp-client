@@ -327,6 +327,21 @@ private fun FitPubNavGraph(
                 appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
+                onOpenTrim = { navController.navigate(Routes.activityTrim(activityId)) },
+            )
+        }
+        // Trim workspace: pick the range of the original GPS track to keep. Its own route so
+        // Back from it returns to the activity detail with that screen's state intact.
+        composable(
+            route = Routes.ACTIVITY_TRIM,
+            arguments = listOf(navArgument("activityId") { }),
+        ) { entry ->
+            val trimActivityId = entry.arguments?.getString("activityId").orEmpty()
+            com.fpclient.android.ui.activity.ActivityTrimScreen(
+                activityId = trimActivityId,
+                container = container,
+                appViewModel = appViewModel,
+                onBack = { navController.popBackStack() },
             )
         }
         // Personal records, reached from the Analytics "Personal records" tile.

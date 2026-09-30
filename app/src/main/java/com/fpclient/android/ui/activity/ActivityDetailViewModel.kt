@@ -34,7 +34,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fpclient.android.AppContainer
+import com.fpclient.android.data.dto.ActivityTrimDataDto
+import com.fpclient.android.data.dto.ActivityTrimPointDto
+import com.fpclient.android.data.dto.ActivityTrimSelection
 import com.fpclient.android.data.dto.ActivityUpdateRequest
+import com.fpclient.android.data.dto.toUpdateRequest
 import com.fpclient.android.data.dto.BoostDto
 import com.fpclient.android.data.dto.CommentDto
 import com.fpclient.android.data.dto.LikeDto
@@ -44,15 +48,23 @@ import com.fpclient.android.util.ActorHandle
 import com.fpclient.android.util.Format
 import com.fpclient.android.util.ShareLinks
 import com.fpclient.android.util.TrackParser
+import com.fpclient.android.util.TrimPreview
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ActivityDetailViewModel(
     private val activities: com.fpclient.android.data.repository.ActivityRepository,
     private val users: com.fpclient.android.data.repository.UserRepository,
     private val appViewModel: com.fpclient.android.ui.AppViewModel,
+    /** Bumped after a trim so list screens (timeline, profile, records) re-fetch instead of
+     * showing the activity's old distance. */
+    private val activitiesVersion: MutableStateFlow<Int>,
 ) : ViewModel() {
 
     data class UiState(
@@ -77,6 +89,64 @@ class ActivityDetailViewModel(
 
     private val _ui = MutableStateFlow(UiState(serverUrl = appViewModel.uiState.value.serverUrl))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
+
+    /**
+     * The trim workspace (`GET /api/web/activities/{id}/trim` + the `trim` field of the normal
+     * activity update). Only loaded when the trim screen is opened.
+     */
+    data class TrimUiState(
+        val loading: Boolean = false,
+        /** Server message when the source cannot be trimmed at all (manual activity, no original file, unsupported format, < 3 points). */
+        val error: String? = null,
+        val data: ActivityTrimDataDto? = null,
+        /** Slider positions — indices into [ActivityTrimDataDto.points] (the original track). */
+        val startIndex: Int = 0,
+        val endIndex: Int = 0,
+        /** The selection [preview] was computed for; lags the sliders by the preview debounce. */
+        val previewStartIndex: Int = 0,
+        val previewEndIndex: Int = 0,
+        val preview: TrimPreview.Result? = null,
+        val saving: Boolean = false,
+        /** Totals the instance reported for the last applied trim — authoritative, unlike [preview]. */
+        val applied: AppliedTrim? = null,
+    ) {
+        val points: List<ActivityTrimPointDto> get() = data?.points ?: emptyList()
+
+        /** Whether the selection still differs from the range the activity currently stores. */
+        val selectedRangeIsStored: Boolean
+            get() = data != null && startIndex == data.currentStartIndex && endIndex == data.currentEndIndex
+
+        /** The whole original track is selected (a way back from any previous trim). */
+        val selectedRangeIsOriginal: Boolean
+            get() = points.isNotEmpty() && startIndex == 0 && endIndex == points.lastIndex
+
+        /** The server rejects a range that keeps fewer than two points. */
+        val canApply: Boolean get() = data != null && startIndex < endIndex && !saving && !selectedRangeIsStored
+    }
+
+    /** What the instance stored for the last applied trim, so the screen never has to guess it. */
+    data class AppliedTrim(
+        val startIndex: Int,
+        val endIndex: Int,
+        val totalDistance: Double?,
+        val totalDurationSeconds: Long?,
+        val elevationGain: Double?,
+    )
+
+    private data class TrimSelection(val startIndex: Int, val endIndex: Int)
+
+    private val _trim = MutableStateFlow(TrimUiState())
+    val trim: StateFlow<TrimUiState> = _trim.asStateFlow()
+
+    /** Emits on every slider move; [init] debounces it so a drag recomputes the preview a few times, not sixty. */
+    private val trimSelection = MutableStateFlow(TrimSelection(0, 0))
+
+    init {
+        viewModelScope.launch {
+            @OptIn(FlowPreview::class)
+            trimSelection.debounce(PREVIEW_DEBOUNCE_MS).collect { selection -> computePreview(selection) }
+        }
+    }
 
     fun load(activityId: String) {
         viewModelScope.launch {
@@ -203,6 +273,136 @@ class ActivityDetailViewModel(
         }
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Trim workspace
+    // ---------------------------------------------------------------------------------------
+
+    /** Fetches the original track + stored range. Called when the trim screen is opened. */
+    fun loadTrimData(activityId: String) {
+        viewModelScope.launch {
+            _trim.value = TrimUiState(loading = true)
+            when (val r = activities.trimData(activityId)) {
+                is ApiResult.Success -> {
+                    _trim.value = trimStateFor(r.data)
+                    val state = _trim.value
+                    trimSelection.value = TrimSelection(state.startIndex, state.endIndex)
+                    // Compute immediately as well: an unchanged selection would not re-emit on the
+                    // debounced flow, and this is the state the dialog opens with.
+                    computePreview(TrimSelection(state.startIndex, state.endIndex))
+                }
+                is ApiResult.Error -> _trim.value = TrimUiState(error = r.message)
+            }
+        }
+    }
+
+    /** Moves the first retained point. Keeps at least one point before the end. */
+    fun setTrimStart(index: Int) {
+        val state = _trim.value
+        if (state.points.size < 2) return
+        updateTrimSelection(index.coerceIn(0, state.endIndex - 1), state.endIndex)
+    }
+
+    /** Moves the last retained point. Keeps at least one point after the start. */
+    fun setTrimEnd(index: Int) {
+        val state = _trim.value
+        if (state.points.size < 2) return
+        updateTrimSelection(state.startIndex, index.coerceIn(state.startIndex + 1, state.points.lastIndex))
+    }
+
+    /** Selects the whole original track — how a previous trim is undone. */
+    fun trimToOriginal() {
+        val state = _trim.value
+        if (state.points.size < 2) return
+        updateTrimSelection(0, state.points.lastIndex)
+    }
+
+    /**
+     * Applies the selection. A trim is not its own endpoint: the range rides along with the
+     * activity update, which is also why the request re-sends the metadata that update replaces
+     * ([toUpdateRequest]). The server then recalculates distance, duration, elevation, speed
+     * metrics, timezone and start location, and the response's totals are what the screen shows.
+     */
+    fun applyTrim(activityId: String) {
+        val state = _trim.value
+        val activity = _ui.value.activity ?: return
+        if (!state.canApply) return
+        val selection = ActivityTrimSelection(state.startIndex, state.endIndex)
+        viewModelScope.launch {
+            _trim.value = _trim.value.copy(saving = true, error = null)
+            when (val r = activities.update(activityId, activity.toUpdateRequest(selection))) {
+                is ApiResult.Success -> {
+                    val updated = r.data
+                    _trim.value = _trim.value.copy(
+                        saving = false,
+                        applied = AppliedTrim(
+                            startIndex = selection.startIndex,
+                            endIndex = selection.endIndex,
+                            totalDistance = updated.totalDistance,
+                            totalDurationSeconds = updated.totalDurationSeconds,
+                            elevationGain = updated.elevationGain,
+                        ),
+                    )
+                    activitiesVersion.value += 1
+                    load(activityId)
+                    reloadTrimData(activityId)
+                }
+                is ApiResult.Error -> _trim.value = _trim.value.copy(saving = false, error = r.message)
+            }
+        }
+    }
+
+    private fun updateTrimSelection(start: Int, end: Int) {
+        if (_trim.value.startIndex == start && _trim.value.endIndex == end) return
+        _trim.value = _trim.value.copy(startIndex = start, endIndex = end)
+        trimSelection.value = TrimSelection(start, end)
+    }
+
+    /** The workspace state for freshly loaded trim data, with the stored range selected. */
+    private fun trimStateFor(data: ActivityTrimDataDto): TrimUiState {
+        val last = maxOf(0, data.points.lastIndex)
+        val start = data.currentStartIndex.coerceIn(0, last)
+        val end = data.currentEndIndex.coerceIn(0, last)
+        return TrimUiState(
+            data = data,
+            startIndex = start,
+            endIndex = end,
+            previewStartIndex = start,
+            previewEndIndex = end,
+        )
+    }
+
+    /** Re-reads the workspace after a successful trim, keeping the "applied" report visible. */
+    private suspend fun reloadTrimData(activityId: String) {
+        val reported = _trim.value.applied
+        when (val r = activities.trimData(activityId)) {
+            is ApiResult.Success -> {
+                val state = trimStateFor(r.data)
+                _trim.value = state.copy(applied = reported)
+                trimSelection.value = TrimSelection(state.startIndex, state.endIndex)
+                computePreview(TrimSelection(state.startIndex, state.endIndex))
+            }
+            is ApiResult.Error -> _trim.value = _trim.value.copy(applied = reported, error = r.message)
+        }
+    }
+
+    /**
+     * Recomputes the preview for a settled selection off the main thread (the elevation pass is
+     * linear in the point count, and a long recording has tens of thousands of them).
+     */
+    private suspend fun computePreview(selection: TrimSelection) {
+        val data = _trim.value.data ?: return
+        val preview = withContext(Dispatchers.Default) {
+            TrimPreview.preview(data, selection.startIndex, selection.endIndex)
+        }
+        // The workspace may have been reloaded (or closed) while this ran.
+        if (_trim.value.data !== data) return
+        _trim.value = _trim.value.copy(
+            previewStartIndex = selection.startIndex,
+            previewEndIndex = selection.endIndex,
+            preview = preview,
+        )
+    }
+
     fun updateActivity(activityId: String, request: ActivityUpdateRequest) {
         viewModelScope.launch {
             when (val r = activities.update(activityId, request)) {
@@ -259,12 +459,16 @@ class ActivityDetailViewModel(
     }
 
     companion object {
+        /** How long a slider must sit still before the (off-main) preview is recomputed. */
+        private const val PREVIEW_DEBOUNCE_MS = 150L
+
         fun factory(container: AppContainer, appViewModel: com.fpclient.android.ui.AppViewModel): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ActivityDetailViewModel(
                     container.activityRepository,
                     container.userRepository,
                     appViewModel,
+                    container.activitiesVersion,
                 )
             }
         }

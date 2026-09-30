@@ -65,6 +65,16 @@ data class ActivityDto(
     val boostEligible: Boolean? = null,
     val privacyZones: List<PrivacyZonePreviewDto>? = null,
 ) {
+    /**
+     * Whether the trim workspace can be offered for this activity. The web editor gates its own
+     * Trim button on exactly these two things (`activities/edit.html`: `creationSource ===
+     * 'MANUAL' || !hasGpsTrack` hides it); anything else the server cannot trim (an unsupported
+     * source format, fewer than three points, points without timestamps) still answers the trim
+     * request with a 400 whose message the app shows as-is.
+     */
+    val isTrimmable: Boolean
+        get() = creationSource != "MANUAL" && hasGpsTrack == true
+
     val resolvedUsername: String?
         get() = username ?: ownerUsername ?: author?.username ?: owner?.username ?: user?.username
             ?: actorUri?.substringAfterLast('/')?.substringBefore('?')?.takeIf { it.isNotBlank() }
@@ -283,7 +293,7 @@ data class TrackPropertiesDto(
 )
 
 // ---------------------------------------------------------------------------
-// Activity update (title / description / visibility / type)
+// Activity update (title / description / visibility / type / trim)
 // ---------------------------------------------------------------------------
 
 @Serializable
@@ -293,9 +303,72 @@ data class ActivityUpdateRequest(
     /** Required by the server (PUT replaces metadata); preserve the current value when editing only title/description. */
     val visibility: String,
     val activityType: String? = null,
+    /**
+     * The server replaces the context with whatever this field carries, so it must be sent
+     * back for edits that are not about the context: a missing value clears a COMMUTE/RACE
+     * context, and clearing RACE also drops the activity's official result
+     * (`ActivityLifecycleService.updateActivity`).
+     */
     val context: String? = null,
     val indoor: Boolean? = null,
+    /** Keeps [ActivityTrimSelection] of the original track; null means "leave the track alone". */
+    val trim: ActivityTrimSelection? = null,
     val expectedUpdatedAt: String? = null,
+)
+
+/**
+ * The metadata a `PUT /api/web/activities/{id}` replaces. Each missing field is treated by the
+ * server as "clear it", so a screen that edits one thing (or only trims the track) must send the
+ * activity's current values back for the rest.
+ */
+fun ActivityDto.toUpdateRequest(trim: ActivityTrimSelection? = null): ActivityUpdateRequest =
+    ActivityUpdateRequest(
+        title = title.orEmpty(),
+        description = description,
+        visibility = visibility ?: ActivityVisibilities.PUBLIC,
+        // `context.name` is the enum name the server accepts back (COMMUTE/RACE).
+        context = context?.name,
+        trim = trim,
+    )
+
+// ---------------------------------------------------------------------------
+// Activity trimming — the workspace behind `GET /api/web/activities/{id}/trim`
+// ---------------------------------------------------------------------------
+
+/**
+ * The server's `ActivityTrimDataDTO`: the activity's **original, untrimmed** track (parsed
+ * again from the uploaded FIT/GPX/TCX file) plus the index range that is currently stored, so
+ * a trim can be widened again as well as narrowed.
+ */
+@Serializable
+data class ActivityTrimDataDto(
+    val points: List<ActivityTrimPointDto> = emptyList(),
+    val currentStartIndex: Int = 0,
+    val currentEndIndex: Int = -1,
+    val currentElevationGain: Double? = null,
+    val currentElevationLoss: Double? = null,
+    val originalElevationGain: Double? = null,
+    val originalElevationLoss: Double? = null,
+)
+
+/** One point of the original track. Indices address this list, not the stored track. */
+@Serializable
+data class ActivityTrimPointDto(
+    val index: Int = 0,
+    val timestamp: String? = null,
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val elevation: Double? = null,
+    val distance: Double? = null,
+    val speed: Double? = null,
+    val elevationSegment: Int = 0,
+)
+
+/** `{"startIndex": n, "endIndex": m}` — the range of original points to keep (server validates `start < end`). */
+@Serializable
+data class ActivityTrimSelection(
+    val startIndex: Int,
+    val endIndex: Int,
 )
 
 // ---------------------------------------------------------------------------

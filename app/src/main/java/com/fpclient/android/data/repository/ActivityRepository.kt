@@ -3,6 +3,7 @@ package com.fpclient.android.data.repository
 import android.content.Context
 import android.net.Uri
 import com.fpclient.android.data.dto.ActivityDto
+import com.fpclient.android.data.dto.ActivityTrimDataDto
 import com.fpclient.android.data.dto.ActivityUpdateRequest
 import com.fpclient.android.data.dto.BoostDto
 import com.fpclient.android.data.dto.CommentCreateRequest
@@ -45,6 +46,19 @@ class ActivityRepository(
                 return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
             }
             ApiResult.Success(response.body() ?: error("Empty update response"))
+        } catch (e: Exception) {
+            ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
+        }
+    }
+
+    /** The original (untrimmed) track plus the range currently stored, for the trim workspace. */
+    suspend fun trimData(id: String): ApiResult<ActivityTrimDataDto> {
+        return try {
+            val response = api.getActivityTrimData(id)
+            if (!response.isSuccessful) {
+                return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
+            }
+            ApiResult.Success(response.body() ?: error("Empty trim data response"))
         } catch (e: Exception) {
             ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
         }

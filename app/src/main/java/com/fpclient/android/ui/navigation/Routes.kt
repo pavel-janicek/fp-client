@@ -8,6 +8,8 @@ object Routes {
     const val PASSWORD_RESET = "password_reset"
     const val MAIN = "main"
     const val ACTIVITY_DETAIL = "activity/{activityId}"
+    /** Trim workspace for one activity's original GPS track (detail toolbar → ContentCut). */
+    const val ACTIVITY_TRIM = "activity/{activityId}/trim"
     // Optional query arg carries a file URI shared into the app (share sheet / "Open with").
     const val CREATE = "create?sharedUri={sharedUri}"
     const val PROFILE = "profile/{username}"
@@ -41,6 +43,7 @@ object Routes {
     const val FOLLOW_LIST = "follow_list/{username}/{type}"
 
     fun activityDetail(activityId: String) = "activity/$activityId"
+    fun activityTrim(activityId: String) = "activity/$activityId/trim"
     fun profile(username: String) = "profile/$username"
     fun followList(username: String, type: String) = "follow_list/$username/$type"
 
