@@ -193,7 +193,13 @@ private fun AuthFlowRoute(container: AppContainer, appViewModel: AppViewModel) {
             )
         }
         composable(Routes.REGISTER) {
-            RegisterRoute(container = container, onBack = { navController.popBackStack() })
+            val st by appViewModel.uiState.collectAsState()
+            RegisterRoute(
+                container = container,
+                serverUrl = st.serverUrl,
+                onBack = { navController.popBackStack() },
+                onChangeServer = { navController.navigate(Routes.SERVER_SETUP) },
+            )
         }
         composable(Routes.PASSWORD_RESET) {
             val vm: PasswordResetViewModel = viewModel(factory = PasswordResetViewModel.factory(container))
@@ -212,7 +218,12 @@ private fun AuthFlowRoute(container: AppContainer, appViewModel: AppViewModel) {
 }
 
 @Composable
-private fun RegisterRoute(container: AppContainer, onBack: () -> Unit) {
+private fun RegisterRoute(
+    container: AppContainer,
+    serverUrl: String,
+    onBack: () -> Unit,
+    onChangeServer: () -> Unit,
+) {
     val vm: RegisterViewModel = viewModel(factory = RegisterViewModel.factory(container))
     val busy by vm.busy.collectAsState()
     val error by vm.error.collectAsState()
@@ -220,6 +231,10 @@ private fun RegisterRoute(container: AppContainer, onBack: () -> Unit) {
     val awaitingCode by vm.awaitingCode.collectAsState()
     val verified by vm.verified.collectAsState()
     var pendingEmail by remember { mutableStateOf("") }
+
+    // The registration rules (enabled / password required) belong to the chosen instance,
+    // so reload them whenever the instance changes — e.g. after "Change instance".
+    LaunchedEffect(serverUrl) { vm.loadStatus() }
 
     when {
         verified == true -> return
@@ -234,11 +249,13 @@ private fun RegisterRoute(container: AppContainer, onBack: () -> Unit) {
             busy = busy,
             error = error,
             status = status,
+            serverUrl = serverUrl,
             onStart = { username, email, password, displayName, timezone ->
                 pendingEmail = email
                 vm.start(username, email, password, displayName, null, timezone, null)
             },
             onBack = onBack,
+            onChangeServer = onChangeServer,
         )
     }
 }
