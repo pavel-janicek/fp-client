@@ -1,0 +1,5 @@
+2.2.1 (release 2.2.1):
+- Creating an account now shows which instance you are joining, with a "Change instance" button right on that screen; the e-mail field checks that you really entered an e-mail address, and the form is centered on the screen.
+- Fix: on a private account, accepting or rejecting a follow request now dismisses it — the row shows "Accepted" or "Rejected" instead of keeping the Accept/Reject buttons, and a failed response is shown on the row instead of being ignored.
+- Fix: "Mark all read" on the Activity tab now also clears the FitPub push notifications from the notification shade — the launcher icon badge counts those, so it stayed until they were dismissed by hand.
+- Fix: the file button on the New activity screen no longer shows "{sharedUri}" when the screen is opened from the app — it asks you to choose a FIT / GPX / TCX file instead.
