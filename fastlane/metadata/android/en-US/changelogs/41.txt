@@ -9,3 +9,4 @@
 - Locked (followers-only) profiles now show the person's name and profile picture instead of only a handle, and Edit profile can preview the Gravatar your instance would fall back to if you removed your uploaded picture — looking changes nothing.
 - Creating an account now shows which instance you are joining, with a "Change instance" button right on that screen; the e-mail field checks that you really entered an e-mail address, and the form is centered on the screen.
 - Fixed a startup crash that could occur after the app was restored from a device backup.
+- Fix: on a private account, accepting or rejecting a follow request now dismisses it — the row shows "Accepted" or "Rejected" instead of keeping the Accept/Reject buttons, and a failed response is shown on the row instead of being ignored.
