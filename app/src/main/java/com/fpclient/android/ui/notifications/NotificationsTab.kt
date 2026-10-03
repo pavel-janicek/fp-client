@@ -62,7 +62,13 @@ fun NotificationsTabContent(
         ) {
             Text("Activity", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             Surface(
-                onClick = { viewModel.markAllRead() },
+                onClick = {
+                    viewModel.markAllRead()
+                    // Launcher badges count the app's active shade notifications, not the
+                    // server-side unread state — clear those too, or the icon kept showing
+                    // (1) until every push was dismissed by hand.
+                    PushNotifications.cancelAll(context)
+                },
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
