@@ -40,6 +40,7 @@ import com.fpclient.android.ui.auth.ServerSetupContent
 import com.fpclient.android.ui.auth.ServerSetupViewModel
 import com.fpclient.android.ui.auth.VerifyCodeContent
 import com.fpclient.android.ui.navigation.Routes
+import com.fpclient.android.ui.navigation.SharedUriArg
 import com.fpclient.android.ui.theme.FPClientTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -319,7 +320,7 @@ private fun FitPubNavGraph(
                 appViewModel = appViewModel,
                 onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
-                onOpenCreate = { navController.navigate(Routes.CREATE) },
+                onOpenCreate = { navController.navigate(Routes.create()) },
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
@@ -392,7 +393,11 @@ private fun FitPubNavGraph(
             )
         }
         composable(Routes.CREATE) { entry ->
-            val sharedUri = entry.arguments?.getString("sharedUri")?.let { Uri.parse(it) }
+            // Only a scheme-bearing URI (content://…) pre-selects a file: this rejects the
+            // literal "{sharedUri}" placeholder a navigation to the raw route pattern passes in.
+            val sharedUri = entry.arguments?.getString("sharedUri")
+                ?.takeIf { SharedUriArg.isFileUri(it) }
+                ?.let { Uri.parse(it) }
             com.fpclient.android.ui.create.CreateActivityScreen(
                 container = container,
                 appViewModel = appViewModel,

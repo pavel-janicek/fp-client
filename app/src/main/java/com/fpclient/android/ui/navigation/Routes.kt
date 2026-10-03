@@ -11,6 +11,9 @@ object Routes {
     /** Trim workspace for one activity's original GPS track (detail toolbar → ContentCut). */
     const val ACTIVITY_TRIM = "activity/{activityId}/trim"
     // Optional query arg carries a file URI shared into the app (share sheet / "Open with").
+    // Destination pattern only: navigating to it directly passes the unfilled "{sharedUri}"
+    // placeholder through as the literal argument value — open the screen with [create]
+    // (no file) or [createWithSharedUri] (shared file).
     const val CREATE = "create?sharedUri={sharedUri}"
     const val PROFILE = "profile/{username}"
     /** Personal records; reached from the Analytics "Personal records" tile. */
@@ -59,6 +62,9 @@ object Routes {
 
     /** Create screen with a pre-selected file from an incoming share/open intent. */
     fun createWithSharedUri(sharedUri: String) = "create?sharedUri=${android.net.Uri.encode(sharedUri)}"
+
+    /** Create screen opened from inside the app: no file pre-selected. */
+    fun create() = "create"
 
     /** Bottom navigation destinations shown on the main scaffold. */
     enum class BottomTab(
