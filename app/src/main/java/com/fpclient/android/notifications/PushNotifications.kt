@@ -100,6 +100,29 @@ object PushNotifications {
     }
 
     /**
+     * Whether a posted notification belongs to this object (it must live on [CHANNEL_ID]).
+     * The dismissal sweep in [cancelAll] keys on it so the ongoing track-recording and
+     * instant-delivery notifications — each on its own channel — survive.
+     */
+    internal fun isPushNotificationChannel(channelId: String?): Boolean = channelId == CHANNEL_ID
+
+    /**
+     * Dismisses every FitPub push notification at once: the 8f summary and all per-payload
+     * items. Launcher icon badges count the app's active shade notifications, not the
+     * server-side unread state, so "Mark all read" used to zero the in-app badge while the
+     * launcher kept showing (1) until every push was swiped away by hand (or the summary
+     * cancelled by opening the tab — [cancel] only covers that one notification). Only
+     * [CHANNEL_ID] is swept; [InstantDeliveryService][com.fpclient.android.notifications.InstantDeliveryService]
+     * and the track-recording service keep their ongoing notifications.
+     */
+    fun cancelAll(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.activeNotifications
+            .filter { isPushNotificationChannel(it.notification.channelId) }
+            .forEach { manager.cancel(it.tag, it.id) }
+    }
+
+    /**
      * Posts one decrypted mailbox push (Iteration 8h). The payload's `tag` is used both as the
      * Android collapse tag and to derive a stable notification id, so repeated pushes of the
      * same kind (e.g. `fitpub-activity_liked`) replace each other instead of stacking; the

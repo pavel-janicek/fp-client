@@ -43,6 +43,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * A follow request this session accepted or rejected, keyed by actor username in
+ * [NotificationsViewModel.UiState.followRequestOutcomes]. The server keeps the
+ * FOLLOW_REQUEST notification after the decision (it only flips `followRequestPending`),
+ * so this local record is what turns the row's buttons into a resolved label.
+ */
+enum class FollowRequestOutcome { ACCEPTED, REJECTED }
+
 class NotificationsViewModel(
     private val repository: NotificationRepository,
     private val users: com.fpclient.android.data.repository.UserRepository,
@@ -52,6 +60,13 @@ class NotificationsViewModel(
         val loading: Boolean = false,
         val error: String? = null,
         val items: List<NotificationDto> = emptyList(),
+        /** Username → decision this session completed; survives the post-action refresh. */
+        val followRequestOutcomes: Map<String, FollowRequestOutcome> = emptyMap(),
+        /** Username whose accept/reject POST is in flight (single-flight guard). */
+        val followRequestActingOn: String? = null,
+        /** Username the last action failure belongs to; shown inline on that row. */
+        val followRequestErrorUsername: String? = null,
+        val followRequestError: String? = null,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -102,17 +117,44 @@ class NotificationsViewModel(
         viewModelScope.launch { repository.delete(id); refreshSoft() }
     }
 
-    fun acceptFollowRequest(username: String) {
-        viewModelScope.launch {
-            users.acceptFollowRequest(username)
-            refreshSoft()
-        }
-    }
+    fun acceptFollowRequest(username: String) = respondToFollowRequest(username, accept = true)
 
-    fun rejectFollowRequest(username: String) {
+    fun rejectFollowRequest(username: String) = respondToFollowRequest(username, accept = false)
+
+    /**
+     * Posts the decision and records the outcome only when the server confirms it: the
+     * FOLLOW_REQUEST notification itself is never deleted, so the row's resolved label is
+     * what dismisses the request. Failures stay on the row instead of disappearing with
+     * the old fire-and-forget call that ignored the [ApiResult].
+     */
+    private fun respondToFollowRequest(username: String, accept: Boolean) {
+        if (_ui.value.followRequestActingOn != null) return
+        _ui.value = _ui.value.copy(
+            followRequestActingOn = username,
+            followRequestError = null,
+            followRequestErrorUsername = null,
+        )
         viewModelScope.launch {
-            users.rejectFollowRequest(username)
-            refreshSoft()
+            val result =
+                if (accept) users.acceptFollowRequest(username) else users.rejectFollowRequest(username)
+            when (result) {
+                is ApiResult.Success -> {
+                    val outcome =
+                        if (accept) FollowRequestOutcome.ACCEPTED else FollowRequestOutcome.REJECTED
+                    _ui.value = _ui.value.copy(
+                        followRequestActingOn = null,
+                        followRequestOutcomes = _ui.value.followRequestOutcomes +
+                            (username to outcome),
+                    )
+                    refreshSoft()
+                }
+                is ApiResult.Error -> _ui.value = _ui.value.copy(
+                    followRequestActingOn = null,
+                    followRequestErrorUsername = username,
+                    followRequestError = result.message
+                        ?: "Could not ${if (accept) "accept" else "reject"} the follow request",
+                )
+            }
         }
     }
 

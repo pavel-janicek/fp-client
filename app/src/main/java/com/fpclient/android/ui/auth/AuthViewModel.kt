@@ -117,10 +117,10 @@ class RegisterViewModel(
     private val _verified = MutableStateFlow<Boolean?>(null)
     val verified = _verified.asStateFlow()
 
-    init {
-        loadStatus()
-    }
-
+    /**
+     * Loads the registration rules of the *current* instance. Driven by the register route
+     * keyed on the server URL, so it re-runs after the user switches instance.
+     */
     fun loadStatus() {
         viewModelScope.launch {
             val status = auth.registrationStatus()

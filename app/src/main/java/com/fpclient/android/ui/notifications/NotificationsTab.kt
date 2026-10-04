@@ -32,6 +32,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fpclient.android.AppContainer
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.data.dto.NotificationDto
+import com.fpclient.android.data.dto.NotificationTypes
 import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.ui.components.EmptyState
 import com.fpclient.android.ui.components.ErrorState
@@ -61,7 +62,13 @@ fun NotificationsTabContent(
         ) {
             Text("Activity", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             Surface(
-                onClick = { viewModel.markAllRead() },
+                onClick = {
+                    viewModel.markAllRead()
+                    // Launcher badges count the app's active shade notifications, not the
+                    // server-side unread state — clear those too, or the icon kept showing
+                    // (1) until every push was dismissed by hand.
+                    PushNotifications.cancelAll(context)
+                },
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
@@ -77,8 +84,12 @@ fun NotificationsTabContent(
             ui.items.isEmpty() -> EmptyState(title = "No notifications yet")
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(ui.items, key = { it.id ?: "" }) { n ->
+                    val username = n.actorUsername
                     NotificationRow(
                         notification = n,
+                        outcome = username?.let { ui.followRequestOutcomes[it] },
+                        acting = ui.followRequestActingOn != null && ui.followRequestActingOn == username,
+                        actionError = if (username != null && ui.followRequestErrorUsername == username) ui.followRequestError else null,
                         onClick = {
                             if (!n.read) n.id?.let(viewModel::markRead)
                             val activityId = n.activityId
@@ -141,6 +152,9 @@ fun NotificationsScreen(
 @Composable
 private fun NotificationRow(
     notification: NotificationDto,
+    outcome: FollowRequestOutcome? = null,
+    acting: Boolean = false,
+    actionError: String? = null,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onAccept: () -> Unit = {},
@@ -173,13 +187,84 @@ private fun NotificationRow(
                     )
                 }
             }
-            if (notification.type == "FOLLOW_REQUEST") {
-                Spacer(Modifier.padding(top = 6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onAccept) { Text("Accept") }
-                    OutlinedButton(onClick = onReject) { Text("Reject") }
+            when (
+                followRequestAction(
+                    type = notification.type,
+                    actorUsername = notification.actorUsername,
+                    followRequestPending = notification.followRequestPending,
+                    outcome = outcome,
+                )
+            ) {
+                FollowRequestAction.BUTTONS -> {
+                    Spacer(Modifier.padding(top = 6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onAccept, enabled = !acting) { Text("Accept") }
+                        OutlinedButton(onClick = onReject, enabled = !acting) { Text("Reject") }
+                    }
+                    if (actionError != null) {
+                        Text(
+                            text = actionError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
                 }
+                FollowRequestAction.ACCEPTED -> {
+                    Spacer(Modifier.padding(top = 6.dp))
+                    Text(
+                        text = "✓ Accepted",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                FollowRequestAction.REJECTED -> {
+                    Spacer(Modifier.padding(top = 6.dp))
+                    Text(
+                        text = "✗ Rejected",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                FollowRequestAction.NONE -> Unit
             }
         }
     }
+}
+
+/**
+ * What the action area of a FOLLOW_REQUEST notification row shows.
+ *
+ * The server never deletes a follow-request notification: accepting or rejecting it only
+ * flips the `followRequestPending` flag the list response carries (the web UI in
+ * `templates/notifications.html` hides its buttons on that flag and swaps a successful
+ * press for an "Accepted"/"Rejected" label). The row used to render the buttons purely
+ * from `type == "FOLLOW_REQUEST"`, so a handled request still offered Accept/Reject.
+ */
+internal enum class FollowRequestAction { BUTTONS, ACCEPTED, REJECTED, NONE }
+
+/**
+ * Decides the row's action state.
+ *
+ * @param outcome a decision this session already completed for [actorUsername]; it wins
+ *   over the server flag so the label survives the post-action refresh.
+ */
+internal fun followRequestAction(
+    type: String?,
+    actorUsername: String?,
+    followRequestPending: Boolean?,
+    outcome: FollowRequestOutcome? = null,
+): FollowRequestAction {
+    if (type != NotificationTypes.FOLLOW_REQUEST) return FollowRequestAction.NONE
+    when (outcome) {
+        FollowRequestOutcome.ACCEPTED -> return FollowRequestAction.ACCEPTED
+        FollowRequestOutcome.REJECTED -> return FollowRequestAction.REJECTED
+        null -> Unit
+    }
+    // The accept/reject POST addresses a local username; without one there is no button
+    // to press (the web UI drops them for the same reason).
+    if (actorUsername == null) return FollowRequestAction.NONE
+    // Handled from the web UI or another device: keep the row, drop the buttons.
+    if (followRequestPending == false) return FollowRequestAction.NONE
+    return FollowRequestAction.BUTTONS
 }
