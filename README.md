@@ -27,12 +27,10 @@ Built with Kotlin and Jetpack Compose (Material 3).
 
 ## Where to get it
 
-### Google Play (closed beta)
+### Google Play - Production access
 
-1. Join the [FP Client Google Group](https://groups.google.com/g/fp-client)
-2. [Become a tester](https://play.google.com/apps/testing/com.fpclient.android)
-3. Install from the [Play Store](https://play.google.com/store/apps/details?id=com.fpclient.android)
-4. Use the app actively — it helps make it officially available to all Play users
+1. Either write "FP Client" to the search bar and download the green "FP Client" app by Pavel Janicek
+2. Or [Download it from Play store](https://play.google.com/store/apps/details?id=com.fpclient.android)
 
 ### APK
 
