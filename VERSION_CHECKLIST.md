@@ -7,6 +7,9 @@ this release".
 ## 1. Bump the version
 
 - [ ] `app/build.gradle.kts` — `versionCode` incremented by 1, `versionName` set to the new version
+- [ ] `wear/build.gradle.kts` — same `versionCode`/`versionName` as `:app`: the watch app is a
+      paired half of the same release (Play lists them together, and they must be signed with the
+      same key), so it moves in lockstep (Iteration 9a, see `docs/WEAR.md`)
 - [ ] `app/src/main/java/com/fpclient/android/FitPubApplication.kt` — osmdroid `Configuration.getInstance().userAgentValue = "FP-Client/<version>"`
 
 ## 2. Automatic propagation (no manual edit, but verify)

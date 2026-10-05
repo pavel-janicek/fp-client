@@ -42,6 +42,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FPClient">
 
+        <!-- Iteration 9a — Wear OS pairing metadata. Points the (legacy) Wear companion lookup
+             at res/xml/wear_app.xml, which names the :wear module's application id. The actual
+             watch APK is no longer embedded in this APK: AGP 9 removed the `wearApp` bundling
+             configuration, and Wear OS 3+ installs the watch app standalone. See docs/WEAR.md. -->
+        <meta-data
+            android:name="com.google.android.wearable.beta.app"
+            android:resource="@xml/wear_app" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -691,7 +691,7 @@ the sign-in authority and the upload relay.
 
 Suggested split into sub-steps (one prompt each if done iteratively):
 
-**9a — Module & project scaffolding**
+**9a — Module & project scaffolding** ✅ done (see docs/WEAR.md)
 > "Create a :wear Wear OS module (build.gradle.kts with com.android.application +
 > wearApp wiring in :app via wearApp/unstable bundled dependency, wear_app.xml
 > pairing metadata, minSdk matching Wear OS 3+ = API 26–30 target latest),

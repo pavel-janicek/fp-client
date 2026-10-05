@@ -1,0 +1,98 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
+android {
+    namespace = "com.fpclient.android.wear"
+    // Compile against API 37: the current Compose stack this module uses (BOM 2026.09.00 /
+    // Wear Compose 1.7.0) declares minCompileSdk 37 in its AAR metadata, so the compile-time
+    // floor moves up one API while behaviour does not — targetSdk stays 36 in lockstep with :app
+    // and minSdk stays 26. AGP 9 resolves `37` to the android-37.0 platform (since API 37 the
+    // minor release is part of the platform hash) and fetches it if it is missing.
+    compileSdk = 37
+
+    defaultConfig {
+        // The applicationId must start with :app's applicationId — Google Play requires the
+        // prefix so FP Client and FitPub Wear show up as one paired app in the console.
+        applicationId = "com.fpclient.android.wear"
+        // minSdk 26 matches :app's floor and covers the Wear OS 3+ fleet targeted by the PLAN
+        // (API 26–30 watches in the field; Wear OS 3 devices are API 30 and everything newer
+        // only raises the device API). targetSdk follows the same "target latest" rule as :app.
+        minSdk = 26
+        targetSdk = 36
+        // Kept in step with :app (same keystore, same version) so the two halves of the pair
+        // always advertise the same release — bump both together per VERSION_CHECKLIST.md.
+        versionCode = 42
+        versionName = "2.2.1"
+    }
+
+    signingConfigs {
+        // Same env-driven local release signing as :app. Play requires the watch APK and the
+        // phone APK to be signed with the SAME key for them to be treated as a pair, so both
+        // modules read the identical KEYSTORE_* environment variables.
+        if (System.getenv("KEYSTORE_PATH") != null) {
+            create("release") {
+                storeFile = file(System.getenv("KEYSTORE_PATH")!!)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    buildFeatures {
+        compose = true
+        // BuildConfig.VERSION_NAME/VERSION_CODE feed the About screen.
+        buildConfig = true
+    }
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+}
+
+dependencies {
+    // Compose stack follows Google's current Wear setup guide
+    // (developer.android.com/training/wearables/compose): the shared BOM pins the phone-style
+    // Compose artifacts to 1.12.x — the exact runtime Wear Compose 1.7.0 was released against.
+    // Deliberately a newer BOM than :app's 2024.09.03, because Wear Compose 1.7.0 needs
+    // Compose >= 1.10; its Kotlin metadata (stdlib 2.1.20) stays readable by this project's
+    // Kotlin 2.2.10 compose compiler plugin.
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+
+    // Compose for Wear OS (Iteration 9a). Note the artifact ids: the Wear libraries were never
+    // published as plain `material`/`navigation` — under the androidx.wear.compose group they are
+    // compose-foundation (curved layouts), compose-material (Wear Material components) and
+    // compose-navigation (SwipeDismissableNavHost). compose-material3 exists too but Iteration 9
+    // uses the classic Wear Material components named in the PLAN.
+    implementation("androidx.wear.compose:compose-foundation:1.7.0")
+    implementation("androidx.wear.compose:compose-material:1.7.0")
+    implementation("androidx.wear.compose:compose-navigation:1.7.0")
+    // compose-navigation only drags in navigation-compose 2.6.0 transitively, which predates the
+    // Compose 1.12 runtime above (it still touches compose-ui symbols that have since been
+    // removed). Pin the current stable instead: the NavHostController/NavGraphBuilder surface the
+    // Wear NavHost builds on has been stable since navigation 2.6.
+    implementation("androidx.navigation:navigation-compose:2.10.2")
+
+    // Layout previews for the round-screen composables (no emulator needed to eyeball them).
+    debugImplementation("androidx.compose.ui:ui-tooling")
+}
