@@ -48,6 +48,7 @@ fun HomeScreen(
     onOpenAbout: () -> Unit,
     authState: WearAuthState = WearAuthState(),
     phoneReachable: Boolean? = null,
+    authStatus: String? = null,
     pendingSyncCount: Int = 0,
     onRequestCredentials: () -> Unit = {},
     onSignOut: () -> Unit = {},
@@ -89,7 +90,9 @@ fun HomeScreen(
                 val identityText = when {
                     authState.isSignedIn -> "Device signed in as @${authState.username.ifBlank { "user" }}"
                     authState.expired -> "Sign-in expired. Sign in again on your phone."
+                    authStatus != null -> authStatus
                     phoneReachable == false -> "No paired phone is reachable"
+                    phoneReachable == null -> "Looking for phone…"
                     else -> "Not signed in yet"
                 }
                 Text(

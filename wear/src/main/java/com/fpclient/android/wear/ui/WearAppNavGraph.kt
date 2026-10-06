@@ -29,6 +29,7 @@ object WearRoutes {
 fun WearAppNavGraph(
     authState: WearAuthState = WearAuthState(),
     phoneReachable: Boolean? = null,
+    authStatus: String? = null,
     onRequestCredentials: () -> Unit = {},
     onSignOut: () -> Unit = {},
     workoutSnapshot: WorkoutRecordingSnapshot = WorkoutRecordingSnapshot(),
@@ -51,6 +52,7 @@ fun WearAppNavGraph(
                 onOpenAbout = { navController.navigate(WearRoutes.ABOUT) },
                 authState = authState,
                 phoneReachable = phoneReachable,
+                authStatus = authStatus,
                 pendingSyncCount = workoutSnapshot.pendingSyncCount,
                 onRequestCredentials = onRequestCredentials,
                 onSignOut = onSignOut,

@@ -1,5 +1,6 @@
 package com.fpclient.android.wear
 
+import android.util.Log
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Asset
 import com.google.android.gms.wearable.DataEvent
@@ -17,8 +18,12 @@ import kotlinx.coroutines.tasks.await
 
 class PhoneWearAuthService : WearableListenerService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    companion object {
+        private const val TAG = "PhoneWearAuth"
+    }
 
     override fun onMessageReceived(event: MessageEvent) {
+        Log.i(TAG, "onMessageReceived path=${event.path} from=${event.sourceNodeId}")
         val app = com.fpclient.android.FitPubApplication.from(this)
         when (event.path) {
             PhoneWearAuthProtocol.REQUEST_PATH -> serviceScope.launch {

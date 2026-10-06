@@ -1,6 +1,7 @@
 package com.fpclient.android.wear
 
 import android.content.Context
+import android.util.Log
 import com.fpclient.android.data.session.Session
 import com.fpclient.android.data.session.SessionStore
 import com.google.android.gms.wearable.CapabilityClient
@@ -50,8 +51,13 @@ internal object PhoneWearAuthRelay {
             "expired" -> PhoneWearAuthProtocol.EXPIRED_PATH
             else -> PhoneWearAuthProtocol.SIGNED_OUT_PATH
         }
-        Wearable.getMessageClient(context)
-            .sendMessage(nodeId, path, PhoneWearAuthProtocol.encode(message))
-            .await()
+        Log.i(TAG, "respondToRequest node=$nodeId type=${message.type}")
+        runCatching {
+            Wearable.getMessageClient(context)
+                .sendMessage(nodeId, path, PhoneWearAuthProtocol.encode(message))
+                .await()
+        }.onFailure { e -> Log.w(TAG, "reply to $nodeId failed", e) }
     }
+
+    private const val TAG = "PhoneWearAuth"
 }

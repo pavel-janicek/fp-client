@@ -9,6 +9,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.fpclient.android.wear.auth.CredentialRequestResult
 import com.fpclient.android.wear.auth.WatchWearAuthRelay
 import com.fpclient.android.wear.auth.WearAuthStore
 import com.fpclient.android.wear.recording.WorkoutRecordingBus
@@ -31,6 +32,8 @@ class WearMainActivity : ComponentActivity() {
     private lateinit var authStore: WearAuthStore
     private lateinit var authRelay: WatchWearAuthRelay
     private var phoneReachable by mutableStateOf<Boolean?>(null)
+    /** Transient handshake status shown on Home until the phone answers (9b diagnostics). */
+    private var authStatus by mutableStateOf<String?>(null)
     private var workoutSnapshot by mutableStateOf(WorkoutRecordingSnapshot())
     private var workoutPermissionError by mutableStateOf<String?>(null)
     private var pendingWorkoutType = WorkoutActivityType.RUN
@@ -60,6 +63,7 @@ class WearMainActivity : ComponentActivity() {
                 WearAppNavGraph(
                     authState = authState,
                     phoneReachable = phoneReachable,
+                    authStatus = authStatus,
                     onRequestCredentials = ::requestCredentials,
                     onSignOut = ::signOut,
                     workoutSnapshot = workoutSnapshot,
@@ -82,10 +86,27 @@ class WearMainActivity : ComponentActivity() {
 
     private fun requestCredentials() {
         phoneReachable = null
-        lifecycleScope.launch { phoneReachable = authRelay.requestCredentials() }
+        authStatus = "Looking for phone…"
+        lifecycleScope.launch {
+            when (val result = authRelay.requestCredentials()) {
+                CredentialRequestResult.SentAwaitingReply -> {
+                    phoneReachable = true
+                    authStatus = "Request sent — waiting for phone reply…"
+                }
+                CredentialRequestResult.NoPhoneFound -> {
+                    phoneReachable = false
+                    authStatus = null // Home already shows "No paired phone is reachable"
+                }
+                is CredentialRequestResult.SendFailed -> {
+                    phoneReachable = false
+                    authStatus = "Send failed: ${result.reason}"
+                }
+            }
+        }
     }
 
     private fun signOut() {
+        authStatus = null
         lifecycleScope.launch { phoneReachable = authRelay.signOut() }
     }
 
