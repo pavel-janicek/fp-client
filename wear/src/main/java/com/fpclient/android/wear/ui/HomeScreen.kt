@@ -39,8 +39,8 @@ import com.fpclient.android.wear.auth.WearAuthState
  *    a flat row, so it stays inside the bezel on round screens while still looking right on
  *    square ones (the arc simply lands on the bottom edge either way).
  *
- * The "Not signed in yet" line is the honest current state: the phone→watch sign-in handshake is
- * Iteration 9b and replaces it with "device signed in as @user".
+ * The identity line reflects the phone-relayed session; workout controls live on their own
+ * scrollable route so they do not compete with sign-in on the round display.
  */
 @Composable
 fun HomeScreen(
@@ -50,6 +50,7 @@ fun HomeScreen(
     phoneReachable: Boolean? = null,
     onRequestCredentials: () -> Unit = {},
     onSignOut: () -> Unit = {},
+    onOpenWorkout: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -125,6 +126,16 @@ fun HomeScreen(
                         fontSize = 11.sp * scale,
                         color = MaterialTheme.colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
+                    )
+                }
+                Card(
+                    onClick = onOpenWorkout,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "Workout",
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp * scale))

@@ -1,6 +1,7 @@
 package com.fpclient.android.wear
 
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
@@ -10,6 +11,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fpclient.android.wear.auth.WatchWearAuthRelay
 import com.fpclient.android.wear.auth.WearAuthStore
+import com.fpclient.android.wear.recording.WorkoutRecordingBus
+import com.fpclient.android.wear.recording.WorkoutRecordingController
+import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.ui.FitPubWearTheme
 import com.fpclient.android.wear.ui.WearAppNavGraph
 import kotlinx.coroutines.launch
@@ -17,22 +21,31 @@ import kotlinx.coroutines.launch
 /**
  * Launcher activity for FitPub Wear (Iteration 9a).
  *
- * Deliberately minimal: its job is to prove that the `:wear` module installs and launches on a
- * watch (or the Wear OS emulator) straight from Android Studio. The screens it shows are the
- * 9a navigation/scaffolding skeleton; the sign-in handshake state arrives with 9b and the
- * recording UX with 9d.
+ * Hosts the standalone watch UI and requests workout permissions in context before starting the
+ * foreground recording service.
  */
 class WearMainActivity : ComponentActivity() {
 
     private lateinit var authStore: WearAuthStore
     private lateinit var authRelay: WatchWearAuthRelay
     private var phoneReachable by mutableStateOf<Boolean?>(null)
+    private var workoutSnapshot by mutableStateOf(WorkoutRecordingSnapshot())
+    private var workoutPermissionError by mutableStateOf<String?>(null)
+
+    private val workoutPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        startWorkoutIfAllowed()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         authStore = WearAuthStore(this)
         authRelay = WatchWearAuthRelay(this, authStore)
         requestCredentials()
+        lifecycleScope.launch {
+            WorkoutRecordingBus.state.collect { workoutSnapshot = it }
+        }
         setContent {
             FitPubWearTheme {
                 val authState by authStore.state.collectAsState(initial = com.fpclient.android.wear.auth.WearAuthState())
@@ -41,6 +54,12 @@ class WearMainActivity : ComponentActivity() {
                     phoneReachable = phoneReachable,
                     onRequestCredentials = ::requestCredentials,
                     onSignOut = ::signOut,
+                    workoutSnapshot = workoutSnapshot,
+                    workoutPermissionError = workoutPermissionError,
+                    onStartWorkout = ::requestWorkoutStart,
+                    onPauseWorkout = { WorkoutRecordingController.pause(this) },
+                    onResumeWorkout = { WorkoutRecordingController.resume(this) },
+                    onStopWorkout = { WorkoutRecordingController.stop(this) },
                 )
             }
         }
@@ -53,5 +72,20 @@ class WearMainActivity : ComponentActivity() {
 
     private fun signOut() {
         lifecycleScope.launch { phoneReachable = authRelay.signOut() }
+    }
+
+    private fun requestWorkoutStart() {
+        workoutPermissionError = null
+        val missing = WorkoutRecordingController.missingPermissions(this)
+        if (missing.isEmpty()) startWorkoutIfAllowed() else workoutPermissionLauncher.launch(missing.toTypedArray())
+    }
+
+    private fun startWorkoutIfAllowed() {
+        if (!WorkoutRecordingController.canStart(this)) {
+            workoutPermissionError = "Grant a health or location permission to start recording."
+            return
+        }
+        WorkoutRecordingController.start(this)
+        workoutPermissionError = null
     }
 }

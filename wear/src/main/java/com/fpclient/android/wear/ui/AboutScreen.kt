@@ -14,8 +14,7 @@ import androidx.wear.compose.material.TimeText
 import com.fpclient.android.wear.BuildConfig
 
 /**
- * About screen (Iteration 9a): version plus the two facts a tester standing next to a watch
- * actually needs — how independent the module is, and what this build does *not* do yet.
+ * About screen: version, module independence, and the data this watch records.
  *
  * [ScalingLazyColumn] is the round-safe list: it scales and fades items towards the bezel so
  * nothing clips on a round display, and it scrolls with the crown/rotary input by default.
@@ -60,7 +59,8 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                 Text(
                     text = "The phone relays your FitPub sign-in to this watch. Data Layer " +
                         "messages are protected in transit; watch-side token encryption at " +
-                        "rest is a later hardening step. This build does not record workouts.",
+                        "rest remains a hardening step. GPS, heart rate and steps are recorded " +
+                        "only during a workout you start and stay on the watch until sync ships.",
                     style = MaterialTheme.typography.caption1,
                     color = MaterialTheme.colors.onSurfaceVariant,
                     textAlign = TextAlign.Center,

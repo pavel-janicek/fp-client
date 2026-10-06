@@ -17,10 +17,8 @@ android {
         // The Data Layer requires the same package name and signing certificate on both devices.
         // These APKs install on separate devices, so the watch shares :app's applicationId.
         applicationId = "com.fpclient.android"
-        // minSdk 26 matches :app's floor and covers the Wear OS 3+ fleet targeted by the PLAN
-        // (API 26–30 watches in the field; Wear OS 3 devices are API 30 and everything newer
-        // only raises the device API). targetSdk follows the same "target latest" rule as :app.
-        minSdk = 26
+        // Health Services is available on Wear OS 3+, which starts at API 30.
+        minSdk = 30
         targetSdk = 36
         // Kept in step with :app (same keystore, same version) so the two halves of the pair
         // always advertise the same release — bump both together per VERSION_CHECKLIST.md.
@@ -77,6 +75,7 @@ dependencies {
     // Kotlin 2.2.10 compose compiler plugin.
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.fragment:fragment-ktx:1.8.9")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
 
@@ -103,6 +102,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.health:health-services-client:1.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
 }

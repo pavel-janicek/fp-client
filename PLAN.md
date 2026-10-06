@@ -733,6 +733,17 @@ certificate required by Data Layer. Details and the trust boundary are in `docs/
 > ACTIVITY_RECOGNITION, location permissions; add availability detection
 > (no-GPS watches degrade gracefully to HR+steps+time)."
 
+✅ **Done.** `WorkoutRecordingService` is a `health|location` foreground service. It uses
+framework `LocationManager` GNSS (1 s / 1 m, rejects fixes worse than 20 m), Health Services
+`ExerciseClient` 1.1.0 for supported heart-rate data, and `SensorManager.TYPE_HEART_RATE` fallback;
+steps use `TYPE_STEP_COUNTER` with `TYPE_STEP_DETECTOR` fallback. Optional hardware is detected so
+no-GPS watches retain HR/steps/time. The state machine is `IDLE → RECORDING ⇄ PAUSED → STOPPED`;
+session state is committed synchronously and flushed JSONL GPS/HR/step events replay after a sticky
+restart to rebuild metrics. Runtime permissions include the API 36 `READ_HEART_RATE` migration
+(legacy `BODY_SENSORS` through API 35). Watch `minSdk` is now 30, matching Health Services' Wear OS
+3+ floor. A basic Workout control screen is present; 9d remains the full UX pass. Details:
+`docs/WEAR.md`.
+
 **9d — On-watch recording UX**
 > "Compose-for-Wear recording screens optimized for glanceability: big live HR
 > (color-coded zones) + duration + distance on one swipeable screen, map-less

@@ -1,19 +1,19 @@
-# FitPub Wear — architecture & decision record (Iteration 9a)
+# FitPub Wear — architecture & decision record (Iterations 9a–9c)
 
 `:wear` is the Wear OS companion module ("FitPub Wear"). It sits next to `:app` in the same
 Gradle build and lets athletes leave the phone at home: sign-in is relayed from the phone (9b),
 workouts are recorded on the watch's own sensors (9c/9d) and shared to the FitPub instance (9e).
 
-**Iterations 9a and 9b are delivered**: the standalone watch module launches a round-safe Compose
-UI and relays the phone's FitPub session over the Android Data Layer. The sections below document
-the module decisions and the sign-in security boundary.
+**Iterations 9a–9c are delivered**: the standalone watch module launches a round-safe Compose UI,
+relays the phone's FitPub session over the Android Data Layer, and records GPS/heart-rate/step data
+in a foreground service. The sections below document the module decisions and security boundary.
 
 ## Module map
 
 ```
 wear/
   build.gradle.kts                    com.android.application + compose plugin (AGP 9 built-in Kotlin)
-  proguard-rules.pro                  empty for now; serialization rules join in 9e
+  proguard-rules.pro                  release shrinking rules for the watch module
   src/main/AndroidManifest.xml        watch manifest: uses-feature type.watch, standalone flag,
                                       launcher activity (taskAffinity="" for the Wear recents tray)
   src/main/java/com/fpclient/android/wear/
@@ -25,6 +25,11 @@ wear/
     auth/WearAuthStore.kt             watch-local Preferences DataStore session snapshot
     auth/WatchWearAuthRelay.kt        capability discovery + request/revoke messages
     auth/WatchWearAuthService.kt      receives credential, signed-out and expired states
+    recording/WorkoutRecordingService.kt foreground recording service + sensor integration
+    recording/WorkoutRecordingState.kt StateFlow, transitions, sensor availability and metrics
+    recording/WorkoutTrackStore.kt   flushed JSONL event log, replayed after process death
+    recording/WorkoutSessionStore.kt synchronously restored active-session snapshot
+    ui/WorkoutControlScreen.kt       runtime permissions, sensor status and basic controls
   src/main/res/                       launcher icon (duplicated from :app, + monochrome layer),
                                       strings/colors/themes, data_extraction_rules.xml
 
@@ -41,8 +46,8 @@ app-side pairing (the only files 9a adds/changes in :app):
    automatically if the SDK is missing — this also happens on the CI runner.
 2. Create a **Wear OS** device (Device Manager → Wear OS category, e.g. a round API 30+ image)
    or use a physical watch with ADB debugging.
-3. Pick the **wear** run configuration and Run — the launcher activity opens with the Home
-   screen; the About card navigates, swipe-from-left-edge (or predictive back on API 36+) returns.
+3. Pick the **wear** run configuration and Run — Home opens; Workout requests sensor permissions
+    and provides basic start/pause/resume/stop controls. About and Workout use swipe dismissal.
 
 CI needs no workflow change: the existing root-level `./gradlew assembleDebug`,
 `testDebugUnitTest` and `lint` tasks cover `:wear` as soon as it is in `settings.gradle.kts`.
@@ -74,6 +79,36 @@ devices; a de-Googled pairing fallback remains out of scope for this iteration.
 
 The wire DTOs and message paths are intentionally duplicated in `:app` and `:wear` to preserve
 the modules' independent build graph; keep both protocol definitions synchronized.
+
+## Workout engine (Iteration 9c)
+
+`WorkoutRecordingService` is a `START_STICKY` foreground service declared as `health|location`.
+It owns the `IDLE → RECORDING ⇄ PAUSED → STOPPED` lifecycle, the ongoing workout notification,
+sensor registration, and the live `WorkoutRecordingBus.state` flow. The Workout screen requests
+runtime permissions before starting and displays available sensors; 9d will replace this small
+control surface with the full workout UX.
+
+GNSS uses framework `LocationManager.GPS_PROVIDER` (1 s / 1 m requests, fixes over 20 m accuracy
+discarded), avoiding a fused-location dependency. Heart rate uses `Health Services
+ExerciseClient` 1.1.0 on Wear OS 3+ after checking RUNNING capabilities; `SensorManager.TYPE_HEART_RATE`
+is the fallback when Health Services or its HR data type is unavailable. Steps use
+`TYPE_STEP_COUNTER`, falling back to `TYPE_STEP_DETECTOR`. GPS, heart rate and step features are
+optional and detected independently. Without GPS the service keeps HR/steps/time live and reports
+distance/pace as unavailable instead of blocking a workout.
+
+The manifest declares `BODY_SENSORS` through API 35 and `android.permission.health.READ_HEART_RATE`
+on API 36+, plus `ACTIVITY_RECOGNITION`, fine/coarse location, notification and health/location
+foreground-service permissions. The Health Services requirement moves the watch `minSdk` to API 30;
+the app still compiles against API 37 and targets API 36. Health Services allows only one active
+exercise across apps: the service reattaches to its own exercise after process death and does not
+start over another app's exercise.
+
+The session state is committed synchronously to private preferences; every GPS/HR/step update and
+pause/resume boundary is appended and flushed to `files/workouts/workout-<start>.jsonl`. On sticky
+service restart, the JSONL is replayed to rebuild distance, heart rate and steps, while elapsed time
+remains wall-clock based. Pause boundaries reset the GPS segment so distance across the paused gap
+is excluded. Track data is app-private but not encrypted at rest in this step; watch backups remain
+disabled, and at-rest hardening belongs in 9f before release.
 
 ## Decisions
 
@@ -126,11 +161,11 @@ What 9a does instead:
 - `app/build.gradle.kts` carries a comment at the dependencies block saying why there is
   deliberately **no** `wearApp(...)` line, pointing here.
 
-### 3. SDK levels: `minSdk 26`, `targetSdk 36`, `compileSdk 37`
+### 3. SDK levels: `minSdk 30`, `targetSdk 36`, `compileSdk 37`
 
-- **minSdk = 26** — same floor as `:app`, and the floor the PLAN picked for the Wear OS 3+ fleet
-  (API 26–30 watches in the field; Wear OS 3 itself is API 30, newer devices only raise the
-  number). Every supported watch satisfies it, and both modules keep one shared floor.
+- **minSdk = 30** — required by Health Services, which is available on Wear OS 3 / API 30 and
+  higher. This intentionally narrows the watch module's former API 26 floor to its actual Wear OS
+  3+ target; the phone module remains at API 26.
 - **targetSdk = 36** — "target latest" as of the PLAN, and in lockstep with `:app` so phone and
   watch opt into the same runtime behaviour.
 - **compileSdk = 37** — forced by the *libraries*, not by us: the current Compose stack
@@ -168,19 +203,21 @@ repo-specific choices:
 
 ### 6. Identity, pairing and hygiene
 
- **applicationId `com.fpclient.android` on both APKs** — Data Layer requires exact package and
+- **applicationId `com.fpclient.android` on both APKs** — Data Layer requires exact package and
  signing-certificate equality. The APKs install on separate devices; `wear_app.xml` points at
  this shared package identity.
 - **Same `versionCode`/`versionName` and same signing keystore** as `:app` (both modules read the
   identical `KEYSTORE_*` environment variables; release builds are unsigned when unset, which the
   F-Droid buildserver relies on). The version-bump step in `VERSION_CHECKLIST.md` now covers
-- **No permissions** in the watch manifest yet — 9a records nothing and talks to nothing; 9c adds
-  the sensor permissions, 9e adds `INTERNET`.
+  both files.
+- **Sensor permissions are runtime-gated** in the Workout screen. Optional GPS, heart-rate and
+  step-counter hardware declarations let sensor-poor watches install and run gracefully; 9e adds
+  `INTERNET` for direct upload.
 - **Backups off** (`allowBackup=false` + `fullBackupContent=false` + explicit
   `data_extraction_rules` excludes): the watch will hold the relayed sign-in token (9b) and raw
   health measurements (9c) — none of it may reach a cloud backup or device transfer.
 - **Launcher icon** is `:app`'s adaptive icon, un-gated from `mipmap-anydpi-v26` to
-  `mipmap-anydpi` (minSdk is already 26) and extended with a monochrome layer for themed icons.
+  `mipmap-anydpi` (minSdk is 30) and extended with a monochrome layer for themed icons.
 - **`android:taskAffinity=""`** on the launcher activity so it shows up correctly in the Wear OS
   recents tray (lint's `WearRecents` auto-fix value).
 - `./gradlew :wear:lintDebug` is clean (0 findings); release builds minify with R8 like `:app`.
@@ -188,9 +225,9 @@ repo-specific choices:
 ## What builds on this
 
 - **9b** — sign-in relay over the Data Layer; the first real candidate for `:core-shared` (decision 1).
-- **9c** — `WorkoutRecordingService` (GPS/HR/steps), Health Services; the manifest's "no
-  permissions yet" note is where those declarations will go.
-- **9d** — recording UX; Home/About become part of the real screen flow, ambient rendering lands.
+- **9c** — `WorkoutRecordingService` (GPS/HR/steps), Health Services, process-death persistence,
+  runtime permission gate and basic controls are delivered.
+- **9d** — full workout UX, activity-type picker, Ongoing Activity, ambient rendering and sensor QA.
 - **9e** — GPX/JSON serialization + upload; `wear/proguard-rules.pro` gains the serialization
   keep rules, and `INTERNET` joins the manifest.
 - **9f** — README Wear section, battery/sensor QA, multi-form-factor layout QA.

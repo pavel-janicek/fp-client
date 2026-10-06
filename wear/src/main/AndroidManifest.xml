@@ -1,13 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Iteration 9a: Wear OS launcher manifest. No permissions on purpose — the scaffolding
-         app neither records nor talks to anything; Iteration 9c adds the sensor permissions and
-         9e adds INTERNET for the upload paths. -->
+    <!-- Workout recording (Iteration 9c). Sensor features are optional: some watches lack GNSS,
+         a heart-rate sensor, or a step sensor and must still support the available metrics. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission
+        android:name="android.permission.BODY_SENSORS"
+        android:maxSdkVersion="35" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Marks this as a watch app rather than a phone-app variant; Play and the package manager
          use it to keep the APK off phones. -->
     <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.heartrate" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
 
     <!-- Backups are fully off on every Android version: allowBackup covers API ≤ 30,
          fullBackupContent=false is the Android 11- spelling lint expects alongside
@@ -40,6 +54,11 @@
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpub/auth" />
             </intent-filter>
         </service>
+
+        <service
+            android:name=".recording.WorkoutRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="health|location" />
 
         <activity
             android:name=".WearMainActivity"

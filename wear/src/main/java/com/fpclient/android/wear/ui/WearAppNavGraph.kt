@@ -7,11 +7,13 @@ import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.fpclient.android.wear.BuildConfig
 import com.fpclient.android.wear.auth.WearAuthState
+import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 
 /** Route table for the watch nav graph — one entry per Iteration 9 screen as they land. */
 object WearRoutes {
     const val HOME = "home"
     const val ABOUT = "about"
+    const val WORKOUT = "workout"
 }
 
 /**
@@ -28,6 +30,13 @@ fun WearAppNavGraph(
     phoneReachable: Boolean? = null,
     onRequestCredentials: () -> Unit = {},
     onSignOut: () -> Unit = {},
+    workoutSnapshot: WorkoutRecordingSnapshot = WorkoutRecordingSnapshot(),
+    workoutPermissionError: String? = null,
+    onOpenWorkout: () -> Unit = {},
+    onStartWorkout: () -> Unit = {},
+    onPauseWorkout: () -> Unit = {},
+    onResumeWorkout: () -> Unit = {},
+    onStopWorkout: () -> Unit = {},
     navController: NavHostController = rememberSwipeDismissableNavController(),
 ) {
     SwipeDismissableNavHost(
@@ -42,10 +51,21 @@ fun WearAppNavGraph(
                 phoneReachable = phoneReachable,
                 onRequestCredentials = onRequestCredentials,
                 onSignOut = onSignOut,
+                onOpenWorkout = { navController.navigate(WearRoutes.WORKOUT) },
             )
         }
         composable(WearRoutes.ABOUT) {
             AboutScreen()
+        }
+        composable(WearRoutes.WORKOUT) {
+            WorkoutControlScreen(
+                snapshot = workoutSnapshot,
+                permissionError = workoutPermissionError,
+                onStart = onStartWorkout,
+                onPause = onPauseWorkout,
+                onResume = onResumeWorkout,
+                onStop = onStopWorkout,
+            )
         }
     }
 }
