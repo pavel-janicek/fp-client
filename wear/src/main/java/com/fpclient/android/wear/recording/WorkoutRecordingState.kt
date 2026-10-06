@@ -8,11 +8,50 @@ import kotlinx.serialization.Serializable
 enum class WorkoutStatus { IDLE, RECORDING, PAUSED, STOPPED }
 
 @Serializable
+enum class WorkoutActivityType(val label: String) {
+    RUN("Run"),
+    WALK("Walk"),
+    HIKE("Hike"),
+    BIKE("Bike"),
+    OTHER("Other");
+
+    companion object {
+        fun fromStorage(value: String?): WorkoutActivityType =
+            entries.firstOrNull { it.name == value } ?: RUN
+    }
+}
+
+enum class WorkoutHeartRateZone(val label: String) {
+    EASY("EASY"),
+    AEROBIC("AEROBIC"),
+    TEMPO("TEMPO"),
+    THRESHOLD("THRESHOLD"),
+    PEAK("PEAK");
+
+    companion object {
+        const val GENERIC_MAX_HEART_RATE_BPM = 190
+
+        fun fromBpm(bpm: Int?): WorkoutHeartRateZone? {
+            if (bpm == null || bpm !in 1..300) return null
+            val percent = bpm * 100 / GENERIC_MAX_HEART_RATE_BPM
+            return when {
+                percent < 60 -> EASY
+                percent < 70 -> AEROBIC
+                percent < 80 -> TEMPO
+                percent < 90 -> THRESHOLD
+                else -> PEAK
+            }
+        }
+    }
+}
+
+@Serializable
 data class WorkoutSessionSnapshot(
     val status: WorkoutStatus,
     val startedAtEpochMs: Long,
     val accumulatedMovingMs: Long,
     val resumedAtEpochMs: Long?,
+    val activityType: WorkoutActivityType = WorkoutActivityType.RUN,
 ) {
     fun elapsedMsAt(nowEpochMs: Long): Long = (nowEpochMs - startedAtEpochMs).coerceAtLeast(0L)
 
@@ -55,11 +94,15 @@ data class WorkoutRecordingSnapshot(
 }
 
 object WorkoutSessionTransitions {
-    fun start(nowEpochMs: Long) = WorkoutSessionSnapshot(
+    fun start(
+        nowEpochMs: Long,
+        activityType: WorkoutActivityType = WorkoutActivityType.RUN,
+    ) = WorkoutSessionSnapshot(
         WorkoutStatus.RECORDING,
         nowEpochMs,
         accumulatedMovingMs = 0L,
         resumedAtEpochMs = nowEpochMs,
+        activityType = activityType,
     )
 
     fun pause(session: WorkoutSessionSnapshot, nowEpochMs: Long): WorkoutSessionSnapshot? =

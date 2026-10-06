@@ -741,7 +741,7 @@ no-GPS watches retain HR/steps/time. The state machine is `IDLE → RECORDING �
 session state is committed synchronously and flushed JSONL GPS/HR/step events replay after a sticky
 restart to rebuild metrics. Runtime permissions include the API 36 `READ_HEART_RATE` migration
 (legacy `BODY_SENSORS` through API 35). Watch `minSdk` is now 30, matching Health Services' Wear OS
-3+ floor. A basic Workout control screen is present; 9d remains the full UX pass. Details:
+3+ floor. Details:
 `docs/WEAR.md`.
 
 **9d — On-watch recording UX**
@@ -752,6 +752,16 @@ restart to rebuild metrics. Runtime permissions include the API 36 `READ_HEART_R
 > Activity API integration so the workout appears on the watch face/in the
 > recents tray; optional Tile ('Start workout') and complication. Handle
 > always-on/ambient rendering with burn-in protection."
+
+✅ **Done.** The Workout route is a round-safe two-page Compose-for-Wear pager: the glance page
+shows large color-zoned HR, duration and distance; the second page has the Run/Walk/Hike/Bike/Other
+picker, sensor summary, pace/steps and dedicated pause/resume/stop controls. The selected type is
+persisted with the session and configures Health Services. The map remains absent. `OngoingActivity`
+1.1.0 attaches a tappable icon to the watch face and a stopwatch status to Recents; Compose ambient
+mode enables always-on behavior, returns to the glance page, blanks stale sensor values, hides
+controls and uses a mostly black display with system burn-in shifting. HR colors currently use a
+generic 190 bpm reference rather than individualized zones. Tiles and complications remain
+optional. See `docs/WEAR.md`.
 
 **9e — Sync & share to FitPub**
 > "Post-workout sync: serialize the recorded session (GPX 1.1 for the track +

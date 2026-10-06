@@ -11,6 +11,9 @@ object WorkoutRecordingController {
     internal const val ACTION_PAUSE = "com.fpclient.android.wear.recording.PAUSE"
     internal const val ACTION_RESUME = "com.fpclient.android.wear.recording.RESUME"
     internal const val ACTION_STOP = "com.fpclient.android.wear.recording.STOP"
+    internal const val ACTION_AMBIENT = "com.fpclient.android.wear.recording.AMBIENT"
+    internal const val EXTRA_ACTIVITY_TYPE = "workout_activity_type"
+    internal const val EXTRA_IS_AMBIENT = "workout_is_ambient"
 
     fun runtimePermissions(): Array<String> = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -45,13 +48,36 @@ object WorkoutRecordingController {
         return locationGranted || healthPermission || activityGranted
     }
 
-    fun start(context: Context) = send(context, ACTION_START, foreground = true)
+    fun start(
+        context: Context,
+        activityType: WorkoutActivityType = WorkoutActivityType.RUN,
+    ) = send(
+        context,
+        ACTION_START,
+        foreground = true,
+        activityType = activityType.name,
+    )
     fun pause(context: Context) = send(context, ACTION_PAUSE)
     fun resume(context: Context) = send(context, ACTION_RESUME)
     fun stop(context: Context) = send(context, ACTION_STOP)
 
-    private fun send(context: Context, action: String, foreground: Boolean = false) {
-        val intent = Intent(context, WorkoutRecordingService::class.java).setAction(action)
+    fun setAmbientMode(context: Context, isAmbient: Boolean) {
+        context.startService(
+            Intent(context, WorkoutRecordingService::class.java)
+                .setAction(ACTION_AMBIENT)
+                .putExtra(EXTRA_IS_AMBIENT, isAmbient),
+        )
+    }
+
+    private fun send(
+        context: Context,
+        action: String,
+        foreground: Boolean = false,
+        activityType: String? = null,
+    ) {
+        val intent = Intent(context, WorkoutRecordingService::class.java)
+            .setAction(action)
+            .putExtra(EXTRA_ACTIVITY_TYPE, activityType)
         if (foreground) ContextCompat.startForegroundService(context, intent) else context.startService(intent)
     }
 

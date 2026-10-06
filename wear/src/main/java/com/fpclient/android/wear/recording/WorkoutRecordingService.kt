@@ -18,6 +18,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.health.services.client.ExerciseClient
@@ -29,6 +30,8 @@ import androidx.health.services.client.data.ExerciseConfig
 import androidx.health.services.client.data.ExerciseState
 import androidx.health.services.client.data.ExerciseType
 import androidx.health.services.client.data.ExerciseUpdate
+import androidx.wear.ongoing.OngoingActivity
+import androidx.wear.ongoing.Status
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,6 +41,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.guava.await
+
+private fun WorkoutActivityType.toHealthExerciseType(): ExerciseType = when (this) {
+    WorkoutActivityType.RUN -> ExerciseType.RUNNING
+    WorkoutActivityType.WALK -> ExerciseType.WALKING
+    WorkoutActivityType.HIKE -> ExerciseType.HIKING
+    WorkoutActivityType.BIKE -> ExerciseType.BIKING
+    WorkoutActivityType.OTHER -> ExerciseType.WORKOUT
+}
 
 class WorkoutRecordingService : Service(), SensorEventListener {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -60,6 +71,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private var errorMessage: String? = null
     private var healthCallback: ExerciseUpdateCallback? = null
     private var ticker: Job? = null
+    private var ambientMode = false
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) = onGpsFix(location)
@@ -83,12 +95,21 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             WorkoutRecordingController.ACTION_START -> {
-                if (session == null || session?.status == WorkoutStatus.STOPPED) beginSession()
+                if (session == null || session?.status == WorkoutStatus.STOPPED) {
+                    beginSession(intent.getStringExtra(WorkoutRecordingController.EXTRA_ACTIVITY_TYPE))
+                }
                 else promoteAndRestartSensors()
             }
             WorkoutRecordingController.ACTION_PAUSE -> pauseSession()
             WorkoutRecordingController.ACTION_RESUME -> resumeSession()
             WorkoutRecordingController.ACTION_STOP -> stopSession()
+            WorkoutRecordingController.ACTION_AMBIENT -> {
+                ambientMode = intent.getBooleanExtra(WorkoutRecordingController.EXTRA_IS_AMBIENT, false)
+                if (session?.status == WorkoutStatus.RECORDING) {
+                    ticker?.cancel()
+                    startTicker()
+                }
+            }
             else -> restoreAfterRestart()
         }
         return START_STICKY
@@ -116,11 +137,11 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
-    private fun beginSession() {
+    private fun beginSession(activityTypeName: String?) {
         val now = System.currentTimeMillis()
         errorMessage = null
         metrics = WorkoutMetricsAccumulator()
-        val fresh = WorkoutSessionTransitions.start(now)
+        val fresh = WorkoutSessionTransitions.start(now, WorkoutActivityType.fromStorage(activityTypeName))
         session = fresh
         sessionStore.save(fresh)
         if (!appendBoundary(fresh.startedAtEpochMs, "START")) {
@@ -402,15 +423,16 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         }
         try {
             val capabilities = client.getCapabilitiesAsync().await()
-            if (ExerciseType.RUNNING !in capabilities.supportedExerciseTypes) {
+            val exerciseType = session?.activityType?.toHealthExerciseType() ?: ExerciseType.WORKOUT
+            if (exerciseType !in capabilities.supportedExerciseTypes) {
                 healthServicesAvailable = false
                 healthHeartRateAvailable = false
                 startFallbackHeartRate()
                 refreshAvailability()
                 return
             }
-            val running = capabilities.getExerciseTypeCapabilities(ExerciseType.RUNNING)
-            if (DataType.HEART_RATE_BPM !in running.supportedDataTypes) {
+            val exerciseCapabilities = capabilities.getExerciseTypeCapabilities(exerciseType)
+            if (DataType.HEART_RATE_BPM !in exerciseCapabilities.supportedDataTypes) {
                 healthServicesAvailable = false
                 healthHeartRateAvailable = false
                 startFallbackHeartRate()
@@ -461,7 +483,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             if (existingExercise?.exerciseType == null || existingExercise.exerciseType == ExerciseType.UNKNOWN) {
                 client.startExerciseAsync(
                     ExerciseConfig(
-                        exerciseType = ExerciseType.RUNNING,
+                        exerciseType = exerciseType,
                         dataTypes = setOf(DataType.HEART_RATE_BPM),
                         isAutoPauseAndResumeEnabled = false,
                         isGpsEnabled = false,
@@ -524,7 +546,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         runCatching {
             trackStore.append(current.startedAtEpochMs, event)
             metrics.add(event)
-            publish()
+            if (!ambientMode) publish()
         }.onFailure {
             publishError("Workout data could not be saved. Stop the workout and check watch storage.")
             stopSession()
@@ -536,8 +558,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         ticker = serviceScope.launch {
             while (isActive && session?.status == WorkoutStatus.RECORDING) {
                 publish()
-                refreshNotification()
-                delay(TICK_INTERVAL_MS)
+                delay(if (ambientMode) AMBIENT_TICK_INTERVAL_MS else TICK_INTERVAL_MS)
             }
         }
     }
@@ -613,7 +634,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun buildNotification(): Notification {
         val current = session
         val paused = current?.status == WorkoutStatus.PAUSED
-        val elapsedSeconds = current?.elapsedMsAt(System.currentTimeMillis())?.div(1000L) ?: 0L
+        val elapsedMs = current?.elapsedMsAt(System.currentTimeMillis()) ?: 0L
+        val elapsedSeconds = elapsedMs / 1000L
         val title = if (paused) "Workout paused" else "Workout recording"
         val contentIntent = PendingIntent.getActivity(
             this,
@@ -624,17 +646,43 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val action = if (paused) WorkoutRecordingController.ACTION_RESUME else WorkoutRecordingController.ACTION_PAUSE
         val actionLabel = if (paused) "Resume" else "Pause"
         val actionIcon = if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle(title)
             .setContentText("${elapsedSeconds / 60}:${(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed")
+            .setWhen(System.currentTimeMillis() - elapsedMs)
+            .setUsesChronometer(!paused)
             .setContentIntent(contentIntent)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(actionIcon, actionLabel, servicePendingIntent(action, action.hashCode()))
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", servicePendingIntent(WorkoutRecordingController.ACTION_STOP, 2))
+
+        val status = Status.Builder()
+            .addTemplate("#activity# #time#")
+            .addPart("activity", Status.TextPart(current?.activityType?.label ?: "Workout"))
+            .addPart(
+                "time",
+                if (paused) {
+                    Status.TextPart("${elapsedSeconds / 60}:${(elapsedSeconds % 60).toString().padStart(2, '0')} paused")
+                } else {
+                    Status.StopwatchPart(SystemClock.elapsedRealtime() - elapsedMs)
+                },
+            )
             .build()
+        val ongoingActivity = OngoingActivity.Builder(this, NOTIFICATION_ID, notificationBuilder)
+            .setStaticIcon(com.fpclient.android.wear.R.drawable.ic_launcher_foreground)
+            .setTouchIntent(contentIntent)
+            .setTitle("${current?.activityType?.label ?: "Workout"} in progress")
+            .setContentDescription("${current?.activityType?.label ?: "Workout"} recording")
+            .setStatus(status)
+            .build()
+        if (Build.VERSION.SDK_INT < 33 || hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
+            ongoingActivity.apply(this)
+        }
+        return notificationBuilder.build()
     }
 
     private fun servicePendingIntent(action: String, requestCode: Int) = PendingIntent.getService(
@@ -651,6 +699,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         private const val LOCATION_INTERVAL_MS = 1_000L
         private const val LOCATION_MIN_DISTANCE_METERS = 1f
         private const val TICK_INTERVAL_MS = 1_000L
+        private const val AMBIENT_TICK_INTERVAL_MS = 60_000L
         private const val MIN_HEART_RATE_BPM = 20
         private const val MAX_HEART_RATE_BPM = 250
     }

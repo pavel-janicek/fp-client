@@ -14,6 +14,7 @@ import com.fpclient.android.wear.auth.WearAuthStore
 import com.fpclient.android.wear.recording.WorkoutRecordingBus
 import com.fpclient.android.wear.recording.WorkoutRecordingController
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
+import com.fpclient.android.wear.recording.WorkoutActivityType
 import com.fpclient.android.wear.ui.FitPubWearTheme
 import com.fpclient.android.wear.ui.WearAppNavGraph
 import kotlinx.coroutines.launch
@@ -31,6 +32,7 @@ class WearMainActivity : ComponentActivity() {
     private var phoneReachable by mutableStateOf<Boolean?>(null)
     private var workoutSnapshot by mutableStateOf(WorkoutRecordingSnapshot())
     private var workoutPermissionError by mutableStateOf<String?>(null)
+    private var pendingWorkoutType = WorkoutActivityType.RUN
 
     private val workoutPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -60,6 +62,13 @@ class WearMainActivity : ComponentActivity() {
                     onPauseWorkout = { WorkoutRecordingController.pause(this) },
                     onResumeWorkout = { WorkoutRecordingController.resume(this) },
                     onStopWorkout = { WorkoutRecordingController.stop(this) },
+                    onAmbientModeChanged = { isAmbient ->
+                        if (workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.RECORDING ||
+                            workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.PAUSED
+                        ) {
+                            WorkoutRecordingController.setAmbientMode(this, isAmbient)
+                        }
+                    },
                 )
             }
         }
@@ -74,7 +83,8 @@ class WearMainActivity : ComponentActivity() {
         lifecycleScope.launch { phoneReachable = authRelay.signOut() }
     }
 
-    private fun requestWorkoutStart() {
+    private fun requestWorkoutStart(activityType: WorkoutActivityType) {
+        pendingWorkoutType = activityType
         workoutPermissionError = null
         val missing = WorkoutRecordingController.missingPermissions(this)
         if (missing.isEmpty()) startWorkoutIfAllowed() else workoutPermissionLauncher.launch(missing.toTypedArray())
@@ -85,7 +95,7 @@ class WearMainActivity : ComponentActivity() {
             workoutPermissionError = "Grant a health or location permission to start recording."
             return
         }
-        WorkoutRecordingController.start(this)
+        WorkoutRecordingController.start(this, pendingWorkoutType)
         workoutPermissionError = null
     }
 }

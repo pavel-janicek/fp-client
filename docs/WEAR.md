@@ -1,10 +1,10 @@
-# FitPub Wear — architecture & decision record (Iterations 9a–9c)
+# FitPub Wear — architecture & decision record (Iterations 9a–9d)
 
 `:wear` is the Wear OS companion module ("FitPub Wear"). It sits next to `:app` in the same
 Gradle build and lets athletes leave the phone at home: sign-in is relayed from the phone (9b),
 workouts are recorded on the watch's own sensors (9c/9d) and shared to the FitPub instance (9e).
 
-**Iterations 9a–9c are delivered**: the standalone watch module launches a round-safe Compose UI,
+**Iterations 9a–9d are delivered**: the standalone watch module launches a round-safe Compose UI,
 relays the phone's FitPub session over the Android Data Layer, and records GPS/heart-rate/step data
 in a foreground service. The sections below document the module decisions and security boundary.
 
@@ -85,8 +85,7 @@ the modules' independent build graph; keep both protocol definitions synchronize
 `WorkoutRecordingService` is a `START_STICKY` foreground service declared as `health|location`.
 It owns the `IDLE → RECORDING ⇄ PAUSED → STOPPED` lifecycle, the ongoing workout notification,
 sensor registration, and the live `WorkoutRecordingBus.state` flow. The Workout screen requests
-runtime permissions before starting and displays available sensors; 9d will replace this small
-control surface with the full workout UX.
+runtime permissions before starting and displays available sensors.
 
 GNSS uses framework `LocationManager.GPS_PROVIDER` (1 s / 1 m requests, fixes over 20 m accuracy
 discarded), avoiding a fused-location dependency. Heart rate uses `Health Services
@@ -109,6 +108,24 @@ service restart, the JSONL is replayed to rebuild distance, heart rate and steps
 remains wall-clock based. Pause boundaries reset the GPS segment so distance across the paused gap
 is excluded. Track data is app-private but not encrypted at rest in this step; watch backups remain
 disabled, and at-rest hardening belongs in 9f before release.
+
+## On-watch recording UX (Iteration 9d)
+
+The Workout destination is a two-page horizontal pager. Its first page centers the current heart
+rate in a color-coded zone, elapsed time, and distance. The second page holds the activity picker
+(Run, Walk, Hike, Bike, Other), sensor summary, pace/steps and dedicated Pause/Resume/Stop controls.
+The selected activity type is part of the synchronously persisted session and configures the
+matching Health Services exercise type. There is no map in the default workout view.
+
+Heart-rate colors currently use generic zones against a 190 bpm reference maximum; they are a
+visual intensity cue, not age- or user-calibrated training guidance. Ambient mode is managed by
+Compose's `rememberAmbientModeManager`, which enables always-on rendering while the workout is
+visible. In ambient mode the UI returns to the main page, uses a black background, removes controls,
+and blanks fast-changing HR/distance values. It leaves edge clearance and pixel shifting to the
+system's burn-in protection. The service also throttles StateFlow/notification refreshes to once
+per minute in ambient mode. The ongoing notification is paired with `OngoingActivity` 1.1.0, with
+a static watch-face icon, tappable return intent, and elapsed status in the watch-face and Recents
+surfaces. Tiles and complications remain optional follow-up work.
 
 ## Decisions
 
@@ -184,6 +201,7 @@ repo-specific choices:
 |---|---|---|
 | `androidx.compose:compose-bom` | 2026.09.00 | Google's own pairing for Wear Compose 1.7.0; resolves Compose to 1.12.x. Newer than `:app`'s 2024.09.03 on purpose — Wear Compose 1.7.0 needs Compose ≥ 1.10. |
 | `androidx.wear.compose:compose-foundation/material/navigation` | 1.7.0 | Latest stable Wear Compose, released together as one version line. **Artifact-id note:** the PLAN wrote `androidx.wear.compose:material`/`navigation`, but those coordinates do not exist on Google Maven — the published ids are `compose-material`, `compose-navigation`, `compose-foundation`. Classic Wear Material (1.x), not the newer `compose-material3`, because that is what the PLAN names. |
+| `androidx.wear:wear-ongoing` | 1.1.0 | Ongoing workout indicator on the watch face and in Recents, using the stable Wear Ongoing Activity API. |
 | `androidx.navigation:navigation-compose` | 2.10.2 | `compose-navigation` transitively pulls 2.6.0, which predates the Compose 1.12 runtime (removed compose-ui symbols) — pin current stable. The `NavHostController`/`NavGraphBuilder` surface the Wear NavHost uses has been stable since 2.6. |
 | `androidx.activity:activity-compose` | 1.13.0 | Google's snippet for the same guide; supplies `ComponentActivity.setContent`. |
 | Kotlin/Compose compiler plugin | 2.2.10 (project-wide) | The BOM/Wear artifacts are built with kotlin-stdlib 2.1.20 metadata — readable by 2.2.10; no forward-metadata problem. |
@@ -227,7 +245,7 @@ repo-specific choices:
 - **9b** — sign-in relay over the Data Layer; the first real candidate for `:core-shared` (decision 1).
 - **9c** — `WorkoutRecordingService` (GPS/HR/steps), Health Services, process-death persistence,
   runtime permission gate and basic controls are delivered.
-- **9d** — full workout UX, activity-type picker, Ongoing Activity, ambient rendering and sensor QA.
+- **9d** — glance UI, activity picker, Ongoing Activity and ambient rendering are delivered; sensor QA remains in 9f.
 - **9e** — GPX/JSON serialization + upload; `wear/proguard-rules.pro` gains the serialization
   keep rules, and `INTERNET` joins the manifest.
 - **9f** — README Wear section, battery/sensor QA, multi-form-factor layout QA.

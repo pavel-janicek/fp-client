@@ -8,6 +8,7 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.fpclient.android.wear.BuildConfig
 import com.fpclient.android.wear.auth.WearAuthState
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
+import com.fpclient.android.wear.recording.WorkoutActivityType
 
 /** Route table for the watch nav graph — one entry per Iteration 9 screen as they land. */
 object WearRoutes {
@@ -33,10 +34,11 @@ fun WearAppNavGraph(
     workoutSnapshot: WorkoutRecordingSnapshot = WorkoutRecordingSnapshot(),
     workoutPermissionError: String? = null,
     onOpenWorkout: () -> Unit = {},
-    onStartWorkout: () -> Unit = {},
+    onStartWorkout: (WorkoutActivityType) -> Unit = {},
     onPauseWorkout: () -> Unit = {},
     onResumeWorkout: () -> Unit = {},
     onStopWorkout: () -> Unit = {},
+    onAmbientModeChanged: (Boolean) -> Unit = {},
     navController: NavHostController = rememberSwipeDismissableNavController(),
 ) {
     SwipeDismissableNavHost(
@@ -65,6 +67,7 @@ fun WearAppNavGraph(
                 onPause = onPauseWorkout,
                 onResume = onResumeWorkout,
                 onStop = onStopWorkout,
+                onAmbientModeChanged = onAmbientModeChanged,
             )
         }
     }

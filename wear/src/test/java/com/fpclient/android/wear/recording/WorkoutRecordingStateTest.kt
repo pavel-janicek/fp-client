@@ -9,15 +9,26 @@ import org.junit.Test
 
 class WorkoutRecordingStateTest {
     @Test
+    fun heartRateZonesUseGenericMaximumAndRejectMissingReadings() {
+        assertNull(WorkoutHeartRateZone.fromBpm(null))
+        assertEquals(WorkoutHeartRateZone.EASY, WorkoutHeartRateZone.fromBpm(113))
+        assertEquals(WorkoutHeartRateZone.AEROBIC, WorkoutHeartRateZone.fromBpm(114))
+        assertEquals(WorkoutHeartRateZone.TEMPO, WorkoutHeartRateZone.fromBpm(133))
+        assertEquals(WorkoutHeartRateZone.THRESHOLD, WorkoutHeartRateZone.fromBpm(152))
+        assertEquals(WorkoutHeartRateZone.PEAK, WorkoutHeartRateZone.fromBpm(171))
+    }
+
+    @Test
     fun stateMachineMovesIdleRecordingPausedStopped() {
         val initial = WorkoutRecordingSnapshot()
-        val started = WorkoutSessionTransitions.start(1_000L)
+        val started = WorkoutSessionTransitions.start(1_000L, WorkoutActivityType.BIKE)
         val paused = WorkoutSessionTransitions.pause(started, 6_000L)!!
         val resumed = WorkoutSessionTransitions.resume(paused, 10_000L)!!
         val stopped = WorkoutSessionTransitions.stop(resumed, 13_000L)
 
         assertEquals(WorkoutStatus.IDLE, initial.status)
         assertEquals(WorkoutStatus.RECORDING, started.status)
+        assertEquals(WorkoutActivityType.BIKE, started.activityType)
         assertEquals(5_000L, paused.accumulatedMovingMs)
         assertEquals(8_000L, stopped.accumulatedMovingMs)
         assertEquals(WorkoutStatus.STOPPED, stopped.status)
@@ -73,7 +84,13 @@ class WorkoutRecordingStateTest {
 
     @Test
     fun snapshotJsonRoundTripsAndRejectsCorruptData() {
-        val snapshot = WorkoutSessionSnapshot(WorkoutStatus.RECORDING, 10L, 2L, 8L)
+        val snapshot = WorkoutSessionSnapshot(
+            WorkoutStatus.RECORDING,
+            10L,
+            2L,
+            8L,
+            WorkoutActivityType.HIKE,
+        )
 
         assertEquals(snapshot, WorkoutSessionStore.decode(WorkoutSessionStore.encode(snapshot)))
         assertNull(WorkoutSessionStore.decode("not-json"))

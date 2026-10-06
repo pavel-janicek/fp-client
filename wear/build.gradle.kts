@@ -103,6 +103,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.wear:wear:1.4.0")
+    implementation("androidx.wear:wear-ongoing:1.1.0")
     implementation("androidx.health:health-services-client:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
 
