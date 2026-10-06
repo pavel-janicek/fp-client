@@ -48,6 +48,7 @@ fun HomeScreen(
     onOpenAbout: () -> Unit,
     authState: WearAuthState = WearAuthState(),
     phoneReachable: Boolean? = null,
+    pendingSyncCount: Int = 0,
     onRequestCredentials: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onOpenWorkout: () -> Unit = {},
@@ -133,7 +134,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "Workout",
+                        text = if (pendingSyncCount > 0) "Workout ($pendingSyncCount pending)" else "Workout",
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )

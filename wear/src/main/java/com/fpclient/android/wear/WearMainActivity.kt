@@ -45,6 +45,8 @@ class WearMainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         authStore = WearAuthStore(this)
         authRelay = WatchWearAuthRelay(this, authStore)
+        val syncStore = com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this)
+        WorkoutRecordingBus.publishPendingCount(syncStore.all().size)
         WorkoutSyncScheduler.schedulePeriodic(this)
         requestCredentials()
         lifecycleScope.launch {

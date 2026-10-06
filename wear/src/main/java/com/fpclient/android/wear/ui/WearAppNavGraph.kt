@@ -51,6 +51,7 @@ fun WearAppNavGraph(
                 onOpenAbout = { navController.navigate(WearRoutes.ABOUT) },
                 authState = authState,
                 phoneReachable = phoneReachable,
+                pendingSyncCount = workoutSnapshot.pendingSyncCount,
                 onRequestCredentials = onRequestCredentials,
                 onSignOut = onSignOut,
                 onOpenWorkout = { navController.navigate(WearRoutes.WORKOUT) },

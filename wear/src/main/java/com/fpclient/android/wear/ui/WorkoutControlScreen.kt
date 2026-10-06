@@ -176,6 +176,9 @@ private fun WorkoutControlsPage(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        if (snapshot.pendingSyncCount > 0) {
+            item { ControlMetric("${snapshot.pendingSyncCount} pending sync") }
+        }
         if (snapshot.status == WorkoutStatus.IDLE || snapshot.status == WorkoutStatus.STOPPED) {
             WorkoutActivityType.entries.forEach { type ->
                 item {
@@ -193,7 +196,6 @@ private fun WorkoutControlsPage(
                 }
             }
         } else {
-            item { ControlMetric("${snapshot.pendingSyncCount} pending sync") }
             item { ControlMetric("${snapshot.steps} steps") }
             item { ControlMetric("${formatPace(snapshot.paceSecondsPerKm)} /km") }
             item { ControlMetric(sensorSummary(snapshot)) }

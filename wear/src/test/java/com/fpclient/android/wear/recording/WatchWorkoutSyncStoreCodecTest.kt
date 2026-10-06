@@ -24,4 +24,19 @@ class WatchWorkoutSyncStoreCodecTest {
         assertEquals(listOf(pending), WatchWorkoutSyncStore.decode(WatchWorkoutSyncStore.encode(listOf(pending))))
         assertTrue(WatchWorkoutSyncStore.decode("broken").isEmpty())
     }
+
+    @Test
+    fun watchProtocolConstantsMatchDataLayerContract() {
+        assertEquals("/fitpub/workout/", WorkoutSyncProtocol.DATA_PATH_PREFIX)
+        assertEquals("/fitpub/workout/synced", WorkoutSyncProtocol.ACK_PATH)
+        assertEquals("session_id", WorkoutSyncProtocol.KEY_ID)
+        assertEquals("activity_type", WorkoutSyncProtocol.KEY_ACTIVITY_TYPE)
+        assertEquals("title", WorkoutSyncProtocol.KEY_TITLE)
+        assertEquals("description", WorkoutSyncProtocol.KEY_DESCRIPTION)
+        assertEquals("visibility", WorkoutSyncProtocol.KEY_VISIBILITY)
+        assertEquals("owner_server", WorkoutSyncProtocol.KEY_OWNER_SERVER)
+        assertEquals("owner_username", WorkoutSyncProtocol.KEY_OWNER_USERNAME)
+        assertEquals("workout_gpx", WorkoutSyncProtocol.ASSET_GPX)
+        assertEquals("workout_sidecar", WorkoutSyncProtocol.ASSET_SIDECAR)
+    }
 }
