@@ -173,6 +173,6 @@ fun HomeScreen(
 @Composable
 private fun HomeScreenPreview() {
     FitPubWearTheme {
-        HomeScreen(versionName = "2.2.1", onOpenAbout = {})
+        HomeScreen(versionName = "3.0.0-alpha", onOpenAbout = {})
     }
 }

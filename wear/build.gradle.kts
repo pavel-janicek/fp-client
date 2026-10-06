@@ -22,8 +22,8 @@ android {
         targetSdk = 34
         // Kept in step with :app (same keystore, same version) so the two halves of the pair
         // always advertise the same release — bump both together per VERSION_CHECKLIST.md.
-        versionCode = 42
-        versionName = "2.2.1"
+        versionCode = 43
+        versionName = "3.0.0-alpha"
     }
 
     signingConfigs {
