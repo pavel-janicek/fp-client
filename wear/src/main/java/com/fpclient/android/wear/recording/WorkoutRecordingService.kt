@@ -32,6 +32,7 @@ import androidx.health.services.client.data.ExerciseType
 import androidx.health.services.client.data.ExerciseUpdate
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
+import com.fpclient.android.wear.auth.WearAuthStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,6 +42,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.flow.first
 
 private fun WorkoutActivityType.toHealthExerciseType(): ExerciseType = when (this) {
     WorkoutActivityType.RUN -> ExerciseType.RUNNING
@@ -54,6 +56,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var sessionStore: WorkoutSessionStore
     private lateinit var trackStore: WorkoutTrackStore
+    private lateinit var syncStore: WatchWorkoutSyncStore
     private lateinit var metrics: WorkoutMetricsAccumulator
     private lateinit var sensorManager: SensorManager
     private lateinit var locationManager: LocationManager
@@ -85,6 +88,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         super.onCreate()
         sessionStore = WorkoutSessionStore(this)
         trackStore = WorkoutTrackStore(filesDir.resolve(TRACK_DIRECTORY))
+        syncStore = WatchWorkoutSyncStore(this)
+        WorkoutRecordingBus.publishPendingCount(syncStore.all().size)
         metrics = WorkoutMetricsAccumulator()
         sensorManager = getSystemService(SensorManager::class.java)
         locationManager = getSystemService(LocationManager::class.java)
@@ -188,7 +193,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             stopSelf()
             return
         }
-        session = WorkoutSessionTransitions.stop(current, System.currentTimeMillis())
+        val stoppedAt = System.currentTimeMillis()
+        session = WorkoutSessionTransitions.stop(current, stoppedAt)
+        val stoppedSession = session!!
         sessionStore.save(session!!)
         runCatching {
             trackStore.append(current.startedAtEpochMs, WorkoutTrackEvent(System.currentTimeMillis(), boundary = "STOP"))
@@ -204,6 +211,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         healthHeartRateAvailable = false
         healthCallback = null
         serviceScope.launch {
+            queueStoppedWorkout(stoppedSession, stoppedAt)
             if (shouldEndExercise && client != null) {
                 runCatching { client.endExerciseAsync().await() }
                 if (callback != null) runCatching { client.clearUpdateCallbackAsync(callback).await() }
@@ -230,8 +238,40 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         metrics = WorkoutMetricsAccumulator()
         trackStore.readEvents(current.startedAtEpochMs).forEach(metrics::add)
         publish()
-        if (current.status == WorkoutStatus.RECORDING) promoteAndRestartSensors()
-        else stopSelf()
+        when (current.status) {
+            WorkoutStatus.RECORDING -> promoteAndRestartSensors()
+            WorkoutStatus.STOPPED -> serviceScope.launch {
+                queueStoppedWorkout(current, System.currentTimeMillis())
+                stopSelf()
+            }
+            else -> stopSelf()
+        }
+    }
+
+    private suspend fun queueStoppedWorkout(stoppedSession: WorkoutSessionSnapshot, stoppedAt: Long) {
+        if (syncStore.get(stoppedSession.startedAtEpochMs) != null) return
+        val events = trackStore.readEvents(stoppedSession.startedAtEpochMs)
+        val title = "${stoppedSession.activityType.label} workout"
+        val exported = runCatching {
+            WorkoutExportWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
+        }.getOrElse {
+            publishError("Workout export could not be saved. Check watch storage.")
+            return
+        }
+        val auth = WearAuthStore(this).state.first()
+        syncStore.upsert(
+            PendingWatchWorkout(
+                sessionId = stoppedSession.startedAtEpochMs,
+                gpxFileName = exported.gpxFile.name,
+                sidecarFileName = exported.sidecarFile.name,
+                activityType = stoppedSession.activityType.name,
+                title = title,
+                ownerServerUrl = auth.serverUrl.takeIf { auth.isSignedIn }.orEmpty(),
+                ownerUsername = auth.username.takeIf { auth.isSignedIn }.orEmpty(),
+                createdAtEpochMs = stoppedAt,
+            ),
+        )
+        WorkoutSyncScheduler.enqueue(this)
     }
 
     private fun promoteAndRestartSensors() {

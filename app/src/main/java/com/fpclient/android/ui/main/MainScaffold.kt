@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fpclient.android.AppContainer
@@ -44,6 +45,7 @@ import com.fpclient.android.ui.notifications.NotificationsViewModel
 import com.fpclient.android.ui.profile.ProfileScreen
 import com.fpclient.android.ui.record.RecordingBanner
 import com.fpclient.android.ui.timeline.TimelineScreen
+import com.fpclient.android.wear.PhoneWorkoutSyncScheduler
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,6 +87,8 @@ fun MainScaffold(
 
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
+    val watchWorkoutPending by container.wearWorkoutInboxStore.pendingCount.collectAsState()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -123,6 +127,22 @@ fun MainScaffold(
             // App-wide "recording in progress" banner (Iteration 8c): visible above
             // every tab while a GPS session runs; tapping it opens the live screen.
             RecordingBanner(onOpen = onOpenRecord)
+            if (watchWorkoutPending > 0) {
+                androidx.compose.material3.Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        container.wearWorkoutInboxStore.retryBlocked()
+                        PhoneWorkoutSyncScheduler.enqueue(context)
+                    },
+                ) {
+                    Text(
+                        text = "$watchWorkoutPending watch workout(s) waiting to sync · tap to retry",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
             val modifier = Modifier.weight(1f).fillMaxWidth()
             when (Routes.BottomTab.valueOf(selectedTab)) {
             Routes.BottomTab.TIMELINE -> TimelineScreen(

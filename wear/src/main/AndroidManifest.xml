@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Workout recording (Iteration 9c). Sensor features are optional: some watches lack GNSS,
          a heart-rate sensor, or a step sensor and must still support the available metrics. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -52,6 +54,10 @@
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpub/auth" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:path="/fitpub/workout/synced" />
             </intent-filter>
         </service>
 

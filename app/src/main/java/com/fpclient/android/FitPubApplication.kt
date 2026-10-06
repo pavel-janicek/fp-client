@@ -7,6 +7,7 @@ import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.wear.PhoneWearAuthRelay
+import com.fpclient.android.wear.PhoneWorkoutSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +24,7 @@ class FitPubApplication : Application() {
         super.onCreate()
         container = AppContainer(this)
         PhoneWearAuthRelay.start(this, container.sessionStore, applicationScope)
+        PhoneWorkoutSyncScheduler.schedulePeriodic(this)
 
         // Background notification delivery (Iteration 8f): create the channel up front so the
         // OS-level toggle for it is visible in system settings even before the first poll, and

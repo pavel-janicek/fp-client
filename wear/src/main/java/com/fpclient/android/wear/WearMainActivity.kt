@@ -15,6 +15,7 @@ import com.fpclient.android.wear.recording.WorkoutRecordingBus
 import com.fpclient.android.wear.recording.WorkoutRecordingController
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutActivityType
+import com.fpclient.android.wear.recording.WorkoutSyncScheduler
 import com.fpclient.android.wear.ui.FitPubWearTheme
 import com.fpclient.android.wear.ui.WearAppNavGraph
 import kotlinx.coroutines.launch
@@ -44,6 +45,7 @@ class WearMainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         authStore = WearAuthStore(this)
         authRelay = WatchWearAuthRelay(this, authStore)
+        WorkoutSyncScheduler.schedulePeriodic(this)
         requestCredentials()
         lifecycleScope.launch {
             WorkoutRecordingBus.state.collect { workoutSnapshot = it }

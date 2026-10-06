@@ -18,6 +18,7 @@ import com.fpclient.android.data.repository.UserRepository
 import com.fpclient.android.notifications.NotificationPollStore
 import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.recording.RecordingShareManager
+import com.fpclient.android.wear.WearWorkoutInboxStore
 import com.fpclient.android.data.session.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -93,4 +94,6 @@ class AppContainer(context: Context) {
     val recordingShareManager: RecordingShareManager by lazy {
         RecordingShareManager(context, activityRepository, activitiesVersion)
     }
+
+    val wearWorkoutInboxStore: WearWorkoutInboxStore by lazy { WearWorkoutInboxStore(context) }
 }

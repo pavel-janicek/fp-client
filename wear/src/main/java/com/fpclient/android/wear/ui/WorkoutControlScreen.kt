@@ -193,6 +193,7 @@ private fun WorkoutControlsPage(
                 }
             }
         } else {
+            item { ControlMetric("${snapshot.pendingSyncCount} pending sync") }
             item { ControlMetric("${snapshot.steps} steps") }
             item { ControlMetric("${formatPace(snapshot.paceSecondsPerKm)} /km") }
             item { ControlMetric(sensorSummary(snapshot)) }

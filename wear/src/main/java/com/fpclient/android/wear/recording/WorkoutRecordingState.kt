@@ -89,6 +89,7 @@ data class WorkoutRecordingSnapshot(
     val steps: Int = 0,
     val availability: WorkoutSensorAvailability = WorkoutSensorAvailability(),
     val errorMessage: String? = null,
+    val pendingSyncCount: Int = 0,
 ) {
     val status: WorkoutStatus get() = session?.status ?: WorkoutStatus.IDLE
 }
@@ -131,6 +132,10 @@ object WorkoutRecordingBus {
 
     fun publish(snapshot: WorkoutRecordingSnapshot) {
         mutableState.value = snapshot
+    }
+
+    fun publishPendingCount(count: Int) {
+        mutableState.value = mutableState.value.copy(pendingSyncCount = count.coerceAtLeast(0))
     }
 }
 
