@@ -4,10 +4,9 @@
 Gradle build and lets athletes leave the phone at home: sign-in is relayed from the phone (9b),
 workouts are recorded on the watch's own sensors (9c/9d) and shared to the FitPub instance (9e).
 
-**Iteration 9a delivered the scaffolding only**: a module that compiles, installs on a watch (or
-the Wear OS emulator) straight from Android Studio, launches a minimal round-safe Compose UI, and
-is wired for pairing with `:app`. Everything below documents what was decided while building it
-and why.
+**Iterations 9a and 9b are delivered**: the standalone watch module launches a round-safe Compose
+UI and relays the phone's FitPub session over the Android Data Layer. The sections below document
+the module decisions and the sign-in security boundary.
 
 ## Module map
 
@@ -23,13 +22,17 @@ wear/
     ui/WearAppNavGraph.kt             SwipeDismissableNavHost graph: home → about
     ui/HomeScreen.kt                  round-safe landing screen (BoxWithConstraints + curved rim)
     ui/AboutScreen.kt                 version / independence / privacy facts (ScalingLazyColumn)
+    auth/WearAuthStore.kt             watch-local Preferences DataStore session snapshot
+    auth/WatchWearAuthRelay.kt        capability discovery + request/revoke messages
+    auth/WatchWearAuthService.kt      receives credential, signed-out and expired states
   src/main/res/                       launcher icon (duplicated from :app, + monochrome layer),
                                       strings/colors/themes, data_extraction_rules.xml
 
 app-side pairing (the only files 9a adds/changes in :app):
-  app/src/main/res/xml/wear_app.xml           <wearableApp package="com.fpclient.android.wear"/>
+  app/src/main/res/xml/wear_app.xml           <wearableApp package="com.fpclient.android"/>
   app/src/main/AndroidManifest.xml            meta-data com.google.android.wearable.beta.app
-  app/build.gradle.kts                         comment explaining the absent wearApp dependency
+  app/build.gradle.kts                         Wearable Data Layer dependency
+  app/src/main/java/.../wear/                  phone session relay and listener service
 ```
 
 ## Running it from Android Studio
@@ -43,6 +46,34 @@ app-side pairing (the only files 9a adds/changes in :app):
 
 CI needs no workflow change: the existing root-level `./gradlew assembleDebug`,
 `testDebugUnitTest` and `lint` tasks cover `:wear` as soon as it is in `settings.gradle.kts`.
+
+## Sign-in relay (Iteration 9b)
+
+The phone advertises `fitpub_phone`; the watch advertises `fitpub_watch`. Both APKs use the exact
+same application ID (`com.fpclient.android`) and signing certificate, as required by the Data
+Layer; they install on separate devices. The watch resolves
+reachable `fitpub_phone` nodes with `CapabilityClient`, then sends a `MessageClient` request.
+The phone listener reads the current `SessionStore` snapshot and responds only to the requesting
+watch with the normalized `serverUrl`, JWT bearer token, username and display name. Phone session
+changes are also broadcast only to reachable nodes advertising `fitpub_watch`, so unrelated
+Wearable-connected devices do not receive the token.
+
+Signing out on the phone (including the interceptor's stale-token 401 path) sends a signed-out or
+expired message that clears the watch's stored credentials. The watch's Sign out action clears
+its local copy first and sends a revoke message to the phone, which clears `SessionStore`; if no
+phone is reachable, the local watch sign-out still succeeds. A watch with no reachable phone
+shows that state and can retry the handshake. A stale phone token is represented separately as
+“Sign-in expired” and is refreshed by requesting credentials again after signing in on the phone.
+
+The Data Layer protects messages in transit with Google Play services' device-to-device
+transport encryption (TLS-equivalent protection). The JWT is still stored in the watch's
+Preferences DataStore, which is not encrypted at rest in this step. Watch-side encryption at rest
+remains a release-hardening follow-up; the phone continues to store its JWT in its existing
+Keystore-backed encrypted preferences. The Data Layer requires Google Play services on both
+devices; a de-Googled pairing fallback remains out of scope for this iteration.
+
+The wire DTOs and message paths are intentionally duplicated in `:app` and `:wear` to preserve
+the modules' independent build graph; keep both protocol definitions synchronized.
 
 ## Decisions
 
@@ -137,12 +168,12 @@ repo-specific choices:
 
 ### 6. Identity, pairing and hygiene
 
-- **applicationId `com.fpclient.android.wear`** — must start with `:app`'s application id; that
-  prefix is how Google Play pairs a watch app with its phone app in one listing.
+ **applicationId `com.fpclient.android` on both APKs** — Data Layer requires exact package and
+ signing-certificate equality. The APKs install on separate devices; `wear_app.xml` points at
+ this shared package identity.
 - **Same `versionCode`/`versionName` and same signing keystore** as `:app` (both modules read the
   identical `KEYSTORE_*` environment variables; release builds are unsigned when unset, which the
   F-Droid buildserver relies on). The version-bump step in `VERSION_CHECKLIST.md` now covers
-  both files.
 - **No permissions** in the watch manifest yet — 9a records nothing and talks to nothing; 9c adds
   the sensor permissions, 9e adds `INTERNET`.
 - **Backups off** (`allowBackup=false` + `fullBackupContent=false` + explicit

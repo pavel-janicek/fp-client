@@ -26,6 +26,7 @@ data class Session(
     val username: String = "",
     val displayName: String = "",
     val email: String = "",
+    val authExpired: Boolean = false,
     /** True when the user skipped login and is browsing the default instance anonymously. */
     val guest: Boolean = false,
 ) {
@@ -55,6 +56,7 @@ class SessionStore(private val context: Context) {
         val DISPLAY_NAME = stringPreferencesKey("display_name")
         val EMAIL = stringPreferencesKey("email")
         val GUEST = booleanPreferencesKey("guest")
+        val AUTH_EXPIRED = booleanPreferencesKey("auth_expired")
         val UNIT_SYSTEM = stringPreferencesKey("unit_system")
     }
 
@@ -72,6 +74,7 @@ class SessionStore(private val context: Context) {
             username = prefs[Keys.USERNAME] ?: "",
             displayName = prefs[Keys.DISPLAY_NAME] ?: "",
             email = prefs[Keys.EMAIL] ?: "",
+            authExpired = prefs[Keys.AUTH_EXPIRED] ?: false,
             guest = prefs[Keys.GUEST] ?: false,
         )
     }
@@ -112,6 +115,7 @@ class SessionStore(private val context: Context) {
             it[Keys.DISPLAY_NAME] = displayName.orEmpty()
             it[Keys.EMAIL] = email.orEmpty()
             it[Keys.GUEST] = false
+            it[Keys.AUTH_EXPIRED] = false
         }
     }
 
@@ -126,6 +130,7 @@ class SessionStore(private val context: Context) {
         context.fitPubDataStore.edit {
             it[Keys.SERVER_URL] = DEFAULT_SERVER_URL
             it[Keys.GUEST] = true
+            it[Keys.AUTH_EXPIRED] = false
         }
     }
 
@@ -139,6 +144,7 @@ class SessionStore(private val context: Context) {
         }
         context.fitPubDataStore.edit {
             it[Keys.GUEST] = true
+            it[Keys.AUTH_EXPIRED] = false
         }
     }
 
@@ -150,7 +156,7 @@ class SessionStore(private val context: Context) {
         context.fitPubDataStore.edit { it[Keys.DISPLAY_NAME] = displayName }
     }
 
-    suspend fun logout() {
+    suspend fun logout(expired: Boolean = false) {
         withContext(Dispatchers.IO) {
             encryptedPrefs.edit().remove("token").apply()
         }
@@ -159,6 +165,7 @@ class SessionStore(private val context: Context) {
             it.remove(Keys.DISPLAY_NAME)
             it.remove(Keys.EMAIL)
             it.remove(Keys.GUEST)
+            it[Keys.AUTH_EXPIRED] = expired
         }
     }
 

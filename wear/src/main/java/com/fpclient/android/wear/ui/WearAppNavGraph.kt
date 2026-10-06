@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.fpclient.android.wear.BuildConfig
+import com.fpclient.android.wear.auth.WearAuthState
 
 /** Route table for the watch nav graph — one entry per Iteration 9 screen as they land. */
 object WearRoutes {
@@ -22,7 +23,13 @@ object WearRoutes {
  * destinations to this graph rather than growing the launcher activity.
  */
 @Composable
-fun WearAppNavGraph(navController: NavHostController = rememberSwipeDismissableNavController()) {
+fun WearAppNavGraph(
+    authState: WearAuthState = WearAuthState(),
+    phoneReachable: Boolean? = null,
+    onRequestCredentials: () -> Unit = {},
+    onSignOut: () -> Unit = {},
+    navController: NavHostController = rememberSwipeDismissableNavController(),
+) {
     SwipeDismissableNavHost(
         navController = navController,
         startDestination = WearRoutes.HOME,
@@ -31,6 +38,10 @@ fun WearAppNavGraph(navController: NavHostController = rememberSwipeDismissableN
             HomeScreen(
                 versionName = BuildConfig.VERSION_NAME,
                 onOpenAbout = { navController.navigate(WearRoutes.ABOUT) },
+                authState = authState,
+                phoneReachable = phoneReachable,
+                onRequestCredentials = onRequestCredentials,
+                onSignOut = onSignOut,
             )
         }
         composable(WearRoutes.ABOUT) {

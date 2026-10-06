@@ -109,6 +109,10 @@ dependencies {
     // push feature needs: the periodic worker that checks the instance for new notifications.
     implementation("androidx.work:work-runtime-ktx:2.10.5")
 
+    // Phone↔watch sign-in relay (Iteration 9b).
+    implementation("com.google.android.gms:play-services-wearable:19.0.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")
 

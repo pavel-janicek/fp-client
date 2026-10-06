@@ -24,6 +24,8 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.material.Button
+import com.fpclient.android.wear.auth.WearAuthState
 
 /**
  * Landing screen of FitPub Wear (Iteration 9a).
@@ -44,6 +46,10 @@ import androidx.wear.compose.material.TimeText
 fun HomeScreen(
     versionName: String,
     onOpenAbout: () -> Unit,
+    authState: WearAuthState = WearAuthState(),
+    phoneReachable: Boolean? = null,
+    onRequestCredentials: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -78,13 +84,50 @@ fun HomeScreen(
                     textAlign = TextAlign.Center,
                 )
                 Spacer(modifier = Modifier.height(8.dp * scale))
+                val identityText = when {
+                    authState.isSignedIn -> "Device signed in as @${authState.username.ifBlank { "user" }}"
+                    authState.expired -> "Sign-in expired. Sign in again on your phone."
+                    phoneReachable == false -> "No paired phone is reachable"
+                    else -> "Not signed in yet"
+                }
                 Text(
-                    text = "Not signed in yet",
+                    text = identityText,
                     fontSize = 15.sp * scale,
                     color = MaterialTheme.colors.primary,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(modifier = Modifier.height(16.dp * scale))
+                Spacer(modifier = Modifier.height(8.dp * scale))
+                if (authState.displayName.isNotBlank() && authState.isSignedIn) {
+                    Text(
+                        text = authState.displayName,
+                        fontSize = 12.sp * scale,
+                        color = MaterialTheme.colors.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                Button(
+                    onClick = onRequestCredentials,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (authState.isSignedIn) "Refresh from phone" else "Sign in with phone")
+                }
+                if (authState.isSignedIn || authState.expired) {
+                    Button(
+                        onClick = onSignOut,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Sign out")
+                    }
+                }
+                if (authState.isSignedIn && phoneReachable == false) {
+                    Text(
+                        text = "Using saved sign-in; phone is not reachable",
+                        fontSize = 11.sp * scale,
+                        color = MaterialTheme.colors.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp * scale))
                 Card(
                     onClick = onOpenAbout,
                     modifier = Modifier.fillMaxWidth(),

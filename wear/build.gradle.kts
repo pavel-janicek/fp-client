@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -13,9 +14,9 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        // The applicationId must start with :app's applicationId — Google Play requires the
-        // prefix so FP Client and FitPub Wear show up as one paired app in the console.
-        applicationId = "com.fpclient.android.wear"
+        // The Data Layer requires the same package name and signing certificate on both devices.
+        // These APKs install on separate devices, so the watch shares :app's applicationId.
+        applicationId = "com.fpclient.android"
         // minSdk 26 matches :app's floor and covers the Wear OS 3+ fleet targeted by the PLAN
         // (API 26–30 watches in the field; Wear OS 3 devices are API 30 and everything newer
         // only raises the device API). targetSdk follows the same "target latest" rule as :app.
@@ -95,4 +96,13 @@ dependencies {
 
     // Layout previews for the round-screen composables (no emulator needed to eyeball them).
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Phone↔watch sign-in relay (Iteration 9b).
+    implementation("com.google.android.gms:play-services-wearable:19.0.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    testImplementation("junit:junit:4.13.2")
 }

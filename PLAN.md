@@ -711,6 +711,16 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > Add 'device signed in as @user' state UI on the watch and a revoke/sign-out
 > path both directions; handle no-phone-paired and stale-token states."
 
+✅ **Done.** The phone advertises `fitpub_phone`; the watch discovers reachable phones and
+requests credentials by `MessageClient`. The phone responds from `SessionStore` with server URL,
+bearer token and identity, and broadcasts session revocation only to reachable nodes advertising
+`fitpub_watch`. Watch credentials live in its own Preferences DataStore. Phone logout and stale
+401s revoke the watch copy; watch sign-out clears its local copy immediately and revokes the phone
+session when reachable. The UI distinguishes signed-in, expired, signed-out and no-reachable-phone
+states. Data Layer transport is encrypted by Google Play services; watch DataStore encryption at
+rest remains a hardening follow-up. The modules now share the exact application ID and signing
+certificate required by Data Layer. Details and the trust boundary are in `docs/WEAR.md`.
+
 **9c — Watch sensor recording engine**
 > "Build WorkoutRecordingService on the watch: a foreground service (location +
 > bodySensors + activityRecognition types) capturing GPS (onboard GNSS via

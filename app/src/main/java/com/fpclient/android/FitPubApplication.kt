@@ -6,9 +6,15 @@ import com.fpclient.android.notifications.InstantDeliveryService
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
+import com.fpclient.android.wear.PhoneWearAuthRelay
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.osmdroid.config.Configuration
 
 class FitPubApplication : Application() {
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     lateinit var container: AppContainer
         private set
@@ -16,6 +22,7 @@ class FitPubApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        PhoneWearAuthRelay.start(this, container.sessionStore, applicationScope)
 
         // Background notification delivery (Iteration 8f): create the channel up front so the
         // OS-level toggle for it is visible in system settings even before the first poll, and

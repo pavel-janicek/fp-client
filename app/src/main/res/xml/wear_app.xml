@@ -11,4 +11,4 @@
   com.google.android.wearable.standalone flag in :wear's manifest). Full decision record:
   docs/WEAR.md.
 -->
-<wearableApp package="com.fpclient.android.wear" />
+<wearableApp package="com.fpclient.android" />

@@ -145,6 +145,6 @@ class ApiClientTest {
 
         assertFalse(response.isSuccessful)
         assertEquals(401, response.code())
-        verify(sessionStore).logout()
+        verify(sessionStore).logout(expired = true)
     }
 }

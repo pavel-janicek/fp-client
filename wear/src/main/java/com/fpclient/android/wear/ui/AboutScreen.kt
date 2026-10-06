@@ -49,7 +49,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             item {
                 Text(
                     text = "Independent watch module — it imports nothing from the phone app, " +
-                        "which pairs with it for sign-in only.",
+                        "which relays sign-in over the Wearable Data Layer.",
                     style = MaterialTheme.typography.body2,
                     color = MaterialTheme.colors.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -58,9 +58,9 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             }
             item {
                 Text(
-                    text = "This build records nothing and sends nothing. Heart-rate and GPS " +
-                        "recordings will only leave the watch after you sign in and choose to " +
-                        "share an activity.",
+                    text = "The phone relays your FitPub sign-in to this watch. Data Layer " +
+                        "messages are protected in transit; watch-side token encryption at " +
+                        "rest is a later hardening step. This build does not record workouts.",
                     style = MaterialTheme.typography.caption1,
                     color = MaterialTheme.colors.onSurfaceVariant,
                     textAlign = TextAlign.Center,
