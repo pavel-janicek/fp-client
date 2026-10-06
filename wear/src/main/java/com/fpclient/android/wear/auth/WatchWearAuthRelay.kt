@@ -3,19 +3,21 @@ package com.fpclient.android.wear.auth
 import android.content.Context
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore) {
     private val appContext = context.applicationContext
 
-    suspend fun requestCredentials(): Boolean {
+    suspend fun requestCredentials(): Boolean = withContext(Dispatchers.IO) {
         val nodes = runCatching {
             Wearable.getCapabilityClient(appContext)
                 .getCapability(WearAuthProtocol.CAPABILITY, CapabilityClient.FILTER_REACHABLE)
                 .await()
                 .nodes
         }.getOrDefault(emptySet())
-        if (nodes.isEmpty()) return false
+        if (nodes.isEmpty()) return@withContext false
 
         var sent = false
         nodes.forEach { node ->
@@ -26,10 +28,10 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
                 true
             }.getOrDefault(false) || sent
         }
-        return sent
+        sent
     }
 
-    suspend fun signOut(): Boolean {
+    suspend fun signOut(): Boolean = withContext(Dispatchers.IO) {
         authStore.clear(expired = false)
         val nodes = runCatching {
             Wearable.getCapabilityClient(appContext)
@@ -37,7 +39,7 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
                 .await()
                 .nodes
         }.getOrDefault(emptySet())
-        if (nodes.isEmpty()) return false
+        if (nodes.isEmpty()) return@withContext false
 
         var sent = false
         nodes.forEach { node ->
@@ -48,6 +50,6 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
                 true
             }.getOrDefault(false) || sent
         }
-        return sent
+        sent
     }
 }

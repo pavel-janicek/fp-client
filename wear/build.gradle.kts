@@ -19,7 +19,7 @@ android {
         applicationId = "com.fpclient.android"
         // Health Services is available on Wear OS 3+, which starts at API 30.
         minSdk = 30
-        targetSdk = 36
+        targetSdk = 34
         // Kept in step with :app (same keystore, same version) so the two halves of the pair
         // always advertise the same release — bump both together per VERSION_CHECKLIST.md.
         versionCode = 42

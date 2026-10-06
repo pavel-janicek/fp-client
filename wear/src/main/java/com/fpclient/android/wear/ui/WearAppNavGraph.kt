@@ -2,7 +2,7 @@ package com.fpclient.android.wear.ui
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.composable
+import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.fpclient.android.wear.BuildConfig
