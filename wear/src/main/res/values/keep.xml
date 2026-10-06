@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keeps the Wear OS android_wear_capabilities array so capability
+     declarations are not stripped by the resource shrinker. Placed in
+     res/values/ because tools:keep rules in res/raw/ only apply to
+     res/raw/ resources; values/wear.xml lives in res/values/. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/android_wear_capabilities" />
