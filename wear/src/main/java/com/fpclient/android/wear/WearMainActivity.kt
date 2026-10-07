@@ -44,6 +44,15 @@ class WearMainActivity : ComponentActivity() {
         startWorkoutIfAllowed()
     }
 
+    /** Bumped when a permission dialog is answered so Settings can re-read grant state. */
+    private var permissionsVersion by mutableStateOf(0)
+
+    private val sensorPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        permissionsVersion++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         authStore = WearAuthStore(this)
@@ -68,6 +77,8 @@ class WearMainActivity : ComponentActivity() {
                     onSignOut = ::signOut,
                     workoutSnapshot = workoutSnapshot,
                     workoutPermissionError = workoutPermissionError,
+                    onRequestSensorPermissions = ::requestSensorPermissions,
+                    permissionRefreshKey = permissionsVersion,
                     onStartWorkout = ::requestWorkoutStart,
                     onPauseWorkout = { WorkoutRecordingController.pause(this) },
                     onResumeWorkout = { WorkoutRecordingController.resume(this) },
@@ -108,6 +119,13 @@ class WearMainActivity : ComponentActivity() {
     private fun signOut() {
         authStatus = null
         lifecycleScope.launch { phoneReachable = authRelay.signOut() }
+    }
+
+    /** Settings → "Grant sensor access": asks for the workout permissions without starting. */
+    private fun requestSensorPermissions() {
+        val missing = WorkoutRecordingController.missingPermissions(this)
+        if (missing.isEmpty()) return
+        sensorPermissionLauncher.launch(missing.toTypedArray())
     }
 
     private fun requestWorkoutStart(activityType: WorkoutActivityType) {
