@@ -14,7 +14,12 @@ data class PendingWatchWorkout(
     val activityType: String,
     val title: String,
     val description: String? = null,
-    val visibility: String = "PRIVATE",
+    /**
+     * "PUBLIC" literal: matches the phone app's upload default rather than Private — kept as a
+     * literal (not WatchWorkoutSyncStore.DEFAULT_VISIBILITY) because constructor defaults
+     * cannot reference companion members — see the 3.0.0-beta plan entry.
+     */
+    val visibility: String = "PUBLIC",
     val ownerServerUrl: String = "",
     val ownerUsername: String = "",
     val createdAtEpochMs: Long,
@@ -64,6 +69,8 @@ class WatchWorkoutSyncStore(context: Context) {
     companion object {
         private const val PREFERENCES_NAME = "fitpub_watch_workout_queue"
         private const val KEY_QUEUE = "pending"
+        /** Watch auto-share default visibility (matches the phone app's upload default). */
+        const val DEFAULT_VISIBILITY = "PUBLIC"
         private val serializer = ListSerializer(PendingWatchWorkout.serializer())
         private val json = Json { ignoreUnknownKeys = true }
 

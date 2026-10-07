@@ -34,7 +34,7 @@ class WatchActivityUploader(
                     .setType(MultipartBody.FORM)
                     .addFormDataPart("file", gpxFile.name, gpxFile.asRequestBody(mediaType))
                     .addFormDataPart("title", workout.title)
-                    .addFormDataPart("visibility", VISIBILITY_PRIVATE)
+                    .addFormDataPart("visibility", workout.visibility.ifBlank { WatchWorkoutSyncStore.DEFAULT_VISIBILITY })
                     .build()
                 signedRequest(uploadUrl, auth.token, csrf)
                     .post(multipart)
@@ -54,7 +54,7 @@ class WatchActivityUploader(
                 val update = WatchActivityUpdate(
                     title = uploaded.title ?: workout.title,
                     description = uploaded.description,
-                    visibility = uploaded.visibility ?: VISIBILITY_PRIVATE,
+                    visibility = uploaded.visibility ?: workout.visibility.ifBlank { WatchWorkoutSyncStore.DEFAULT_VISIBILITY },
                     activityType = workout.activityType,
                 )
                 val body = json.encodeToString(update).toRequestBody(JSON_MEDIA_TYPE)
@@ -127,7 +127,6 @@ class WatchActivityUploader(
     )
 
     companion object {
-        private const val VISIBILITY_PRIVATE = "PRIVATE"
         private const val USER_AGENT = "FP-Client-Wear/${BuildConfig.VERSION_NAME}"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaTypeOrNull()!!
 

@@ -1,6 +1,7 @@
 package com.fpclient.android.wear.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,6 +14,7 @@ import com.fpclient.android.wear.auth.WearAuthState
 import com.fpclient.android.wear.recording.WorkoutActivityType
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutStatus
+import kotlinx.coroutines.delay
 
 /** Route table for the watch nav graph. */
 object WearRoutes {
@@ -21,6 +23,19 @@ object WearRoutes {
     const val WORKOUT = "workout"
     const val SETTINGS = "settings"
 }
+
+/** How long the ✓ SAVED confirmation stays visible before auto-returning to Home. */
+const val STOPPED_AUTO_CLOSE_DELAY_MS = 1_500L
+
+/**
+ * Pure decision behind the workout auto-close: auto-return Home only when the composable actually
+ * observed the RECORDING/PAUSED → STOPPED transition in this process lifetime. A STOPPED snapshot
+ * restored from storage (process death) or shown on re-entry has a null [previousStatus], so it
+ * can never satisfy the guard and the workout window cannot bounce-loop back to Home.
+ */
+fun shouldAutoReturnOnStop(previousStatus: WorkoutStatus?, isCurrentlyStopped: Boolean): Boolean =
+    isCurrentlyStopped &&
+        (previousStatus == WorkoutStatus.RECORDING || previousStatus == WorkoutStatus.PAUSED)
 
 /**
  * Navigation graph for the watch app.
@@ -88,6 +103,25 @@ fun WearAppNavGraph(
             )
         }
         composable(WearRoutes.WORKOUT) {
+            // Auto-return Home shortly after a fresh stop so the ✓ + beep + buzz land first.
+            // Tracks the previous status and fires only on the RECORDING/PAUSED → STOPPED
+            // transition, so process death + re-entry on a persisted STOPPED snapshot cannot
+            // bounce-loop back to Home.
+            val finishedSessionId = workoutSnapshot.session
+                ?.takeIf { it.status == WorkoutStatus.STOPPED }
+                ?.startedAtEpochMs
+            var previousStatus by remember(workoutSnapshot.session?.startedAtEpochMs) {
+                mutableStateOf<WorkoutStatus?>(null)
+            }
+            LaunchedEffect(finishedSessionId) {
+                val previous = previousStatus
+                previousStatus = workoutSnapshot.status
+                if (!shouldAutoReturnOnStop(previous, finishedSessionId != null)) return@LaunchedEffect
+                delay(STOPPED_AUTO_CLOSE_DELAY_MS)
+                if (navController.currentDestination?.route == WearRoutes.WORKOUT) {
+                    navController.popBackStack(WearRoutes.HOME, inclusive = false)
+                }
+            }
             WorkoutControlScreen(
                 activityType = selectedActivityType,
                 snapshot = workoutSnapshot,

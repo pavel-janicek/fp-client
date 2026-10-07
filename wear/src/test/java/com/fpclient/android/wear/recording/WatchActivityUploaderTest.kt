@@ -15,16 +15,29 @@ class WatchActivityUploaderTest {
     @Test
     fun uploadPrimesCsrfAndPostsSessionCookieMultipart() = runBlocking {
         val server = MockWebServer()
-        server.enqueue(MockResponse().setResponseCode(200).addHeader("Set-Cookie", "XSRF-TOKEN=csrf-value; Path=/"))
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .addHeader("Set-Cookie", "XSRF-TOKEN=csrf-value; Path=/"),
+        )
         server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"activity-1","activityType":"RUN"}"""))
         server.start()
         val gpx = File.createTempFile("watch-track", ".gpx").apply { writeText("<gpx/>") }
-        val pending = PendingWatchWorkout(10L, gpx.name, "track.json", "RUN", "Run workout", createdAtEpochMs = 1L)
-        val auth = WearAuthState(server.url("/").toString().trimEnd('/'), "watch-jwt", "runner", "Runner")
+        val pending =
+            PendingWatchWorkout(
+                10L,
+                gpx.name,
+                "track.json",
+                "RUN",
+                "Run workout",
+                createdAtEpochMs = 1L,
+            )
+        val auth =
+            WearAuthState(server.url("/").toString().trimEnd('/'), "watch-jwt", "runner", "Runner")
 
-        val uploaded = WatchActivityUploader(
-            OkHttpClient.Builder().followRedirects(false).build(),
-        ).upload(pending, gpx, auth)
+        val uploaded =
+            WatchActivityUploader(OkHttpClient.Builder().followRedirects(false).build())
+                .upload(pending, gpx, auth)
 
         assertTrue(uploaded)
         val csrfPrime = server.takeRequest()
@@ -43,7 +56,15 @@ class WatchActivityUploaderTest {
         val server = MockWebServer()
         server.start()
         val gpx = File.createTempFile("watch-track", ".gpx").apply { writeText("<gpx/>") }
-        val pending = PendingWatchWorkout(11L, gpx.name, "track.json", "RUN", "Run workout", createdAtEpochMs = 1L)
+        val pending =
+            PendingWatchWorkout(
+                11L,
+                gpx.name,
+                "track.json",
+                "RUN",
+                "Run workout",
+                createdAtEpochMs = 1L,
+            )
 
         val uploaded = WatchActivityUploader().upload(pending, gpx, WearAuthState())
 
