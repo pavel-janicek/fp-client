@@ -11,14 +11,13 @@ this release".
       paired half of the same release (Play lists them together, and they must be signed with the
       same key), so it moves in lockstep (Iteration 9a, see `docs/WEAR.md`)
 - [ ] `app/src/main/java/com/fpclient/android/FitPubApplication.kt` — osmdroid `Configuration.getInstance().userAgentValue = "FP-Client/<version>"`
-- [ ] `wear/src/main/java/com/fpclient/android/wear/ui/HomeScreen.kt` — preview `HomeScreen(versionName = "<version>")` (preview-only; the real About/Home labels come from `BuildConfig`)
 
 ## 2. Automatic propagation (no manual edit, but verify)
 
 - [ ] HTTP `User-Agent` header — `ApiClient.kt` builds it from `BuildConfig.VERSION_NAME`; nothing to edit
 - [ ] Watch upload `User-Agent` — `WatchActivityUploader.kt` builds `FP-Client-Wear/<version>` from its own `BuildConfig.VERSION_NAME`; nothing to edit
 - [ ] About screen (Settings → About this app) — version comes from `BuildConfig`; nothing to edit
-- [ ] Watch About screen — version comes from the `:wear` `BuildConfig`; nothing to edit
+- [ ] Watch Settings screen — version comes from the `:wear` `BuildConfig`; nothing to edit
 
 ## 3. Documentation
 
@@ -81,7 +80,7 @@ watch needs these on top of sections 1–5:
       and **signed in on the phone first** — a signed-out phone answers
       `signed_out`/`expired` by design and the watch stays signed out.
 - [ ] Watch release checks: `./gradlew :wear:assembleRelease :wear:lintDebug`
-      clean; on-watch About shows the new version; `Sign in with phone`
+      clean; on-watch Settings shows the new version; `Sign in with phone`
       reports `Device signed in as @…`; sign-out/revoke both directions still work.
 - [ ] `docs/WEAR.md` touched only if the pairing contract changed (capability
       names, message paths, `applicationId`, signing or backup rules).

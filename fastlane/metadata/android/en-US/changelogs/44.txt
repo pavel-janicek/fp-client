@@ -1,0 +1,5 @@
+3.0.0-beta (release 3.0.0-beta):
+- Watch main screen redesigned: a compact "FP Wear" title, dedicated Workout and Settings buttons, and a scrollable list so the buttons stay reachable on small round displays — sign-in is now a single tappable status line.
+- New watch Settings screen shows the app version and requests the sensor access (GPS, heart rate, steps) your workouts need.
+- Improved watch workout flow with a dedicated activity picker.
+- Fixed phone ↔ watch sign-in pairing; the phone's Settings → Handshake diagnostics shows the pairing request/reply state for troubleshooting.
