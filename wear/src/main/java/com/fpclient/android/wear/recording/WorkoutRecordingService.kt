@@ -16,9 +16,13 @@ import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.health.services.client.ExerciseClient
@@ -211,7 +215,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         healthHeartRateAvailable = false
         healthCallback = null
         serviceScope.launch {
-            queueStoppedWorkout(stoppedSession, stoppedAt)
+            if (queueStoppedWorkout(stoppedSession, stoppedAt)) playCompletionFeedback()
             if (shouldEndExercise && client != null) {
                 runCatching { client.endExerciseAsync().await() }
                 if (callback != null) runCatching { client.clearUpdateCallbackAsync(callback).await() }
@@ -226,7 +230,12 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val restored = sessionStore.load() ?: return
         session = restored
         metrics = WorkoutMetricsAccumulator()
-        trackStore.readEvents(restored.startedAtEpochMs).forEach(metrics::add)
+        // Only replay the track when the restored session is actually ongoing. A STOPPED session's
+        // metrics are reset by the next beginSession() anyway, and reading a large track file on
+        // the main thread here would delay service start (freezing the Start button) for no benefit.
+        if (restored.status == WorkoutStatus.RECORDING || restored.status == WorkoutStatus.PAUSED) {
+            trackStore.readEvents(restored.startedAtEpochMs).forEach(metrics::add)
+        }
         publish()
     }
 
@@ -248,15 +257,15 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         }
     }
 
-    private suspend fun queueStoppedWorkout(stoppedSession: WorkoutSessionSnapshot, stoppedAt: Long) {
-        if (syncStore.get(stoppedSession.startedAtEpochMs) != null) return
+    private suspend fun queueStoppedWorkout(stoppedSession: WorkoutSessionSnapshot, stoppedAt: Long): Boolean {
+        if (syncStore.get(stoppedSession.startedAtEpochMs) != null) return true
         val events = trackStore.readEvents(stoppedSession.startedAtEpochMs)
         val title = "${stoppedSession.activityType.label} workout"
         val exported = runCatching {
             WorkoutExportWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
         }.getOrElse {
             publishError("Workout export could not be saved. Check watch storage.")
-            return
+            return false
         }
         val auth = WearAuthStore(this).state.first()
         syncStore.upsert(
@@ -272,6 +281,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             ),
         )
         WorkoutSyncScheduler.enqueue(this)
+        return true
     }
 
     private fun promoteAndRestartSensors() {
@@ -374,6 +384,10 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
         stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
         sensorsActive = stepSensor != null
+        // Also register the platform heart-rate sensor so HR keeps recording if Health Services
+        // reports available but never delivers an update (it is torn down only once Health
+        // Services actually provides a value).
+        startFallbackHeartRate()
         refreshAvailability()
     }
 
@@ -512,7 +526,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                     if (dataType == DataType.HEART_RATE_BPM && availability is DataTypeAvailability) {
                         healthHeartRateAvailable = availability == DataTypeAvailability.AVAILABLE ||
                             availability == DataTypeAvailability.ACQUIRING
-                        if (healthHeartRateAvailable) stopFallbackHeartRate() else startFallbackHeartRate()
+                        if (!healthHeartRateAvailable) startFallbackHeartRate()
                         refreshAvailability()
                     }
                 }
@@ -723,6 +737,23 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             ongoingActivity.apply(this)
         }
         return notificationBuilder.build()
+    }
+
+    /** Beep (default notification sound) + vibration when a workout is saved. */
+    private fun playCompletionFeedback() {
+        runCatching {
+            RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                ?.play()
+        }
+        runCatching {
+            @Suppress("DEPRECATION")
+            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                getSystemService(VibratorManager::class.java).defaultVibrator
+            } else {
+                getSystemService(VIBRATOR_SERVICE) as Vibrator
+            }
+            vibrator.vibrate(VibrationEffect.createOneShot(250, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
     }
 
     private fun servicePendingIntent(action: String, requestCode: Int) = PendingIntent.getService(

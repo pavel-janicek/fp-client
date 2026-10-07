@@ -48,12 +48,12 @@ class WorkoutRecordingStateTest {
         val metrics = WorkoutMetricsAccumulator()
         metrics.add(WorkoutTrackEvent(1L, 50.0, 14.0, accuracyMeters = 5.0, heartRateBpm = 120, steps = 10))
         metrics.add(WorkoutTrackEvent(2L, 50.0001, 14.0, accuracyMeters = 5.0, heartRateBpm = 124, steps = 12))
-        metrics.add(WorkoutTrackEvent(3L, 51.0, 14.0, accuracyMeters = 50.0, heartRateBpm = 0, steps = 12))
+        metrics.add(WorkoutTrackEvent(3L, 51.0, 14.0, accuracyMeters = 500.0, heartRateBpm = 0, steps = 12))
 
         assertTrue(metrics.distanceMeters in 10.0..12.0)
         assertEquals(124, metrics.heartRateBpm)
         assertEquals(12, metrics.steps)
-        assertFalse(WorkoutMath.isAcceptableAccuracy(50.0))
+        assertFalse(WorkoutMath.isAcceptableAccuracy(500.0))
         assertEquals(363L, WorkoutMath.paceSecondsPerKm(4_000L, 11.0))
         assertNull(WorkoutMath.paceSecondsPerKm(4_000L, 2.0))
     }

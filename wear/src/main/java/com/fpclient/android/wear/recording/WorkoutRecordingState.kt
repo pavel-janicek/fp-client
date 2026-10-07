@@ -140,7 +140,8 @@ object WorkoutRecordingBus {
 }
 
 object WorkoutMath {
-    const val MAX_ACCURACY_METERS = 20.0
+    /** Fixes with worse accuracy are dropped live. 50 m is lenient for wearable GPS (which often reports 20–40 m); tighter filtering would starve live distance. */
+    const val MAX_ACCURACY_METERS = 50.0
     private const val EARTH_RADIUS_METERS = 6_371_000.0
     private const val MIN_PACE_DISTANCE_METERS = 10.0
 

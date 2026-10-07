@@ -39,6 +39,7 @@ fun WorkoutControlScreen(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onSyncPending: () -> Unit = {},
     onAmbientModeChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -67,7 +68,7 @@ fun WorkoutControlScreen(
                             WorkoutStatus.IDLE -> currentType.label.uppercase(Locale.ROOT)
                             WorkoutStatus.RECORDING -> currentType.label.uppercase(Locale.ROOT)
                             WorkoutStatus.PAUSED -> "${currentType.label.uppercase(Locale.ROOT)} · PAUSED"
-                            WorkoutStatus.STOPPED -> "${currentType.label.uppercase(Locale.ROOT)} · FINISHED"
+                            WorkoutStatus.STOPPED -> "✓ ${currentType.label.uppercase(Locale.ROOT)} SAVED"
                         },
                         style = MaterialTheme.typography.caption1,
                         color = if (isAmbient) Color.LightGray else MaterialTheme.colors.primary,
@@ -77,7 +78,18 @@ fun WorkoutControlScreen(
                 }
 
                 if (snapshot.pendingSyncCount > 0) {
-                    item { MetricLabel("${snapshot.pendingSyncCount} pending sync") }
+                    item { MetricLabel("${snapshot.pendingSyncCount} pending sync — tap Sync now to upload") }
+                    item {
+                        Button(
+                            onClick = onSyncPending,
+                            colors = ButtonDefaults.secondaryButtonColors(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        ) {
+                            Text("Sync now")
+                        }
+                    }
                 }
 
                 // Heart rate BPM readout

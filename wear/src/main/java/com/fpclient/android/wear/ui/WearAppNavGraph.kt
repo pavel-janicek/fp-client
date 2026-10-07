@@ -42,6 +42,7 @@ fun WearAppNavGraph(
     onPauseWorkout: () -> Unit = {},
     onResumeWorkout: () -> Unit = {},
     onStopWorkout: () -> Unit = {},
+    onSyncPending: () -> Unit = {},
     onAmbientModeChanged: (Boolean) -> Unit = {},
     onRequestSensorPermissions: () -> Unit = {},
     permissionRefreshKey: Int = 0,
@@ -95,6 +96,7 @@ fun WearAppNavGraph(
                 onPause = onPauseWorkout,
                 onResume = onResumeWorkout,
                 onStop = onStopWorkout,
+                onSyncPending = onSyncPending,
                 onAmbientModeChanged = onAmbientModeChanged,
             )
         }
