@@ -1,24 +1,12 @@
 package com.fpclient.android.wear.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,20 +18,21 @@ import androidx.wear.compose.foundation.AmbientMode
 import androidx.wear.compose.foundation.LocalAmbientModeManager
 import androidx.wear.compose.foundation.rememberAmbientModeManager
 import androidx.wear.compose.material.Button
-import androidx.wear.compose.material.Chip
+import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.ScalingLazyColumn
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.fpclient.android.wear.recording.WorkoutActivityType
-import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutHeartRateZone
+import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutStatus
 import java.util.Locale
 
 @Composable
 fun WorkoutControlScreen(
+    activityType: WorkoutActivityType,
     snapshot: WorkoutRecordingSnapshot,
     permissionError: String?,
     onStart: (WorkoutActivityType) -> Unit,
@@ -51,187 +40,175 @@ fun WorkoutControlScreen(
     onResume: () -> Unit,
     onStop: () -> Unit,
     onAmbientModeChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val ambientManager = rememberAmbientModeManager()
     CompositionLocalProvider(LocalAmbientModeManager provides ambientManager) {
         val isAmbient = LocalAmbientModeManager.current?.currentAmbientMode is AmbientMode.Ambient
-        val pagerState = rememberPagerState(pageCount = { 2 })
-        var selectedTypeName by rememberSaveable { mutableStateOf(WorkoutActivityType.RUN.name) }
-        val selectedType = remember(selectedTypeName) { WorkoutActivityType.fromStorage(selectedTypeName) }
+        val currentType = snapshot.session?.activityType ?: activityType
+        val zone = WorkoutHeartRateZone.fromBpm(snapshot.heartRateBpm)
 
         LaunchedEffect(isAmbient) { onAmbientModeChanged(isAmbient) }
-        LaunchedEffect(isAmbient) {
-            if (isAmbient && pagerState.currentPage != 0) pagerState.scrollToPage(0)
-        }
 
         Scaffold(
-            modifier = Modifier.background(Color.Black),
+            modifier = modifier.background(Color.Black),
             timeText = { TimeText() },
         ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                userScrollEnabled = !isAmbient,
-            ) { page ->
-                if (page == 0) {
-                    LiveWorkoutPage(snapshot, isAmbient)
-                } else {
-                    WorkoutControlsPage(
-                        snapshot = snapshot,
-                        permissionError = permissionError,
-                        selectedType = selectedType,
-                        onSelectType = { selectedTypeName = it.name },
-                        onStart = { onStart(selectedType) },
-                        onPause = onPause,
-                        onResume = onResume,
-                        onStop = onStop,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LiveWorkoutPage(snapshot: WorkoutRecordingSnapshot, isAmbient: Boolean) {
-    val zone = WorkoutHeartRateZone.fromBpm(snapshot.heartRateBpm)
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .padding(horizontal = 28.dp, vertical = 18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = when (snapshot.status) {
-                WorkoutStatus.IDLE -> "READY"
-                WorkoutStatus.RECORDING -> snapshot.session?.activityType?.label?.uppercase(Locale.ROOT) ?: "WORKOUT"
-                WorkoutStatus.PAUSED -> "PAUSED"
-                WorkoutStatus.STOPPED -> "FINISHED"
-            },
-            style = MaterialTheme.typography.caption2,
-            color = if (isAmbient) Color.LightGray else MaterialTheme.colors.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = snapshot.heartRateBpm?.toString()?.takeUnless { isAmbient } ?: "--",
-            fontSize = 58.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isAmbient) Color.White else zone?.toColor() ?: Color.LightGray,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
-        Text(
-            text = if (isAmbient) "BPM" else "${zone?.label ?: "NO SIGNAL"} · BPM",
-            style = MaterialTheme.typography.caption1,
-            color = if (isAmbient) Color.LightGray else zone?.toColor() ?: Color.LightGray,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = formatDuration(snapshot.elapsedMs),
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = if (isAmbient) "-- km" else "${"%.2f".format(Locale.ROOT, snapshot.distanceMeters / 1000.0)} km",
-            style = MaterialTheme.typography.body2,
-            color = if (isAmbient) Color.DarkGray else Color.LightGray,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-@Composable
-private fun WorkoutControlsPage(
-    snapshot: WorkoutRecordingSnapshot,
-    permissionError: String?,
-    selectedType: WorkoutActivityType,
-    onSelectType: (WorkoutActivityType) -> Unit,
-    onStart: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onStop: () -> Unit,
-) {
-    ScalingLazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        item {
-            Text(
-                text = if (snapshot.status == WorkoutStatus.IDLE || snapshot.status == WorkoutStatus.STOPPED) {
-                    "Activity"
-                } else {
-                    "Workout"
-                },
-                style = MaterialTheme.typography.title3,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        if (snapshot.pendingSyncCount > 0) {
-            item { ControlMetric("${snapshot.pendingSyncCount} pending sync") }
-        }
-        if (snapshot.status == WorkoutStatus.IDLE || snapshot.status == WorkoutStatus.STOPPED) {
-            WorkoutActivityType.entries.forEach { type ->
+            ScalingLazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .padding(horizontal = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 item {
-                    Chip(
-                        onClick = { onSelectType(type) },
-                        label = {
-                            Text(
-                                text = if (selectedType == type) "Selected · ${type.label}" else type.label,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                    Text(
+                        text = when (snapshot.status) {
+                            WorkoutStatus.IDLE -> currentType.label.uppercase(Locale.ROOT)
+                            WorkoutStatus.RECORDING -> currentType.label.uppercase(Locale.ROOT)
+                            WorkoutStatus.PAUSED -> "${currentType.label.uppercase(Locale.ROOT)} · PAUSED"
+                            WorkoutStatus.STOPPED -> "${currentType.label.uppercase(Locale.ROOT)} · FINISHED"
                         },
+                        style = MaterialTheme.typography.caption1,
+                        color = if (isAmbient) Color.LightGray else MaterialTheme.colors.primary,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-            }
-        } else {
-            item { ControlMetric("${snapshot.steps} steps") }
-            item { ControlMetric("${formatPace(snapshot.paceSecondsPerKm)} /km") }
-            item { ControlMetric(sensorSummary(snapshot)) }
-            if (!snapshot.availability.gps) item { ControlMetric("GPS unavailable · HR and steps continue") }
-        }
 
-        (snapshot.errorMessage ?: permissionError)?.let { message ->
-            item {
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.caption2,
-                    color = MaterialTheme.colors.error,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
+                if (snapshot.pendingSyncCount > 0) {
+                    item { MetricLabel("${snapshot.pendingSyncCount} pending sync") }
+                }
 
-        when (snapshot.status) {
-            WorkoutStatus.IDLE, WorkoutStatus.STOPPED -> {
-                item { Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start") } }
-            }
-            WorkoutStatus.RECORDING -> {
-                item { Button(onClick = onPause, modifier = Modifier.fillMaxWidth()) { Text("Pause") } }
-                item { Button(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("Stop") } }
-            }
-            WorkoutStatus.PAUSED -> {
-                item { Button(onClick = onResume, modifier = Modifier.fillMaxWidth()) { Text("Resume") } }
-                item { Button(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("Stop") } }
+                // Heart rate BPM readout
+                item {
+                    Text(
+                        text = snapshot.heartRateBpm?.toString()?.takeUnless { isAmbient } ?: "--",
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAmbient) Color.White else zone?.toColor() ?: Color.LightGray,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    Text(
+                        text = if (isAmbient) "BPM" else "${zone?.label ?: if (snapshot.status == WorkoutStatus.IDLE) "READY" else "NO SIGNAL"} · BPM",
+                        style = MaterialTheme.typography.caption2,
+                        color = if (isAmbient) Color.LightGray else zone?.toColor() ?: Color.LightGray,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // Duration & Distance
+                item {
+                    Text(
+                        text = formatDuration(snapshot.elapsedMs),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    )
+                }
+                item {
+                    MetricLabel(
+                        if (isAmbient) "-- km" else "${"%.2f".format(Locale.ROOT, snapshot.distanceMeters / 1000.0)} km",
+                    )
+                }
+
+                if (snapshot.status != WorkoutStatus.IDLE) {
+                    item { MetricLabel("${formatPace(snapshot.paceSecondsPerKm)} /km · ${snapshot.steps} steps") }
+                    item { MetricLabel(sensorSummary(snapshot)) }
+                }
+
+                (snapshot.errorMessage ?: permissionError)?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.caption2,
+                            color = MaterialTheme.colors.error,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                        )
+                    }
+                }
+
+                // Action buttons based on workout status
+                when (snapshot.status) {
+                    WorkoutStatus.IDLE, WorkoutStatus.STOPPED -> {
+                        item {
+                            Button(
+                                onClick = { onStart(currentType) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 6.dp),
+                            ) {
+                                Text("Start ${currentType.label}")
+                            }
+                        }
+                    }
+                    WorkoutStatus.RECORDING -> {
+                        item {
+                            Button(
+                                onClick = onPause,
+                                colors = ButtonDefaults.secondaryButtonColors(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                            ) {
+                                Text("Pause")
+                            }
+                        }
+                        item {
+                            Button(
+                                onClick = onStop,
+                                colors = ButtonDefaults.secondaryButtonColors(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                            ) {
+                                Text("Stop")
+                            }
+                        }
+                    }
+                    WorkoutStatus.PAUSED -> {
+                        item {
+                            Button(
+                                onClick = onResume,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                            ) {
+                                Text("Resume")
+                            }
+                        }
+                        item {
+                            Button(
+                                onClick = onStop,
+                                colors = ButtonDefaults.secondaryButtonColors(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                            ) {
+                                Text("Stop")
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ControlMetric(value: String) {
+private fun MetricLabel(value: String) {
     Text(
         text = value,
         style = MaterialTheme.typography.body2,
@@ -253,7 +230,7 @@ private fun sensorSummary(snapshot: WorkoutRecordingSnapshot): String = listOf(
     if (snapshot.availability.gps) "GPS" else null,
     if (snapshot.availability.heartRate) "HR" else null,
     if (snapshot.availability.steps) "steps" else null,
-).filterNotNull().joinToString(" · ").ifBlank { "Timer only" }
+).filterNotNull().joinToString(" · ").ifBlank { "Timer" }
 
 private fun formatDuration(durationMs: Long): String {
     val totalSeconds = durationMs / 1000L

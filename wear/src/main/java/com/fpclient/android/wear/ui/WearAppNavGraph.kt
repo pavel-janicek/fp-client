@@ -1,17 +1,23 @@
 package com.fpclient.android.wear.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.fpclient.android.wear.auth.WearAuthState
-import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutActivityType
+import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
+import com.fpclient.android.wear.recording.WorkoutStatus
 
 /** Route table for the watch nav graph. */
 object WearRoutes {
     const val HOME = "home"
+    const val WORKOUT_SELECT = "workout_select"
     const val WORKOUT = "workout"
     const val SETTINGS = "settings"
 }
@@ -32,7 +38,6 @@ fun WearAppNavGraph(
     onSignOut: () -> Unit = {},
     workoutSnapshot: WorkoutRecordingSnapshot = WorkoutRecordingSnapshot(),
     workoutPermissionError: String? = null,
-    onOpenWorkout: () -> Unit = {},
     onStartWorkout: (WorkoutActivityType) -> Unit = {},
     onPauseWorkout: () -> Unit = {},
     onResumeWorkout: () -> Unit = {},
@@ -42,6 +47,8 @@ fun WearAppNavGraph(
     permissionRefreshKey: Int = 0,
     navController: NavHostController = rememberSwipeDismissableNavController(),
 ) {
+    var selectedActivityType by remember { mutableStateOf(WorkoutActivityType.RUN) }
+
     SwipeDismissableNavHost(
         navController = navController,
         startDestination = WearRoutes.HOME,
@@ -54,7 +61,13 @@ fun WearAppNavGraph(
                 pendingSyncCount = workoutSnapshot.pendingSyncCount,
                 onRequestCredentials = onRequestCredentials,
                 onSignOut = onSignOut,
-                onOpenWorkout = { navController.navigate(WearRoutes.WORKOUT) },
+                onOpenWorkout = {
+                    if (workoutSnapshot.status == WorkoutStatus.RECORDING || workoutSnapshot.status == WorkoutStatus.PAUSED) {
+                        navController.navigate(WearRoutes.WORKOUT)
+                    } else {
+                        navController.navigate(WearRoutes.WORKOUT_SELECT)
+                    }
+                },
                 onOpenSettings = { navController.navigate(WearRoutes.SETTINGS) },
             )
         }
@@ -64,8 +77,18 @@ fun WearAppNavGraph(
                 permissionRefreshKey = permissionRefreshKey,
             )
         }
+        composable(WearRoutes.WORKOUT_SELECT) {
+            ActivitySelectionScreen(
+                onSelectActivity = { type ->
+                    selectedActivityType = type
+                    navController.navigate(WearRoutes.WORKOUT)
+                },
+                onRequestSensorPermissions = onRequestSensorPermissions,
+            )
+        }
         composable(WearRoutes.WORKOUT) {
             WorkoutControlScreen(
+                activityType = selectedActivityType,
                 snapshot = workoutSnapshot,
                 permissionError = workoutPermissionError,
                 onStart = onStartWorkout,
