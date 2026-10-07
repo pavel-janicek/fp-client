@@ -15,6 +15,7 @@ class WatchWearAuthService : WearableListenerService() {
 
     override fun onMessageReceived(event: MessageEvent) {
         val path = event.path
+        android.util.Log.i("WatchWearAuthService", "onMessageReceived path=$path from=${event.sourceNodeId}")
         if (path == com.fpclient.android.wear.recording.WorkoutSyncProtocol.ACK_PATH) {
             event.data.toString(Charsets.UTF_8).toLongOrNull()?.let { sessionId ->
                 serviceScope.launch {
@@ -34,8 +35,11 @@ class WatchWearAuthService : WearableListenerService() {
 
         serviceScope.launch {
             runCatching {
-                WearAuthStore(this@WatchWearAuthService)
-                    .apply(WearAuthProtocol.decode(event.data))
+                val state = WearAuthProtocol.decode(event.data)
+                WearAuthStore(this@WatchWearAuthService).apply(state)
+                android.util.Log.i("WatchWearAuthService", "Applied auth state: username=${state.username} server=${state.serverUrl}")
+            }.onFailure { e ->
+                android.util.Log.w("WatchWearAuthService", "Failed to apply auth state from $path", e)
             }
         }
     }

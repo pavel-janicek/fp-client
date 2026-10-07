@@ -29,16 +29,11 @@ internal object PhoneWearAuthRelay {
             "expired" -> PhoneWearAuthProtocol.EXPIRED_PATH
             else -> PhoneWearAuthProtocol.SIGNED_OUT_PATH
         }
-        val nodes = runCatching {
-            Wearable.getCapabilityClient(context)
-                .getCapability(PhoneWearAuthProtocol.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
-                .await()
-                .nodes
-        }.getOrDefault(emptySet())
-        nodes.forEach { node ->
+        val nodeIds = getReachableWatchNodeIds(context)
+        nodeIds.forEach { nodeId ->
             runCatching {
                 Wearable.getMessageClient(context)
-                    .sendMessage(node.id, path, PhoneWearAuthProtocol.encode(message))
+                    .sendMessage(nodeId, path, PhoneWearAuthProtocol.encode(message))
                     .await()
             }
         }
@@ -62,12 +57,24 @@ internal object PhoneWearAuthRelay {
         return ok
     }
 
-    suspend fun getReachableWatchNodeIds(context: Context): List<String> = runCatching {
-        Wearable.getCapabilityClient(context)
-            .getCapability(PhoneWearAuthProtocol.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
-            .await()
-            .nodes
-    }.getOrDefault(emptySet()).map { it.id }.toList()
+    suspend fun getReachableWatchNodeIds(context: Context): List<String> {
+        val capabilityNodes = runCatching {
+            Wearable.getCapabilityClient(context)
+                .getCapability(PhoneWearAuthProtocol.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
+                .await()
+                .nodes
+                .map { it.id }
+        }.getOrDefault(emptyList())
+
+        if (capabilityNodes.isNotEmpty()) return capabilityNodes
+
+        return runCatching {
+            Wearable.getNodeClient(context)
+                .connectedNodes
+                .await()
+                .map { it.id }
+        }.getOrDefault(emptyList())
+    }
 
     private const val TAG = "PhoneWearAuth"
 }

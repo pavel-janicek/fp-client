@@ -22,18 +22,26 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
     private val appContext = context.applicationContext
 
     suspend fun requestCredentials(): CredentialRequestResult = withContext(Dispatchers.IO) {
-        val nodes = runCatching {
+        val capabilityNodes = runCatching {
             Wearable.getCapabilityClient(appContext)
                 .getCapability(WearAuthProtocol.CAPABILITY, CapabilityClient.FILTER_REACHABLE)
                 .await()
                 .nodes
         }.getOrElse { e ->
             Log.w(TAG, "getCapability(${WearAuthProtocol.CAPABILITY}) failed", e)
-            return@withContext CredentialRequestResult.SendFailed("lookup failed: ${e.message}")
+            emptySet()
         }
+
+        val nodes = if (capabilityNodes.isNotEmpty()) capabilityNodes else runCatching {
+            Wearable.getNodeClient(appContext)
+                .connectedNodes
+                .await()
+                .toSet()
+        }.getOrDefault(emptySet())
+
         Log.i(
             TAG,
-            "requestCredentials: ${nodes.size} reachable node(s) for ${WearAuthProtocol.CAPABILITY}: " +
+            "requestCredentials: ${nodes.size} reachable/connected node(s): " +
                 nodes.joinToString { "${it.id} displayName=${it.displayName} nearby=${it.isNearby}" },
         )
         if (nodes.isEmpty()) return@withContext CredentialRequestResult.NoPhoneFound
@@ -58,12 +66,20 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
 
     suspend fun signOut(): Boolean = withContext(Dispatchers.IO) {
         authStore.clear(expired = false)
-        val nodes = runCatching {
+        val capabilityNodes = runCatching {
             Wearable.getCapabilityClient(appContext)
                 .getCapability(WearAuthProtocol.CAPABILITY, CapabilityClient.FILTER_REACHABLE)
                 .await()
                 .nodes
         }.getOrDefault(emptySet())
+
+        val nodes = if (capabilityNodes.isNotEmpty()) capabilityNodes else runCatching {
+            Wearable.getNodeClient(appContext)
+                .connectedNodes
+                .await()
+                .toSet()
+        }.getOrDefault(emptySet())
+
         if (nodes.isEmpty()) return@withContext false
 
         var sent = false
