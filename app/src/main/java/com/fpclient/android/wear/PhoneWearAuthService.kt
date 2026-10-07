@@ -1,6 +1,7 @@
 package com.fpclient.android.wear
 
 import android.util.Log
+import com.fpclient.android.FitPubApplication
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Asset
 import com.google.android.gms.wearable.DataEvent
@@ -18,25 +19,47 @@ import kotlinx.coroutines.tasks.await
 
 class PhoneWearAuthService : WearableListenerService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val diagnosticsStore by lazy { PhoneHandshakeDiagnosticsStore(this) }
     companion object {
         private const val TAG = "PhoneWearAuth"
     }
 
     override fun onMessageReceived(event: MessageEvent) {
         Log.i(TAG, "onMessageReceived path=${event.path} from=${event.sourceNodeId}")
-        val app = com.fpclient.android.FitPubApplication.from(this)
+        val app = FitPubApplication.from(this)
         when (event.path) {
-            PhoneWearAuthProtocol.REQUEST_PATH -> serviceScope.launch {
-                PhoneWearAuthRelay.respondToRequest(
-                    this@PhoneWearAuthService,
-                    event.sourceNodeId,
-                    app.container.sessionStore.currentSession(),
-                )
-            }
+            PhoneWearAuthProtocol.REQUEST_PATH -> handleAuthRequest(event, app)
             PhoneWearAuthProtocol.REVOKE_PATH -> serviceScope.launch {
                 app.container.sessionStore.logout()
             }
             else -> super.onMessageReceived(event)
+        }
+    }
+
+    private fun handleAuthRequest(event: MessageEvent, app: FitPubApplication) {
+        val nodeId = event.sourceNodeId
+        val diagnostics = PhoneHandshakeDiagnostics(
+            lastRequestNodeId = nodeId,
+            lastRequestPath = event.path,
+            lastRequestTimestampMs = System.currentTimeMillis(),
+        )
+
+        serviceScope.launch {
+            diagnosticsStore.write(diagnostics)
+            val session = app.container.sessionStore.currentSession()
+            val finalState = when (PhoneWearAuthRelay.sendReplyTo(this@PhoneWearAuthService, nodeId, session)) {
+                true -> diagnostics.copy(
+                    lastReplySent = true,
+                    lastReplyType = PhoneWearAuthProtocol.stateFor(session).type,
+                    lastReplyTimestampMs = System.currentTimeMillis(),
+                )
+                false -> diagnostics.copy(
+                    lastReplySent = false,
+                    lastReplyFailed = true,
+                    lastReplyTimestampMs = System.currentTimeMillis(),
+                )
+            }
+            diagnosticsStore.write(finalState)
         }
     }
 

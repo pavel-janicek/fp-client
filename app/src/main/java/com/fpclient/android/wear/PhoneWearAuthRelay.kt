@@ -44,20 +44,30 @@ internal object PhoneWearAuthRelay {
         }
     }
 
-    suspend fun respondToRequest(context: Context, nodeId: String, session: Session) {
+    suspend fun sendReplyTo(context: Context, nodeId: String, session: Session): Boolean {
         val message = PhoneWearAuthProtocol.stateFor(session)
         val path = when (message.type) {
             "credentials" -> PhoneWearAuthProtocol.CREDENTIALS_PATH
             "expired" -> PhoneWearAuthProtocol.EXPIRED_PATH
             else -> PhoneWearAuthProtocol.SIGNED_OUT_PATH
         }
-        Log.i(TAG, "respondToRequest node=$nodeId type=${message.type}")
-        runCatching {
+        Log.i(TAG, "sendReplyTo node=$nodeId type=${message.type}")
+        val ok = runCatching {
             Wearable.getMessageClient(context)
                 .sendMessage(nodeId, path, PhoneWearAuthProtocol.encode(message))
                 .await()
-        }.onFailure { e -> Log.w(TAG, "reply to $nodeId failed", e) }
+            true
+        }.getOrDefault(false)
+        if (!ok) Log.w(TAG, "sendReplyTo to $nodeId failed")
+        return ok
     }
+
+    suspend fun getReachableWatchNodeIds(context: Context): List<String> = runCatching {
+        Wearable.getCapabilityClient(context)
+            .getCapability(PhoneWearAuthProtocol.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
+            .await()
+            .nodes
+    }.getOrDefault(emptySet()).map { it.id }.toList()
 
     private const val TAG = "PhoneWearAuth"
 }
