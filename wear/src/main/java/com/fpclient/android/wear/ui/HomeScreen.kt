@@ -1,36 +1,29 @@
 package com.fpclient.android.wear.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.ScalingLazyColumn
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.fpclient.android.wear.auth.WearAuthState
 
 /**
- * Landing screen of FitPub Wear: the "FP Wear" title, a compact sign-in/status line (tap to sign
- * in or refresh from the paired phone), and the two primary destinations — Workout and Settings.
- * The app version moved to [SettingsScreen], so it no longer rides the bottom rim here.
+ * Landing screen of FitPub Wear.
  *
- * Round safety: everything scales from the screen diameter ([BoxWithConstraints], 200 dp reference,
- * clamped 0.85–1.3×) and text is horizontally inset off the curved edges.
+ * A [ScalingLazyColumn] — the round-safe Wear list used by the other screens — hosts everything,
+ * so the screen auto-centres when the content fits and scrolls (crown/touch) when it overflows:
+ * on a small round display the Workout and Settings buttons would otherwise fall below the fold.
+ * The title is deliberately compact and the app version lives on [SettingsScreen], not here.
  */
 @Composable
 fun HomeScreen(
@@ -48,27 +41,20 @@ fun HomeScreen(
         modifier = modifier,
         timeText = { TimeText() },
     ) {
-        BoxWithConstraints(
+        ScalingLazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
         ) {
-            val scale = (minOf(maxWidth, maxHeight) / 200.dp).coerceIn(0.85f, 1.3f)
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 32.dp * scale),
-            ) {
+            item {
                 Text(
                     text = "FP Wear",
-                    fontSize = 32.sp * scale,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colors.onBackground,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(modifier = Modifier.height(8.dp * scale))
+            }
+            item {
                 // Compact sign-in / status line — tapped to sign in (or refresh) from the phone.
                 val identityText = when {
                     authState.isSignedIn -> "Signed in as @${authState.username.ifBlank { "user" }} · tap to refresh"
@@ -80,18 +66,17 @@ fun HomeScreen(
                 }
                 Text(
                     text = identityText,
-                    fontSize = 15.sp * scale,
                     color = MaterialTheme.colors.primary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onRequestCredentials),
                 )
-                if (authState.isSignedIn || authState.expired) {
-                    Spacer(modifier = Modifier.height(4.dp * scale))
+            }
+            if (authState.isSignedIn || authState.expired) {
+                item {
                     Text(
                         text = "Sign out",
-                        fontSize = 12.sp * scale,
                         color = MaterialTheme.colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
@@ -99,23 +84,26 @@ fun HomeScreen(
                             .clickable(onClick = onSignOut),
                     )
                 }
-                if (authState.isSignedIn && phoneReachable == false) {
-                    Spacer(modifier = Modifier.height(4.dp * scale))
+            }
+            if (authState.isSignedIn && phoneReachable == false) {
+                item {
                     Text(
                         text = "Using saved sign-in; phone is not reachable",
-                        fontSize = 11.sp * scale,
                         color = MaterialTheme.colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp * scale))
+            }
+            item {
                 Button(
                     onClick = onOpenWorkout,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(if (pendingSyncCount > 0) "Workout ($pendingSyncCount pending)" else "Workout")
                 }
-                Spacer(modifier = Modifier.height(8.dp * scale))
+            }
+            item {
                 Button(
                     onClick = onOpenSettings,
                     modifier = Modifier.fillMaxWidth(),
