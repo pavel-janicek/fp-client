@@ -1,0 +1,2 @@
+3.0.0-rc1 (release 3.0.0-rc1):
+- Version bump to the first release candidate of the 3.0.0 line (versionCode 45) with the FP-Client/3.0.0-rc1 User-Agent.
