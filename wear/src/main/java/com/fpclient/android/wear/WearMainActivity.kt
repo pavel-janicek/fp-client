@@ -90,6 +90,12 @@ class WearMainActivity : ComponentActivity() {
                     onDiscardPending = {
                         com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this).removeAll()
                     },
+                    onResolvePending = {
+                        // Forced full retry: clears the per-workout attempt flags so the worker
+                        // re-attempts every queued workout (direct upload first, then relay).
+                        com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this).resetRelayFlags()
+                        com.fpclient.android.wear.recording.WorkoutSyncScheduler.enqueue(this)
+                    },
                     onAmbientModeChanged = { isAmbient ->
                         if (workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.RECORDING ||
                             workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.PAUSED

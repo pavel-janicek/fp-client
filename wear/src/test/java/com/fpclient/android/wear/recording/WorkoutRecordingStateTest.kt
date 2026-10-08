@@ -44,6 +44,28 @@ class WorkoutRecordingStateTest {
     }
 
     @Test
+    fun liveElapsedPrefersMonotonicStartSoBackwardClockStepsCannotFreezeTheTimer() {
+        val session = WorkoutSessionTransitions.start(
+            nowEpochMs = 10_000L,
+            nowElapsedRealtimeMs = 500_000L,
+        )
+
+        // Monotonic readout advances even if the wall clock stepped back past the start.
+        assertEquals(3_000L, session.liveElapsedMs(nowElapsedRealtimeMs = 503_000L, nowEpochMs = 7_000L))
+        // Monotonic start in the "future" (reboot restarted the monotonic clock) falls back
+        // to wall-clock, which keeps counting across reboots.
+        assertEquals(9_000L, session.liveElapsedMs(nowElapsedRealtimeMs = 400_000L, nowEpochMs = 19_000L))
+    }
+
+    @Test
+    fun liveElapsedFallsBackToWallClockForSnapshotsWithoutMonotonicStart() {
+        val legacy = WorkoutSessionSnapshot(WorkoutStatus.RECORDING, 1_000L, 0L, 1_000L)
+
+        assertEquals(4_000L, legacy.liveElapsedMs(nowElapsedRealtimeMs = 42L, nowEpochMs = 5_000L))
+        assertEquals(0L, legacy.liveElapsedMs(nowElapsedRealtimeMs = 42L, nowEpochMs = 500L))
+    }
+
+    @Test
     fun metricsAccumulateDistanceHeartRateAndStepsAndFilterBadFixes() {
         val metrics = WorkoutMetricsAccumulator()
         metrics.add(WorkoutTrackEvent(1L, 50.0, 14.0, accuracyMeters = 5.0, heartRateBpm = 120, steps = 10))

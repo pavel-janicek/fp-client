@@ -117,7 +117,10 @@ fun SettingsScreen(
                 }
                 item {
                     Button(
-                        onClick = onResolvePending,
+                        onClick = {
+                            onResolvePending()
+                            feedback = "Full retry queued for pending workouts"
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp),

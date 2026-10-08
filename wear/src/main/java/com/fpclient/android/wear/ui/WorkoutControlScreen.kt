@@ -1,5 +1,6 @@
 package com.fpclient.android.wear.ui
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -7,6 +8,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +35,7 @@ import com.fpclient.android.wear.recording.WorkoutActivityType
 import com.fpclient.android.wear.recording.WorkoutHeartRateZone
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutStatus
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 @Composable
@@ -54,6 +60,23 @@ fun WorkoutControlScreen(
         val zone = WorkoutHeartRateZone.fromBpm(snapshot.heartRateBpm)
 
         LaunchedEffect(isAmbient) { onAmbientModeChanged(isAmbient) }
+
+        // One-second UI tick: keeps the on-screen timer moving whenever the screen is on,
+        // anchored to the session's monotonic start — so it advances even if the recording
+        // service's periodic publish is throttled (ambient, background limits, clock sync).
+        var monotonicNow by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
+        val recording = snapshot.status == WorkoutStatus.RECORDING
+        LaunchedEffect(recording) {
+            while (recording) {
+                delay(1_000L)
+                monotonicNow = SystemClock.elapsedRealtime()
+            }
+        }
+        val elapsedMs = if (recording) {
+            snapshot.session?.liveElapsedMs(monotonicNow, System.currentTimeMillis()) ?: snapshot.elapsedMs
+        } else {
+            snapshot.elapsedMs
+        }
 
         Scaffold(
             modifier = modifier.background(Color.Black),
@@ -132,7 +155,7 @@ fun WorkoutControlScreen(
                 // Elapsed duration timer
                 item {
                     Text(
-                        text = formatDuration(snapshot.elapsedMs),
+                        text = formatDuration(elapsedMs),
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,

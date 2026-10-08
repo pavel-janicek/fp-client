@@ -94,6 +94,7 @@ fun WearAppNavGraph(
                 onRequestSensorPermissions = onRequestSensorPermissions,
                 onSyncPending = onSyncPending,
                 onDiscardPending = onDiscardPending,
+                onResolvePending = onResolvePending,
                 permissionRefreshKey = permissionRefreshKey,
             )
         }

@@ -52,8 +52,24 @@ data class WorkoutSessionSnapshot(
     val accumulatedMovingMs: Long,
     val resumedAtEpochMs: Long?,
     val activityType: WorkoutActivityType = WorkoutActivityType.RUN,
+    /** Monotonic start timestamp used for live elapsed-time display. */
+    val sessionStartElapsedRealtimeMs: Long = 0L,
 ) {
     fun elapsedMsAt(nowEpochMs: Long): Long = (nowEpochMs - startedAtEpochMs).coerceAtLeast(0L)
+
+    /**
+     * Live elapsed time for display. Prefers the monotonic session start captured when the
+     * workout began, so the readout keeps advancing while the watch is awake even if a time-sync
+     * steps the wall clock backwards (which freezes an [elapsedMsAt] readout at 0 until the wall
+     * clock passes the original start). Snapshots persisted before the monotonic field existed
+     * (or restored after a reboot, where the monotonic clock restarted) fall back to wall-clock.
+     */
+    fun liveElapsedMs(nowElapsedRealtimeMs: Long, nowEpochMs: Long): Long =
+        if (sessionStartElapsedRealtimeMs > 0L && nowElapsedRealtimeMs >= sessionStartElapsedRealtimeMs) {
+            nowElapsedRealtimeMs - sessionStartElapsedRealtimeMs
+        } else {
+            elapsedMsAt(nowEpochMs)
+        }
 
     fun movingMsAt(nowEpochMs: Long): Long = accumulatedMovingMs +
         (resumedAtEpochMs?.let { (nowEpochMs - it).coerceAtLeast(0L) } ?: 0L)
@@ -98,11 +114,13 @@ object WorkoutSessionTransitions {
     fun start(
         nowEpochMs: Long,
         activityType: WorkoutActivityType = WorkoutActivityType.RUN,
+        nowElapsedRealtimeMs: Long = 0L,
     ) = WorkoutSessionSnapshot(
-        WorkoutStatus.RECORDING,
-        nowEpochMs,
+        status = WorkoutStatus.RECORDING,
+        startedAtEpochMs = nowEpochMs,
         accumulatedMovingMs = 0L,
         resumedAtEpochMs = nowEpochMs,
+        sessionStartElapsedRealtimeMs = nowElapsedRealtimeMs,
         activityType = activityType,
     )
 

@@ -150,7 +150,11 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val now = System.currentTimeMillis()
         errorMessage = null
         metrics = WorkoutMetricsAccumulator()
-        val fresh = WorkoutSessionTransitions.start(now, WorkoutActivityType.fromStorage(activityTypeName))
+        val fresh = WorkoutSessionTransitions.start(
+            now,
+            WorkoutActivityType.fromStorage(activityTypeName),
+            SystemClock.elapsedRealtime(),
+        )
         session = fresh
         sessionStore.save(fresh)
         if (!appendBoundary(fresh.startedAtEpochMs, "START")) {
@@ -315,6 +319,14 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             true
         } catch (_: SecurityException) {
             publishError("Workout permissions changed. Grant access and try again.")
+            session = null
+            sessionStore.clear()
+            stopSelf()
+            false
+        } catch (e: Exception) {
+            // e.g. ForegroundServiceStartNotAllowedException after the user force-stopped the
+            // app. Never crash the service mid-workout — abort cleanly with a retryable message.
+            publishError("Could not enter workout foreground (${e.javaClass.simpleName}). Retry.")
             session = null
             sessionStore.clear()
             stopSelf()
@@ -630,7 +642,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         WorkoutRecordingBus.publish(
             WorkoutRecordingSnapshot(
                 session = current,
-                elapsedMs = current?.elapsedMsAt(now) ?: 0L,
+                elapsedMs = current?.liveElapsedMs(SystemClock.elapsedRealtime(), now) ?: 0L,
                 movingMs = movingMs,
                 heartRateBpm = metrics.heartRateBpm,
                 distanceMeters = metrics.distanceMeters,
@@ -694,7 +706,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun buildNotification(): Notification {
         val current = session
         val paused = current?.status == WorkoutStatus.PAUSED
-        val elapsedMs = current?.elapsedMsAt(System.currentTimeMillis()) ?: 0L
+        val elapsedMs = current?.liveElapsedMs(SystemClock.elapsedRealtime(), System.currentTimeMillis()) ?: 0L
         val elapsedSeconds = elapsedMs / 1000L
         val title = if (paused) "Workout paused" else "Workout recording"
         val contentIntent = PendingIntent.getActivity(
