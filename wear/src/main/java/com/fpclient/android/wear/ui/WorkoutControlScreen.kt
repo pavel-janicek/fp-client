@@ -42,6 +42,7 @@ fun WorkoutControlScreen(
     onResume: () -> Unit,
     onStop: () -> Unit,
     onSyncPending: () -> Unit = {},
+    onDiscardPending: () -> Unit = {},
     onAmbientModeChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -81,7 +82,7 @@ fun WorkoutControlScreen(
                 }
 
                 if (snapshot.pendingSyncCount > 0) {
-                    item { MetricLabel("${snapshot.pendingSyncCount} pending sync — tap Sync now to upload") }
+                    item { MetricLabel("${snapshot.pendingSyncCount} pending sync") }
                     item {
                         Button(
                             onClick = onSyncPending,
@@ -91,6 +92,17 @@ fun WorkoutControlScreen(
                                 .padding(top = 4.dp),
                         ) {
                             Text("Sync now")
+                        }
+                    }
+                    item {
+                        Button(
+                            onClick = onDiscardPending,
+                            colors = ButtonDefaults.secondaryButtonColors(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        ) {
+                            Text("Discard pending")
                         }
                     }
                 }
@@ -117,17 +129,26 @@ fun WorkoutControlScreen(
                     )
                 }
 
-                // Duration & Distance
+                // Elapsed duration timer
                 item {
                     Text(
                         text = formatDuration(snapshot.elapsedMs),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
                         color = Color.White,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
+                            .padding(top = 6.dp),
+                    )
+                }
+                item {
+                    Text(
+                        text = if (snapshot.status == WorkoutStatus.RECORDING) "ELAPSED TIME" else "TIME",
+                        style = MaterialTheme.typography.caption2,
+                        color = Color.LightGray,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 item {

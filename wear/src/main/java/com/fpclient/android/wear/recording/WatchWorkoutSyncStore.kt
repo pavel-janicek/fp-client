@@ -63,6 +63,17 @@ class WatchWorkoutSyncStore(context: Context) {
         write(read().filterNot { it.sessionId == sessionId })
     }
 
+    fun removeAll() = synchronized(lock) {
+        val existingList = read()
+        for (existing in existingList) {
+            val gpx = File(appContext.filesDir, "workouts/${existing.gpxFileName}")
+            val sidecar = File(appContext.filesDir, "workouts/${existing.sidecarFileName}")
+            gpx.delete()
+            sidecar.delete()
+        }
+        write(emptyList())
+    }
+
     private fun read(): List<PendingWatchWorkout> = decode(preferences.getString(KEY_QUEUE, null))
 
     private fun write(workouts: List<PendingWatchWorkout>) {

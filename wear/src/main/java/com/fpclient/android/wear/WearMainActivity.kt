@@ -87,6 +87,9 @@ class WearMainActivity : ComponentActivity() {
                         com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this).resetRelayFlags()
                         com.fpclient.android.wear.recording.WorkoutSyncScheduler.enqueue(this)
                     },
+                    onDiscardPending = {
+                        com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this).removeAll()
+                    },
                     onAmbientModeChanged = { isAmbient ->
                         if (workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.RECORDING ||
                             workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.PAUSED

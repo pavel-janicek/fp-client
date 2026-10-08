@@ -58,6 +58,7 @@ fun WearAppNavGraph(
     onResumeWorkout: () -> Unit = {},
     onStopWorkout: () -> Unit = {},
     onSyncPending: () -> Unit = {},
+    onDiscardPending: () -> Unit = {},
     onAmbientModeChanged: (Boolean) -> Unit = {},
     onRequestSensorPermissions: () -> Unit = {},
     permissionRefreshKey: Int = 0,
@@ -137,6 +138,7 @@ fun WearAppNavGraph(
                     navController.popBackStack(WearRoutes.HOME, inclusive = false)
                 },
                 onSyncPending = onSyncPending,
+                onDiscardPending = onDiscardPending,
                 onAmbientModeChanged = onAmbientModeChanged,
             )
         }

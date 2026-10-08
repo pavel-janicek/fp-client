@@ -405,9 +405,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     }
 
     private fun stopFallbackHeartRate() {
-        heartRateSensor?.let { sensorManager.unregisterListener(this, it) }
-        heartRateSensor = null
-        sensorsActive = stepSensor != null
+        // Keep the hardware PPG heart-rate sensor active continuously during recording
+        // so live BPM updates stream reliably across device variants.
     }
 
     private fun stopPlatformSensors() {
