@@ -68,6 +68,15 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private var availability = WorkoutSensorAvailability()
     private var stepSensor: Sensor? = null
     private var heartRateSensor: Sensor? = null
+
+    /** Monotonic timestamp of the last PPG (re-)registration, used by the HR watchdog. */
+    private var heartRateSensorArmedAtMs = 0L
+
+    /** True once any heart-rate value has actually reached [publishHeartRate] during this workout. */
+    private var heartRateEverReceived = false
+
+    /** How many times the HR watchdog has re-armed this workout; caps the recovery loop. */
+    private var heartRateRecoveryAttempts = 0
     private var locationActive = false
     private var sensorsActive = false
     private var healthExerciseActive = false
@@ -150,6 +159,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val now = System.currentTimeMillis()
         errorMessage = null
         metrics = WorkoutMetricsAccumulator()
+        heartRateEverReceived = false
+        heartRateRecoveryAttempts = 0
+        heartRateSensorArmedAtMs = 0L
         val fresh = WorkoutSessionTransitions.start(
             now,
             WorkoutActivityType.fromStorage(activityTypeName),
@@ -406,15 +418,30 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         // Also register the platform heart-rate sensor so HR keeps recording if Health Services
         // reports available but never delivers an update (it is torn down only once Health
         // Services actually provides a value).
-        startFallbackHeartRate()
+        ensureHeartRateSensor()
         refreshAvailability()
     }
 
-    private fun startFallbackHeartRate() {
-        if (heartRateSensor != null || !hasHeartRatePermission()) return
-        heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE) ?: return
-        sensorManager.registerListener(this, heartRateSensor, SensorManager.SENSOR_DELAY_UI)
+    /**
+     * Arms the platform PPG listener. Idempotent, but *re-armable*: every caller that used to be a
+     * no-op because [heartRateSensor] was already set now genuinely re-registers the listener.
+     *
+     * This is the fix for "--" BPM readouts. While a Health Services exercise runs it holds the PPG
+     * exclusively, so an already-registered listener is starved silently — no callback, no error.
+     * The old `if (heartRateSensor != null) return` guard meant no recovery path could ever
+     * re-register it, leaving HR dead for the rest of the workout (and only "fixed" by restarting
+     * the app, which built a fresh service with a null listener).
+     */
+    private fun ensureHeartRateSensor() {
+        if (!hasHeartRatePermission()) return
+        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE) ?: return
+        // Unregister before re-registering: registering the same listener/sensor pair again is a
+        // no-op on the framework side, so without this the "re-arm" would not take effect.
+        sensorManager.unregisterListener(this, sensor)
+        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+        heartRateSensor = sensor
         sensorsActive = true
+        heartRateSensorArmedAtMs = SystemClock.elapsedRealtime()
         refreshAvailability()
     }
 
@@ -461,6 +488,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun publishHeartRate(value: Int?) {
         val bpm = value?.takeIf { it in MIN_HEART_RATE_BPM..MAX_HEART_RATE_BPM } ?: return
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
+        heartRateEverReceived = true
         appendEvent(current, WorkoutTrackEvent(timeEpochMs = System.currentTimeMillis(), heartRateBpm = bpm))
     }
 
@@ -469,14 +497,14 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         if (!hasHeartRatePermission()) {
             healthServicesAvailable = false
             healthHeartRateAvailable = false
-            startFallbackHeartRate()
+            ensureHeartRateSensor()
             refreshAvailability()
             return
         }
         val client = runCatching { HealthServices.getClient(this).exerciseClient }.getOrNull() ?: run {
             healthServicesAvailable = false
             healthHeartRateAvailable = false
-            startFallbackHeartRate()
+            ensureHeartRateSensor()
             refreshAvailability()
             return
         }
@@ -488,7 +516,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                     .onFailure {
                         healthExerciseActive = false
                         healthHeartRateAvailable = false
-                        startFallbackHeartRate()
+                        ensureHeartRateSensor()
                     }
             }
             return
@@ -499,7 +527,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             if (exerciseType !in capabilities.supportedExerciseTypes) {
                 healthServicesAvailable = false
                 healthHeartRateAvailable = false
-                startFallbackHeartRate()
+                ensureHeartRateSensor()
                 refreshAvailability()
                 return
             }
@@ -507,7 +535,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             if (DataType.HEART_RATE_BPM !in exerciseCapabilities.supportedDataTypes) {
                 healthServicesAvailable = false
                 healthHeartRateAvailable = false
-                startFallbackHeartRate()
+                ensureHeartRateSensor()
                 refreshAvailability()
                 return
             }
@@ -519,7 +547,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                     healthExerciseActive = false
                     healthServicesAvailable = false
                     healthHeartRateAvailable = false
-                    startFallbackHeartRate()
+                    ensureHeartRateSensor()
                     refreshAvailability()
                 }
 
@@ -544,7 +572,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                     if (dataType == DataType.HEART_RATE_BPM && availability is DataTypeAvailability) {
                         healthHeartRateAvailable = availability == DataTypeAvailability.AVAILABLE ||
                             availability == DataTypeAvailability.ACQUIRING
-                        if (!healthHeartRateAvailable) startFallbackHeartRate()
+                        if (!healthHeartRateAvailable) ensureHeartRateSensor()
                         refreshAvailability()
                     }
                 }
@@ -567,7 +595,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                     runCatching { client.clearUpdateCallbackAsync(callback).await() }
                     healthServicesAvailable = false
                     healthHeartRateAvailable = false
-                    startFallbackHeartRate()
+                    ensureHeartRateSensor()
                     refreshAvailability()
                     return
                 }
@@ -583,7 +611,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             healthExerciseActive = false
             healthServicesAvailable = false
             healthHeartRateAvailable = false
-            startFallbackHeartRate()
+            ensureHeartRateSensor()
             refreshAvailability()
         }
     }
@@ -597,7 +625,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 .onFailure {
                     healthExerciseActive = false
                     healthHeartRateAvailable = false
-                    startFallbackHeartRate()
+                    ensureHeartRateSensor()
                     refreshAvailability()
                 }
         }
@@ -630,8 +658,50 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         ticker = serviceScope.launch {
             while (isActive && session?.status == WorkoutStatus.RECORDING) {
                 publish()
+                watchdogHeartRate()
                 delay(if (ambientMode) AMBIENT_TICK_INTERVAL_MS else TICK_INTERVAL_MS)
             }
+        }
+    }
+
+    /**
+     * Revives a starved heart-rate listener. If a workout is recording, the PPG exists and is
+     * permitted, yet not a single BPM has arrived within [HEART_RATE_WATCHDOG_MS] of arming, the
+     * listener is being starved — by far the most common cause is Health Services holding the PPG
+     * exclusively while its exercise runs, which silences the platform listener with no callback and
+     * no error. Releasing that exercise hands the sensor back, and [ensureHeartRateSensor] re-arms.
+     *
+     * This is what turns a permanently "--" workout into a recovering one. Bounded by
+     * [MAX_HEART_RATE_RECOVERY_ATTEMPTS] so a watch that is simply not on the wrist cannot spin.
+     */
+    private fun watchdogHeartRate() {
+        if (session?.status != WorkoutStatus.RECORDING) return
+        if (heartRateEverReceived) return
+        if (!hasHeartRatePermission()) return
+        if (heartRateSensorArmedAtMs == 0L) return
+        if (heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS) return
+        if (SystemClock.elapsedRealtime() - heartRateSensorArmedAtMs < HEART_RATE_WATCHDOG_MS) return
+        heartRateRecoveryAttempts++
+        if (healthExerciseActive) releaseHealthServicesForPlatformSensor()
+        ensureHeartRateSensor()
+    }
+
+    /**
+     * Ends the Health Services exercise so the platform PPG listener can take the sensor back.
+     * Flags are cleared synchronously; the teardown itself is fire-and-forget so the watchdog never
+     * blocks the ticker.
+     */
+    private fun releaseHealthServicesForPlatformSensor() {
+        val client = healthExerciseClient
+        val callback = healthCallback
+        healthExerciseActive = false
+        healthExercisePaused = false
+        healthServicesAvailable = false
+        healthHeartRateAvailable = false
+        healthCallback = null
+        serviceScope.launch {
+            runCatching { client?.endExerciseAsync()?.await() }
+            if (client != null && callback != null) runCatching { client.clearUpdateCallbackAsync(callback).await() }
         }
     }
 
@@ -671,11 +741,21 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         availability = WorkoutSensorAvailability(
             gps = gps,
             healthServices = healthServicesAvailable,
-            heartRate = (healthHeartRateAvailable && healthServicesAvailable) || hrSensorPresent,
+            // Honest signal: only claim HR once a BPM has actually arrived, or while a source is
+            // still plausibly warming up (Health Services acquiring, or a freshly armed PPG).
+            // Claiming availability from "the sensor object exists" is what let the UI advertise
+            // "HR" above a permanent "--" readout.
+            heartRate = heartRateEverReceived ||
+                (healthHeartRateAvailable && healthServicesAvailable) ||
+                (hrSensorPresent && !hasExceededHeartRateRecovery()),
             steps = stepPresent,
         )
         publish()
     }
+
+    /** True once the watchdog has given up re-arming the PPG for this workout. */
+    private fun hasExceededHeartRateRecovery(): Boolean =
+        heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS
 
     private fun hasHeartRatePermission(): Boolean = if (Build.VERSION.SDK_INT >= 36) {
         hasPermission(WorkoutRecordingController.READ_HEART_RATE_PERMISSION)
@@ -803,5 +883,11 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         private const val AMBIENT_TICK_INTERVAL_MS = 60_000L
         private const val MIN_HEART_RATE_BPM = 20
         private const val MAX_HEART_RATE_BPM = 250
+
+        /** No BPM within this window of arming means the listener is starved, not idle. */
+        private const val HEART_RATE_WATCHDOG_MS = 10_000L
+
+        /** Caps watchdog re-arms per workout so a watch off the wrist cannot loop forever. */
+        private const val MAX_HEART_RATE_RECOVERY_ATTEMPTS = 3
     }
 }

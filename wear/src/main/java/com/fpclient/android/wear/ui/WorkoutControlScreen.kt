@@ -144,7 +144,7 @@ fun WorkoutControlScreen(
                 }
                 item {
                     Text(
-                        text = if (isAmbient) "BPM" else "${zone?.label ?: if (snapshot.status == WorkoutStatus.IDLE) "READY" else "NO SIGNAL"} · BPM",
+                        text = if (isAmbient) "BPM" else "${heartRateLabel(snapshot, zone)} · BPM",
                         style = MaterialTheme.typography.caption2,
                         color = if (isAmbient) Color.LightGray else zone?.toColor() ?: Color.LightGray,
                         textAlign = TextAlign.Center,
@@ -298,6 +298,17 @@ private fun WorkoutHeartRateZone.toColor(): Color = when (this) {
     WorkoutHeartRateZone.TEMPO -> Color(0xFFFFA24A)
     WorkoutHeartRateZone.THRESHOLD -> Color(0xFFFF655E)
     WorkoutHeartRateZone.PEAK -> Color(0xFFE77CFF)
+}
+
+/**
+ * Caption under the BPM readout. Distinguishes the three states the user needs to tell apart:
+ * warming up, genuinely no signal, and no heart-rate permission granted at all.
+ */
+private fun heartRateLabel(snapshot: WorkoutRecordingSnapshot, zone: WorkoutHeartRateZone?): String = when {
+    zone != null -> zone.label
+    snapshot.status == WorkoutStatus.IDLE -> "READY"
+    !snapshot.availability.heartRate -> "HR OFF"
+    else -> "NO SIGNAL"
 }
 
 private fun sensorSummary(snapshot: WorkoutRecordingSnapshot): String = listOf(
