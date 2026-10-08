@@ -298,6 +298,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val foregroundTypes = foregroundServiceTypes()
         if (Build.VERSION.SDK_INT >= 34 && foregroundTypes == 0) {
             publishError("Grant heart-rate, activity, or location permission to start a workout.")
+            session = null
+            sessionStore.clear()
             stopSelf()
             return false
         }
@@ -307,9 +309,12 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification())
             }
+            playStartFeedback()
             true
         } catch (_: SecurityException) {
             publishError("Workout permissions changed. Grant access and try again.")
+            session = null
+            sessionStore.clear()
             stopSelf()
             false
         }
@@ -318,7 +323,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun foregroundServiceTypes(): Int {
         if (Build.VERSION.SDK_INT < 34) return 0
         var types = 0
-        if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) && gpsProviderAvailable()) {
+        if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) || hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
         val heartRatePermission = if (Build.VERSION.SDK_INT >= 36) {
@@ -737,6 +742,18 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             ongoingActivity.apply(this)
         }
         return notificationBuilder.build()
+    }
+
+    private fun playStartFeedback() {
+        runCatching {
+            @Suppress("DEPRECATION")
+            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                getSystemService(VibratorManager::class.java).defaultVibrator
+            } else {
+                getSystemService(VIBRATOR_SERVICE) as Vibrator
+            }
+            vibrator.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
     }
 
     /** Beep (default notification sound) + vibration when a workout is saved. */

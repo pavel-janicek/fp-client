@@ -10,6 +10,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,6 +45,7 @@ fun WorkoutControlScreen(
     onAmbientModeChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
     val ambientManager = rememberAmbientModeManager()
     CompositionLocalProvider(LocalAmbientModeManager provides ambientManager) {
         val isAmbient = LocalAmbientModeManager.current?.currentAmbientMode is AmbientMode.Ambient
@@ -157,7 +160,10 @@ fun WorkoutControlScreen(
                     WorkoutStatus.IDLE, WorkoutStatus.STOPPED -> {
                         item {
                             Button(
-                                onClick = { onStart(currentType) },
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onStart(currentType)
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 6.dp),
@@ -169,7 +175,10 @@ fun WorkoutControlScreen(
                     WorkoutStatus.RECORDING -> {
                         item {
                             Button(
-                                onClick = onPause,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onPause()
+                                },
                                 colors = ButtonDefaults.secondaryButtonColors(),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -180,7 +189,10 @@ fun WorkoutControlScreen(
                         }
                         item {
                             Button(
-                                onClick = onStop,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onStop()
+                                },
                                 colors = ButtonDefaults.secondaryButtonColors(),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -193,7 +205,10 @@ fun WorkoutControlScreen(
                     WorkoutStatus.PAUSED -> {
                         item {
                             Button(
-                                onClick = onResume,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onResume()
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 4.dp),
@@ -203,7 +218,10 @@ fun WorkoutControlScreen(
                         }
                         item {
                             Button(
-                                onClick = onStop,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onStop()
+                                },
                                 colors = ButtonDefaults.secondaryButtonColors(),
                                 modifier = Modifier
                                     .fillMaxWidth()
