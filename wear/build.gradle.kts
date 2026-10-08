@@ -19,7 +19,13 @@ android {
         applicationId = "com.fpclient.android"
         // Health Services is available on Wear OS 3+, which starts at API 30.
         minSdk = 30
-        targetSdk = 34
+        // Must stay >= 36 to match :app, and this is not cosmetic: it selects which body-sensors
+        // permission the platform will actually grant. The switch to `android.permission.health.
+        // READ_HEART_RATE` applies **only to apps targeting API 36+**. While this sat at 34 the app
+        // asked for READ_HEART_RATE on API 36 watches, which the framework auto-denies without a
+        // dialog, while BODY_SENSORS was simultaneously stripped from the merged manifest by its
+        // `maxSdkVersion="35"` — leaving heart rate ungrantable and silently dead.
+        targetSdk = 36
         // Kept in step with :app (same keystore, same version) so the two halves of the pair
         // always advertise the same release — bump both together per VERSION_CHECKLIST.md.
         versionCode = 44

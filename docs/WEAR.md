@@ -52,6 +52,52 @@ app-side pairing (the only files 9a adds/changes in :app):
 CI needs no workflow change: the existing root-level `./gradlew assembleDebug`,
 `testDebugUnitTest` and `lint` tasks cover `:wear` as soon as it is in `settings.gradle.kts`.
 
+## Publishing to Google Play (why the watch says "not compatible")
+
+Sideloading works but the Play store on the watch refuses the listing? That is almost never a code
+problem — the built artifact is already compatible with modern watches. It is a **Play Console
+configuration** problem. Read this before touching a manifest.
+
+**One listing, two artifacts.** `:app` and `:wear` deliberately share `applicationId`
+`com.fpclient.android` (the Data Layer matches messages by package name — see decision 6). On
+Google Play that means a **single listing carrying two artifacts**: a phone AAB and a Wear AAB.
+They are not two separate apps. `:wear` keeps itself off phones via
+`android.hardware.type.watch` (required) + `com.google.android.wearable.standalone=true`; every
+sensor feature is `required="false"` so GNSS/heart-rate/step sensors never filter devices out.
+
+**The compatibility floor is `minSdk 30` = Wear OS 3 / API 30.** Verified against the built release
+artifact (`aapt2 dump badging`, `bundletool dump manifest`):
+
+```
+package: name='com.fpclient.android'  minSdkVersion:'30'  targetSdkVersion:'36'
+uses-feature: android.hardware.type.watch        (required)
+uses-feature: android.hardware.sensor.heartrate  (required=false)  … and gps/steps likewise
+```
+
+So a **Xiaomi Watch 2 on Wear OS 5 (API 34)**, a Galaxy Watch on Wear OS 3/4, etc. are all within
+range — which is why a sideloaded build installs and runs on them. If the store on such a watch
+says "not compatible," the watch is being offered a release that contains **only the phone
+artifact**, so the watch correctly sees a phone-only app and filters it out.
+
+**Fix — add the Wear artifact to the same release (Play Console, not code):**
+
+1. Build both bundles: `./gradlew :app:bundleRelease :wear:bundleRelease`
+   - phone → `app/build/outputs/bundle/release/*.aab`
+   - watch → `wear/build/outputs/bundle/release/wear-release.aab`
+2. In **Play Console → the `com.fpclient.android` listing → the same release/track you're shipping**,
+   upload **both** AABs to that one release. Under **Advanced settings → Form factors**, mark the
+   `wear-release.aab` as the **Wear OS** artifact. Each AAB retains its own version code
+   (`:wear` uses its own `versionCode` scheme); keep both bumped every release.
+3. Roll the release out. The watch now receives the Wear artifact and the "not compatible" verdict
+   disappears.
+
+**Sanity checks before blaming the build:**
+- The watch you're testing on already installs a sideloaded build → its API level is ≥ 30 → the
+  artifact is compatible. The problem is what the *listing* is serving, full stop.
+- Confirm the listing is on the **Wear OS device type** at all (Play Console → Setup → Advanced
+  settings → Form factors → Wear OS). If the listing was never enabled for Wear, watches will never
+  see a compatible artifact regardless of uploads.
+
 ## Sign-in relay (Iteration 9b)
 
 The phone advertises `fitpub_phone`; the watch advertises `fitpub_watch`. Both APKs use the exact

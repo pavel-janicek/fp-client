@@ -307,6 +307,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         if (!enterForeground()) return
         startTicker()
         refreshAvailability()
+        reportHeartRateBlockerIfNeeded()
         startLocation()
         startPlatformSensors()
         serviceScope.launch { startHealthServices() }
@@ -352,12 +353,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) || hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
-        val heartRatePermission = if (Build.VERSION.SDK_INT >= 36) {
-            hasPermission(WorkoutRecordingController.READ_HEART_RATE_PERMISSION)
-        } else {
-            hasPermission(Manifest.permission.BODY_SENSORS)
-        }
-        if (heartRatePermission || hasPermission(Manifest.permission.ACTIVITY_RECOGNITION)) {
+        if (hasHeartRatePermission() || hasPermission(Manifest.permission.ACTIVITY_RECOGNITION)) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
         }
         return types
@@ -489,7 +485,21 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val bpm = value?.takeIf { it in MIN_HEART_RATE_BPM..MAX_HEART_RATE_BPM } ?: return
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
         heartRateEverReceived = true
+        // First live reading clears the heart-rate blocker notice, so it does not linger over a
+        // readout that is now working.
+        if (errorMessage == HEART_RATE_PERMISSION_HINT) errorMessage = null
         appendEvent(current, WorkoutTrackEvent(timeEpochMs = System.currentTimeMillis(), heartRateBpm = bpm))
+    }
+
+    /**
+     * A workout can start on location alone, so a missing body-sensors permission would otherwise be
+     * invisible: the session records fine and only the BPM readout stays "--". Report it once, with
+     * an actionable message, instead of leaving the user to guess.
+     */
+    private fun reportHeartRateBlockerIfNeeded() {
+        if (hasHeartRatePermission()) return
+        if (errorMessage != null) return
+        errorMessage = HEART_RATE_PERMISSION_HINT
     }
 
     private suspend fun startHealthServices() {
@@ -757,11 +767,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun hasExceededHeartRateRecovery(): Boolean =
         heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS
 
-    private fun hasHeartRatePermission(): Boolean = if (Build.VERSION.SDK_INT >= 36) {
-        hasPermission(WorkoutRecordingController.READ_HEART_RATE_PERMISSION)
-    } else {
-        hasPermission(Manifest.permission.BODY_SENSORS)
-    }
+    private fun hasHeartRatePermission(): Boolean = WorkoutRecordingController.hasHeartRatePermission(this)
 
     private fun hasPermission(permission: String): Boolean =
         checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
@@ -889,5 +895,12 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
         /** Caps watchdog re-arms per workout so a watch off the wrist cannot loop forever. */
         private const val MAX_HEART_RATE_RECOVERY_ATTEMPTS = 3
+
+        /**
+         * Shown when a workout is running but the body-sensors permission is absent — the workout
+         * starts anyway on location alone, so without this the only symptom is a silent "--" BPM.
+         */
+        private const val HEART_RATE_PERMISSION_HINT =
+            "Heart rate needs the Body sensors permission. Open Settings → Grant sensor access."
     }
 }

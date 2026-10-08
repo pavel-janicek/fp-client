@@ -15,19 +15,43 @@ object WorkoutRecordingController {
     internal const val EXTRA_ACTIVITY_TYPE = "workout_activity_type"
     internal const val EXTRA_IS_AMBIENT = "workout_is_ambient"
 
-    fun runtimePermissions(): Array<String> = buildList {
+    /**
+     * The body-sensors permission this build must ask for.
+     *
+     * The `BODY_SENSORS` → `health.READ_HEART_RATE` switch is keyed on the app's **target** SDK, not
+     * on the device OS version: `READ_HEART_RATE` is only ever granted to apps targeting API 36+.
+     * Branching on `Build.VERSION.SDK_INT` instead silently breaks every API 36+ watch, because the
+     * request is auto-denied with no dialog while `BODY_SENSORS` is removed from the merged manifest
+     * by its `maxSdkVersion="35"` — heart rate becomes permanently ungrantable, yet the workout still
+     * starts because location alone satisfies [canStart].
+     */
+    fun bodySensorPermission(context: Context): String =
+        if (context.applicationInfo.targetSdkVersion >= 36) {
+            READ_HEART_RATE_PERMISSION
+        } else {
+            Manifest.permission.BODY_SENSORS
+        }
+
+    /**
+     * True when either body-sensors permission is granted. Accepting both keeps heart rate working
+     * across the permission migration (and across an upgrade that flips the target SDK) instead of
+     * demanding the exact one the current build happens to request.
+     */
+    fun hasHeartRatePermission(context: Context): Boolean =
+        isGranted(context, READ_HEART_RATE_PERMISSION) || isGranted(context, Manifest.permission.BODY_SENSORS)
+
+    private fun isGranted(context: Context, permission: String): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    fun runtimePermissions(context: Context): Array<String> = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
         add(Manifest.permission.ACTIVITY_RECOGNITION)
-        if (Build.VERSION.SDK_INT >= 36) {
-            add(READ_HEART_RATE_PERMISSION)
-        } else {
-            add(Manifest.permission.BODY_SENSORS)
-        }
+        add(bodySensorPermission(context))
         if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
     }.toTypedArray()
 
-    fun missingPermissions(context: Context): List<String> = runtimePermissions().filter {
+    fun missingPermissions(context: Context): List<String> = runtimePermissions(context).filter {
         ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
@@ -37,10 +61,7 @@ object WorkoutRecordingController {
             context,
             Manifest.permission.ACCESS_FINE_LOCATION,
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        val healthPermission = ContextCompat.checkSelfPermission(
-            context,
-            if (Build.VERSION.SDK_INT >= 36) READ_HEART_RATE_PERMISSION else Manifest.permission.BODY_SENSORS,
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val healthPermission = hasHeartRatePermission(context)
         val activityGranted = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACTIVITY_RECOGNITION,
