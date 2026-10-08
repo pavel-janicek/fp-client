@@ -16,17 +16,21 @@ object WorkoutRecordingController {
     internal const val EXTRA_IS_AMBIENT = "workout_is_ambient"
 
     /**
-     * The body-sensors permission this build must ask for.
+     * The body-sensors permission this build must ask for, keyed on the **device OS version** —
+     * that is what decides which permission the framework will actually prompt for:
      *
-     * The `BODY_SENSORS` → `health.READ_HEART_RATE` switch is keyed on the app's **target** SDK, not
-     * on the device OS version: `READ_HEART_RATE` is only ever granted to apps targeting API 36+.
-     * Branching on `Build.VERSION.SDK_INT` instead silently breaks every API 36+ watch, because the
-     * request is auto-denied with no dialog while `BODY_SENSORS` is removed from the merged manifest
-     * by its `maxSdkVersion="35"` — heart rate becomes permanently ungrantable, yet the workout still
-     * starts because location alone satisfies [canStart].
+     *  - `android.permission.health.READ_HEART_RATE` only exists from API 36. Requesting it on an
+     *    older watch is an unknown permission: the PackageManager denies it instantly with **no
+     *    dialog**. That is the exact "Grant access does nothing" symptom — the button launches a
+     *    request the OS ignores, while an already-granted `BODY_SENSORS` sits unused.
+     *  - `BODY_SENSORS` is declared with `maxSdkVersion="35"`, so on API 36+ it is stripped from the
+     *    merged manifest and `READ_HEART_RATE` is the only grantable option there.
+     *
+     * `targetSdk = 36` (see wear/build.gradle.kts) is the separate prerequisite that makes
+     * `READ_HEART_RATE` *grantable* on API 36+ devices; it must stay, but it is not the request gate.
      */
     fun bodySensorPermission(context: Context): String =
-        if (context.applicationInfo.targetSdkVersion >= 36) {
+        if (Build.VERSION.SDK_INT >= 36) {
             READ_HEART_RATE_PERMISSION
         } else {
             Manifest.permission.BODY_SENSORS

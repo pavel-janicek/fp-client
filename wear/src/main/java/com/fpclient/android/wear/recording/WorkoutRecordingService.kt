@@ -23,6 +23,7 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.health.services.client.ExerciseClient
@@ -75,8 +76,23 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     /** True once any heart-rate value has actually reached [publishHeartRate] during this workout. */
     private var heartRateEverReceived = false
 
+    /**
+     * True when the PPG last reported no skin contact. Kept so the UI can explain a "--" readout
+     * (watch off wrist) rather than showing a bare dash that reads like a fault. Cleared on the
+     * first valid BPM.
+     */
+    private var heartRateNoContact = false
+
     /** How many times the HR watchdog has re-armed this workout; caps the recovery loop. */
     private var heartRateRecoveryAttempts = 0
+
+    /**
+     * True while *we* are tearing the Health Services exercise down on purpose (the HR watchdog).
+     * Without this, the ENDING/ENDED updates that [releaseHealthServicesForPlatformSensor] triggers
+     * look identical to the user ending the exercise, and `onExerciseUpdateReceived`'s
+     * `state.isEnded` branch would call [stopSession] — killing a live workout a few seconds in.
+     */
+    private var healthServicesReleasingForHeartRate = false
     private var locationActive = false
     private var sensorsActive = false
     private var healthExerciseActive = false
@@ -147,13 +163,28 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
         if (session?.status != WorkoutStatus.RECORDING) return
         when (event.sensor.type) {
-            Sensor.TYPE_HEART_RATE -> publishHeartRate(event.values.firstOrNull()?.toInt())
+            Sensor.TYPE_HEART_RATE -> {
+                val v = event.values.firstOrNull()?.toInt()
+                Log.i(TAG, "onSensorChanged TYPE_HEART_RATE raw=$v accuracy=${event.accuracy}")
+                // accuracy == SENSOR_STATUS_NO_CONTACT (2) or UNRELIABLE (0) with a 0 value is the
+                // watch being off the wrist — the PPG has nothing to measure. A 0 is not a valid BPM
+                // and publishHeartRate() discards it, so track the reason here for the UI.
+                heartRateNoContact = v == 0 || event.accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT
+                if (v != null && v != 0) heartRateNoContact = false
+                publishHeartRate(v)
+            }
             Sensor.TYPE_STEP_COUNTER -> onStepCounter(event.values.firstOrNull())
             Sensor.TYPE_STEP_DETECTOR -> onStepDetected()
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        Log.i(TAG, "onAccuracyChanged sensor=${sensor?.type} accuracy=$accuracy")
+        if (sensor?.type == Sensor.TYPE_HEART_RATE) {
+            // SENSOR_STATUS_NO_CONTACT = 2: the watch is off the wrist.
+            heartRateNoContact = accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT
+        }
+    }
 
     private fun beginSession(activityTypeName: String?) {
         val now = System.currentTimeMillis()
@@ -162,6 +193,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         heartRateEverReceived = false
         heartRateRecoveryAttempts = 0
         heartRateSensorArmedAtMs = 0L
+        healthServicesReleasingForHeartRate = false
+        heartRateNoContact = false
         val fresh = WorkoutSessionTransitions.start(
             now,
             WorkoutActivityType.fromStorage(activityTypeName),
@@ -429,12 +462,20 @@ class WorkoutRecordingService : Service(), SensorEventListener {
      * the app, which built a fresh service with a null listener).
      */
     private fun ensureHeartRateSensor() {
-        if (!hasHeartRatePermission()) return
-        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE) ?: return
+        if (!hasHeartRatePermission()) {
+            Log.w(TAG, "ensureHeartRateSensor: no HR permission, skipping")
+            return
+        }
+        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
+        if (sensor == null) {
+            Log.w(TAG, "ensureHeartRateSensor: no TYPE_HEART_RATE sensor present")
+            return
+        }
         // Unregister before re-registering: registering the same listener/sensor pair again is a
         // no-op on the framework side, so without this the "re-arm" would not take effect.
         sensorManager.unregisterListener(this, sensor)
-        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+        val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+        Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name}")
         heartRateSensor = sensor
         sensorsActive = true
         heartRateSensorArmedAtMs = SystemClock.elapsedRealtime()
@@ -542,7 +583,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 return
             }
             val exerciseCapabilities = capabilities.getExerciseTypeCapabilities(exerciseType)
+            Log.i(TAG, "HS capabilities ok: type=$exerciseType supportsHR=${DataType.HEART_RATE_BPM in exerciseCapabilities.supportedDataTypes}")
             if (DataType.HEART_RATE_BPM !in exerciseCapabilities.supportedDataTypes) {
+                Log.w(TAG, "HS: HEART_RATE_BPM not supported for $exerciseType — falling back to platform sensor")
                 healthServicesAvailable = false
                 healthHeartRateAvailable = false
                 ensureHeartRateSensor()
@@ -551,9 +594,12 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             }
 
             val callback = object : ExerciseUpdateCallback {
-                override fun onRegistered() = Unit
+                override fun onRegistered() {
+                    Log.i(TAG, "HS onRegistered")
+                }
 
                 override fun onRegistrationFailed(throwable: Throwable) {
+                    Log.w(TAG, "HS onRegistrationFailed: ${throwable.message}")
                     healthExerciseActive = false
                     healthServicesAvailable = false
                     healthHeartRateAvailable = false
@@ -567,8 +613,12 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                         .lastOrNull()
                         ?.value
                         ?.toInt()
+                    Log.i(TAG, "HS onExerciseUpdateReceived hr=$latestHeartRate state=${update.exerciseStateInfo.state}")
                     if (latestHeartRate != null) publishHeartRate(latestHeartRate)
-                    if (update.exerciseStateInfo.state.isEnded && session?.status == WorkoutStatus.RECORDING) {
+                    // Only treat an ENDING/ENDED update as "the exercise is over" when WE did not
+                    // initiate the teardown. The HR watchdog ends the exercise on purpose to reclaim
+                    // the PPG; honouring that as a user-ended workout would stop the recording.
+                    if (update.exerciseStateInfo.state.isEnded && !healthServicesReleasingForHeartRate && session?.status == WorkoutStatus.RECORDING) {
                         stopSession()
                     }
                 }
@@ -579,6 +629,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                     dataType: androidx.health.services.client.data.DataType<*, *>,
                     availability: androidx.health.services.client.data.Availability,
                 ) {
+                    Log.i(TAG, "HS onAvailabilityChanged dt=$dataType avail=$availability")
                     if (dataType == DataType.HEART_RATE_BPM && availability is DataTypeAvailability) {
                         healthHeartRateAvailable = availability == DataTypeAvailability.AVAILABLE ||
                             availability == DataTypeAvailability.ACQUIRING
@@ -612,6 +663,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             }
             healthCallback = callback
             healthExerciseActive = true
+            healthServicesReleasingForHeartRate = false
             healthExercisePaused = false
             healthServicesAvailable = true
             healthHeartRateAvailable = true
@@ -692,6 +744,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         if (heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS) return
         if (SystemClock.elapsedRealtime() - heartRateSensorArmedAtMs < HEART_RATE_WATCHDOG_MS) return
         heartRateRecoveryAttempts++
+        Log.w(TAG, "HR watchdog firing: no BPM within window, attempt=$heartRateRecoveryAttempts, hsActive=$healthExerciseActive — releasing HS and re-arming platform sensor")
         if (healthExerciseActive) releaseHealthServicesForPlatformSensor()
         ensureHeartRateSensor()
     }
@@ -709,6 +762,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         healthServicesAvailable = false
         healthHeartRateAvailable = false
         healthCallback = null
+        healthServicesReleasingForHeartRate = true
         serviceScope.launch {
             runCatching { client?.endExerciseAsync()?.await() }
             if (client != null && callback != null) runCatching { client.clearUpdateCallbackAsync(callback).await() }
@@ -759,6 +813,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 (healthHeartRateAvailable && healthServicesAvailable) ||
                 (hrSensorPresent && !hasExceededHeartRateRecovery()),
             steps = stepPresent,
+            noContact = heartRateNoContact,
         )
         publish()
     }
@@ -881,6 +936,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     companion object {
         private const val CHANNEL_ID = "fitpub_workout_recording"
+        internal const val TAG = "FitPubWearHR"
         private const val NOTIFICATION_ID = 9301
         private const val TRACK_DIRECTORY = "workouts"
         private const val LOCATION_INTERVAL_MS = 1_000L

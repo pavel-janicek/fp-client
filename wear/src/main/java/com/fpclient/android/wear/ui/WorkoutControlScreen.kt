@@ -301,12 +301,15 @@ private fun WorkoutHeartRateZone.toColor(): Color = when (this) {
 }
 
 /**
- * Caption under the BPM readout. Distinguishes the three states the user needs to tell apart:
- * warming up, genuinely no signal, and no heart-rate permission granted at all.
+ * Caption under the BPM readout. Distinguishes the states the user needs to tell apart:
+ * warming up, genuinely no signal, watch off the wrist, and no heart-rate permission at all.
  */
 private fun heartRateLabel(snapshot: WorkoutRecordingSnapshot, zone: WorkoutHeartRateZone?): String = when {
     zone != null -> zone.label
     snapshot.status == WorkoutStatus.IDLE -> "READY"
+    // The #1 real cause of a "--" readout: the PPG has no skin contact (watch off wrist / charging
+    // on a desk). Say so, instead of a bare dash that looks like a fault.
+    snapshot.availability.noContact -> "NO CONTACT"
     !snapshot.availability.heartRate -> "HR OFF"
     else -> "NO SIGNAL"
 }

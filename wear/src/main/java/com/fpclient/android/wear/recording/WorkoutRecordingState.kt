@@ -93,6 +93,13 @@ data class WorkoutSensorAvailability(
     val healthServices: Boolean = false,
     val heartRate: Boolean = false,
     val steps: Boolean = false,
+    /**
+     * True when the PPG reports it has no skin contact (SENSOR_STATUS_NO_CONTACT) — the watch is off
+     * the wrist. This is the #1 real-world cause of a "--" readout, and it is not a bug: the sensor
+     * is emitting no samples because there is nothing to measure. Surfaced so the UI can say
+     * "NO CONTACT" instead of a bare "--" that looks broken.
+     */
+    val noContact: Boolean = false,
 )
 
 data class WorkoutRecordingSnapshot(

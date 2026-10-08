@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    DEBUG ONLY — never ships in release. Temporarily exports WorkoutRecordingService so the
+    heart-rate path can be exercised end-to-end via `adb shell am start-foreground-service`
+    (the UI's Compose semantics are not exposed to uiautomator, and the charging overlay
+    intercepts taps). Remove this file before release; release keeps exported=false.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <service
+            android:name=".recording.WorkoutRecordingService"
+            android:exported="true"
+            tools:replace="android:exported" />
+    </application>
+</manifest>

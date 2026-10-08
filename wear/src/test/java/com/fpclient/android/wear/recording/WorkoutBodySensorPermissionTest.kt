@@ -6,23 +6,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Regression cover for the heart-rate permission selection that left BPM stuck on "--".
+ * Regression cover for the heart-rate permission selection that made "Grant access" a no-op.
  *
- * The `BODY_SENSORS` → `android.permission.health.READ_HEART_RATE` switch is keyed on the app's
- * **target** SDK, never on the device OS version. This module branched on
- * `Build.VERSION.SDK_INT` while `targetSdk` sat at 34, so on an API 36 watch it asked for
- * READ_HEART_RATE (auto-denied, no dialog) while the manifest's `maxSdkVersion="35"` stripped
- * BODY_SENSORS — heart rate became permanently ungrantable, yet the workout still started because
- * location alone satisfies `canStart`.
+ * The permission to *request* is keyed on the **device OS version** ([Build.VERSION.SDK_INT]),
+ * because `android.permission.health.READ_HEART_RATE` only exists from API 36 — asking for it on an
+ * older watch is an unknown permission that the PackageManager denies instantly with **no dialog**
+ * (the live symptom: `READ_HEART_RATE granted=false`, no USER_SET flag, on an API 34 watch, while
+ * `BODY_SENSORS granted=true` sits unused and the Settings button stays stuck).
+ *
+ * `targetSdk = 36` is the *separate* prerequisite that makes `READ_HEART_RATE` grantable on API 36+
+ * devices; it must be set, but it is never the request gate.
  *
  * [WorkoutRecordingController] is Android-bound, so these tests pin the selection rule and the
  * manifest invariants it depends on.
  */
 class WorkoutBodySensorPermissionTest {
 
-    /** Mirrors WorkoutRecordingController.bodySensorPermission(). */
-    private fun bodySensorPermission(targetSdkVersion: Int): String =
-        if (targetSdkVersion >= 36) READ_HEART_RATE else BODY_SENSORS
+    /** Mirrors WorkoutRecordingController.bodySensorPermission(). Gate = device OS version. */
+    private fun bodySensorPermission(deviceSdkInt: Int): String =
+        if (deviceSdkInt >= 36) READ_HEART_RATE else BODY_SENSORS
 
     /** Mirrors WorkoutRecordingController.hasHeartRatePermission() — accepts either grant. */
     private fun hasHeartRatePermission(readHeartRateGranted: Boolean, bodySensorsGranted: Boolean): Boolean =
@@ -33,28 +35,32 @@ class WorkoutBodySensorPermissionTest {
         locationGranted || hasHeartRate || activityGranted
 
     @Test
-    fun targetSdkSelectsThePermissionThePlatformWillActuallyGrant() {
-        // targetSdk 36+ (matches :app): the health permission is the grantable one.
-        assertEquals(READ_HEART_RATE, bodySensorPermission(targetSdkVersion = 36))
-        assertEquals(READ_HEART_RATE, bodySensorPermission(targetSdkVersion = 37))
-        // Below 36 the app is a legacy body-sensors app; BODY_SENSORS is the grantable one.
-        assertEquals(BODY_SENSORS, bodySensorPermission(targetSdkVersion = 35))
-        assertEquals(BODY_SENSORS, bodySensorPermission(targetSdkVersion = 34))
+    fun deviceOsVersionSelectsThePermissionThePlatformWillActuallyPromptFor() {
+        // API 36+ device: the health permission exists and (with targetSdk 36) is grantable.
+        assertEquals(READ_HEART_RATE, bodySensorPermission(deviceSdkInt = 36))
+        assertEquals(READ_HEART_RATE, bodySensorPermission(deviceSdkInt = 37))
+        // Older device (API ≤ 35): only BODY_SENSORS exists and can be prompted for.
+        assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 35))
+        assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 34))
+        assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 30))
     }
 
     @Test
-    fun theBrokenCombinationIsTheOneThisModuleUsedToShip() {
-        // The old bug: targetSdk 34 selected BODY_SENSORS while the code asked for READ_HEART_RATE
-        // on API 36 devices. Assert the two disagree so a future refactor cannot silently pair them.
-        val targetSdkSelection = bodySensorPermission(targetSdkVersion = 34)
-        val oldDeviceOsSelection = READ_HEART_RATE // what `Build.VERSION.SDK_INT >= 36` picked
-        assertFalse(targetSdkSelection == oldDeviceOsSelection)
+    fun theBrokenCombinationIsRequestingHeartRateOnAPreApi36Device() {
+        // The regression that shipped: gating on targetSdk (36) made the app ask for READ_HEART_RATE
+        // on this very watch (Xiaomi Watch 2, API 34), where the permission does not exist. Assert
+        // that an API 34 device must NOT be handed READ_HEART_RATE, whatever targetSdk says.
+        val requestedOnDevice = bodySensorPermission(deviceSdkInt = 34)
+        assertEquals(BODY_SENSORS, requestedOnDevice)
+        assertFalse(requestedOnDevice == READ_HEART_RATE)
     }
 
     @Test
-    fun eitherGrantSatisfiesTheHeartRateGateSoTheMigrationIsSafe() {
-        assertTrue(hasHeartRatePermission(readHeartRateGranted = true, bodySensorsGranted = false))
+    fun alreadyGrantedBodySensorsSatisfiesTheGateSoANewPromptIsNeverNeeded() {
+        // This watch already has BODY_SENSORS granted, so once the request gate is correct the
+        // controller must treat it as satisfied — no dead-end "Grant access" button.
         assertTrue(hasHeartRatePermission(readHeartRateGranted = false, bodySensorsGranted = true))
+        assertTrue(hasHeartRatePermission(readHeartRateGranted = true, bodySensorsGranted = false))
         assertTrue(hasHeartRatePermission(readHeartRateGranted = true, bodySensorsGranted = true))
         assertFalse(hasHeartRatePermission(readHeartRateGranted = false, bodySensorsGranted = false))
     }
@@ -78,7 +84,7 @@ class WorkoutBodySensorPermissionTest {
         assertTrue(foregroundTypes(false, true, false).contains("HEALTH"))
         assertTrue(foregroundTypes(false, false, true).contains("HEALTH"))
         assertTrue(foregroundTypes(true, false, false).contains("LOCATION"))
-        assertTrue(foregroundTypes(true, false, false).isEmpty().not())
+        assertTrue(foregroundTypes(true, false, false).isNotEmpty())
         assertTrue(foregroundTypes(false, false, false).isEmpty())
     }
 
