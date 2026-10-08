@@ -96,7 +96,10 @@ class PhoneWearAuthService : WearableListenerService() {
     }
 
     private suspend fun receiveWorkout(assets: IncomingAssets) {
-        if (assets.sessionId < 0L) return
+        if (assets.sessionId < 0L) {
+            Log.w(TAG, "Dropping relayed workout: missing session id on ${assets.dataItemUri}")
+            return
+        }
         val app = FitPubApplication.from(this)
         val session = app.container.sessionStore.currentSession()
         val ownerServer = assets.ownerServerUrl.ifBlank { session.serverUrl }
@@ -109,8 +112,12 @@ class PhoneWearAuthService : WearableListenerService() {
         }
         if (previous == null) {
             val dataClient = Wearable.getDataClient(this)
-            val gpxBytes = loadAsset(dataClient, assets.gpx) ?: return
-            val sidecarBytes = loadAsset(dataClient, assets.sidecar) ?: return
+            val gpxBytes = loadAsset(dataClient, assets.gpx)
+            val sidecarBytes = loadAsset(dataClient, assets.sidecar)
+            if (gpxBytes == null || sidecarBytes == null) {
+                Log.w(TAG, "Dropping relayed workout ${assets.sessionId}: asset load failed (gpx=${gpxBytes != null}, sidecar=${sidecarBytes != null})")
+                return
+            }
             val entry = WearWorkoutInboxEntry(
                 sessionId = assets.sessionId,
                 gpxFileName = "workout-${assets.sessionId}.gpx",
@@ -125,7 +132,9 @@ class PhoneWearAuthService : WearableListenerService() {
                 dataItemUri = assets.dataItemUri,
                 receivedAtEpochMs = System.currentTimeMillis(),
             )
-            runCatching { store.stage(entry, gpxBytes, sidecarBytes) }.getOrElse { return }
+            runCatching { store.stage(entry, gpxBytes, sidecarBytes) }
+                .onFailure { Log.w(TAG, "Staging relayed workout ${assets.sessionId} failed", it) }
+                .getOrElse { return }
         }
         PhoneWorkoutSyncScheduler.enqueue(this)
     }

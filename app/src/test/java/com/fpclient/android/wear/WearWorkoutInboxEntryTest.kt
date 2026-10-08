@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WearWorkoutInboxEntryTest {
@@ -58,7 +59,30 @@ class WearWorkoutInboxEntryTest {
         assertEquals("/fitpub/workout/", PhoneWorkoutSyncProtocol.DATA_PATH_PREFIX)
         assertEquals("/fitpub/workout/synced", PhoneWorkoutSyncProtocol.ACK_PATH)
         assertEquals("session_id", PhoneWorkoutSyncProtocol.KEY_ID)
+        assertEquals("sync_attempt", PhoneWorkoutSyncProtocol.KEY_SYNC_ATTEMPT)
         assertEquals("workout_gpx", PhoneWorkoutSyncProtocol.ASSET_GPX)
         assertEquals("workout_sidecar", PhoneWorkoutSyncProtocol.ASSET_SIDECAR)
     }
+
+    @Test
+    fun `owner matching tolerates url normalization and blank owners`() {
+        assertTrue(ownerMatches(inboxEntry("fitpub.social", "runner"), "https://fitpub.social", "runner"))
+        assertTrue(ownerMatches(inboxEntry("", ""), "https://fitpub.social", "runner"))
+        assertTrue(ownerMatches(inboxEntry("https://fitpub.social/", "Runner"), "https://fitpub.social", "runner"))
+        assertFalse(ownerMatches(inboxEntry("https://fitpub.social", "other"), "https://fitpub.social", "runner"))
+        assertFalse(ownerMatches(inboxEntry("https://other.social", "runner"), "https://fitpub.social", "runner"))
+    }
+
+    private fun inboxEntry(ownerServer: String, ownerUser: String) = WearWorkoutInboxEntry(
+        sessionId = 1L,
+        gpxFileName = "workout-1.gpx",
+        sidecarFileName = "workout-1.json",
+        activityType = "RUN",
+        title = "Run",
+        ownerServerUrl = ownerServer,
+        ownerUsername = ownerUser,
+        sourceNodeId = "watch-node",
+        dataItemUri = "wear://watch-node/fitpub/workout/1",
+        receivedAtEpochMs = 0L,
+    )
 }

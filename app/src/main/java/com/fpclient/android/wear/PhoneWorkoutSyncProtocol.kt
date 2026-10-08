@@ -11,6 +11,9 @@ internal object PhoneWorkoutSyncProtocol {
     const val KEY_OWNER_SERVER = "owner_server"
     const val KEY_OWNER_USERNAME = "owner_username"
     const val KEY_NODE_ID = "node_id"
+
+    /** Mirrors the watch's re-relay freshness stamp; ignored when reading the DataMap. */
+    const val KEY_SYNC_ATTEMPT = "sync_attempt"
     const val ASSET_GPX = "workout_gpx"
     const val ASSET_SIDECAR = "workout_sidecar"
 }

@@ -35,6 +35,10 @@ class WearWorkoutInboxStore(context: Context) {
     private val mutablePendingCount = MutableStateFlow(readEntries().size)
     val pendingCount: StateFlow<Int> = mutablePendingCount
 
+    /** Newest stored failure reason, so the UI can explain *why* workouts are not resolving. */
+    private val mutableLatestError = MutableStateFlow(readEntries().firstNotNullOfOrNull { it.lastError })
+    val latestError: StateFlow<String?> = mutableLatestError
+
     fun all(): List<WearWorkoutInboxEntry> = synchronized(lock) { readEntries() }
 
     fun get(sessionId: Long): WearWorkoutInboxEntry? = all().firstOrNull { it.sessionId == sessionId }
@@ -65,6 +69,14 @@ class WearWorkoutInboxStore(context: Context) {
         runCatching { source.copyTo(File(targetDirectory, source.name), overwrite = true) }
     }
 
+    /**
+     * Tombstone: [remove] archives the sidecar as `workout-<sessionId>.json`, so its presence
+     * means this session was already uploaded by an earlier ACK cycle. Used to re-acknowledge a
+     * re-relayed workout instead of uploading a duplicate activity.
+     */
+    fun wasUploadedBefore(sessionId: Long): Boolean =
+        File(File(appContext.filesDir, ARCHIVE_DIRECTORY), "workout-$sessionId.json").isFile
+
     fun remove(sessionId: Long) = synchronized(lock) {
         val entry = readEntries().firstOrNull { it.sessionId == sessionId }
         if (entry != null) {
@@ -85,6 +97,7 @@ class WearWorkoutInboxStore(context: Context) {
         val saved = preferences.edit().putString(KEY_ENTRIES, json.encodeToString(serializer, entries)).commit()
         check(saved) { "Could not persist watch workout inbox" }
         mutablePendingCount.value = entries.count { it.uploadedActivityId == null }
+        mutableLatestError.value = entries.firstNotNullOfOrNull { it.lastError }
     }
 
     private fun writeAtomically(file: File, bytes: ByteArray) {

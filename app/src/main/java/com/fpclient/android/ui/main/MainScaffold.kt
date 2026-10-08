@@ -88,6 +88,7 @@ fun MainScaffold(
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
     val watchWorkoutPending by container.wearWorkoutInboxStore.pendingCount.collectAsState()
+    val latestInboxError by container.wearWorkoutInboxStore.latestError.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -137,7 +138,10 @@ fun MainScaffold(
                     },
                 ) {
                     Text(
-                        text = "$watchWorkoutPending watch workout(s) waiting to sync · tap to retry",
+                        text = buildString {
+                            append("$watchWorkoutPending watch workout(s) waiting to sync · tap to retry")
+                            latestInboxError?.let { append(" — "); append(it) }
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )

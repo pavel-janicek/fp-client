@@ -36,6 +36,7 @@ class WatchWorkoutSyncStoreCodecTest {
         assertEquals("visibility", WorkoutSyncProtocol.KEY_VISIBILITY)
         assertEquals("owner_server", WorkoutSyncProtocol.KEY_OWNER_SERVER)
         assertEquals("owner_username", WorkoutSyncProtocol.KEY_OWNER_USERNAME)
+        assertEquals("sync_attempt", WorkoutSyncProtocol.KEY_SYNC_ATTEMPT)
         assertEquals("workout_gpx", WorkoutSyncProtocol.ASSET_GPX)
         assertEquals("workout_sidecar", WorkoutSyncProtocol.ASSET_SIDECAR)
     }

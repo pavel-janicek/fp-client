@@ -45,6 +45,11 @@ class WatchWorkoutSyncWorker(
                     store.remove(workout.sessionId)
                     continue
                 }
+                // Leave a visible reason in the queue instead of failing silently — the watch
+                // Home/Workout screens show the pending count and this explains the stuck state.
+                val reason = "Direct upload failed; waiting for phone to upload"
+                store.update(workout.sessionId) { it.copy(lastError = reason) }
+                workout = workout.copy(lastError = reason)
             }
 
             if (!workout.relayRequested) {
@@ -68,6 +73,10 @@ class WatchWorkoutSyncWorker(
                 dataMap.putString(WorkoutSyncProtocol.KEY_VISIBILITY, workout.visibility)
                 dataMap.putString(WorkoutSyncProtocol.KEY_OWNER_SERVER, workout.ownerServerUrl)
                 dataMap.putString(WorkoutSyncProtocol.KEY_OWNER_USERNAME, workout.ownerUsername)
+                // Freshness stamp: identical DataItem puts fire no TYPE_CHANGED event on the
+                // phone, so a re-relay ("Sync pending now") must change the payload to re-wake
+                // the phone-side inbox processor.
+                dataMap.putLong(WorkoutSyncProtocol.KEY_SYNC_ATTEMPT, System.currentTimeMillis())
                 dataMap.putAsset(WorkoutSyncProtocol.ASSET_GPX, Asset.createFromBytes(gpx.readBytes()))
                 dataMap.putAsset(WorkoutSyncProtocol.ASSET_SIDECAR, Asset.createFromBytes(sidecar.readBytes()))
             }.asPutDataRequest().setUrgent()
