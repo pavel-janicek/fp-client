@@ -59,6 +59,7 @@ fun WearAppNavGraph(
     onStopWorkout: () -> Unit = {},
     onSyncPending: () -> Unit = {},
     onDiscardPending: () -> Unit = {},
+    onResolvePending: () -> Unit = {},
     onAmbientModeChanged: (Boolean) -> Unit = {},
     onRequestSensorPermissions: () -> Unit = {},
     permissionRefreshKey: Int = 0,
@@ -91,6 +92,8 @@ fun WearAppNavGraph(
         composable(WearRoutes.SETTINGS) {
             SettingsScreen(
                 onRequestSensorPermissions = onRequestSensorPermissions,
+                onSyncPending = onSyncPending,
+                onDiscardPending = onDiscardPending,
                 permissionRefreshKey = permissionRefreshKey,
             )
         }

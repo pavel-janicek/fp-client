@@ -159,6 +159,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         }
         publish()
         promoteAndRestartSensors()
+        startTicker()
     }
 
     private fun pauseSession() {
@@ -190,6 +191,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         metrics.clearSegment()
         publish()
         promoteAndRestartSensors()
+        startTicker()
     }
 
     private fun stopSession() {

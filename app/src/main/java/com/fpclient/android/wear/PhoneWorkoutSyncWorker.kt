@@ -18,6 +18,7 @@ class PhoneWorkoutSyncWorker(
     override suspend fun doWork(): Result {
         val container = FitPubApplication.container(applicationContext)
         val inbox = container.wearWorkoutInboxStore
+        inbox.retryBlocked()
         val session = container.sessionStore.currentSession()
         if (!session.isLoggedIn) return Result.success()
 
