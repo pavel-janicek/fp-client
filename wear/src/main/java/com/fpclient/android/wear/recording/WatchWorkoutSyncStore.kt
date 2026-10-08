@@ -46,6 +46,10 @@ class WatchWorkoutSyncStore(context: Context) {
         write(read().map { if (it.sessionId == sessionId) transform(it) else it })
     }
 
+    fun resetRelayFlags() = synchronized(lock) {
+        write(read().map { it.copy(relayRequested = false, directUploadAttempted = false) })
+    }
+
     fun remove(sessionId: Long) = synchronized(lock) {
         val existing = read().firstOrNull { it.sessionId == sessionId }
         if (existing != null) {

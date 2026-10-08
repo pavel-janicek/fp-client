@@ -132,7 +132,10 @@ fun WearAppNavGraph(
                 onStart = onStartWorkout,
                 onPause = onPauseWorkout,
                 onResume = onResumeWorkout,
-                onStop = onStopWorkout,
+                onStop = {
+                    onStopWorkout()
+                    navController.popBackStack(WearRoutes.HOME, inclusive = false)
+                },
                 onSyncPending = onSyncPending,
                 onAmbientModeChanged = onAmbientModeChanged,
             )

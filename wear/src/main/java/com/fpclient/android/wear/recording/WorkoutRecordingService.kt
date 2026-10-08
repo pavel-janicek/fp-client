@@ -399,7 +399,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun startFallbackHeartRate() {
         if (heartRateSensor != null || !hasHeartRatePermission()) return
         heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE) ?: return
-        sensorManager.registerListener(this, heartRateSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        sensorManager.registerListener(this, heartRateSensor, SensorManager.SENSOR_DELAY_UI)
         sensorsActive = true
         refreshAvailability()
     }
