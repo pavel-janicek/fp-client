@@ -90,10 +90,20 @@ object WorkoutExportWriter {
         }
         if (current.isNotEmpty()) segments += current
 
+        // Heart-rate timeline used to tag each GPS fix with the nearest reading. HR samples and
+        // GPS fixes are recorded as separate events (the PPG fires ~1 Hz, GNSS coarser), so a
+        // trackpoint's own event rarely carries BPM — the nearest-in-time sample does.
+        val heartRateTimeline = events
+            .mapNotNull { event -> event.heartRateBpm?.let { event.timeEpochMs to it } }
+            .sortedBy { it.first }
+
         return buildString {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             append("<gpx version=\"1.1\" creator=\"FP Client Wear\" ")
-            append("xmlns=\"http://www.topografix.com/GPX/1/1\">\n")
+            // TrackPointExtension is the de-facto standard way to carry heart rate inside GPX 1.1;
+            // server-side GPX parsers read <gpxtpx:hr> exactly as they would a Garmin/Strava export.
+            append("xmlns=\"http://www.topografix.com/GPX/1/1\" ")
+            append("xmlns:gpxtpx=\"http://www.garmin.com/xmlschemas/TrackPointExtension/v1\">\n")
             append("  <metadata><name>").append(xmlEscape(title)).append("</name></metadata>\n")
             append("  <trk><name>").append(xmlEscape(title)).append("</name><type>")
                 .append(xmlEscape(activityType)).append("</type>\n")
@@ -105,6 +115,13 @@ object WorkoutExportWriter {
                     event.altitudeMeters?.let { append("        <ele>").append(it).append("</ele>\n") }
                     append("        <time>").append(gpxTimeFormatter.format(Instant.ofEpochMilli(event.timeEpochMs)))
                         .append("</time>\n")
+                    nearestHeartRate(heartRateTimeline, event.timeEpochMs)?.let { bpm ->
+                        append("        <extensions>\n")
+                        append("          <gpxtpx:TrackPointExtension>\n")
+                        append("            <gpxtpx:hr>").append(bpm).append("</gpxtpx:hr>\n")
+                        append("          </gpxtpx:TrackPointExtension>\n")
+                        append("        </extensions>\n")
+                    }
                     append("      </trkpt>\n")
                 }
                 append("    </trkseg>\n")
@@ -112,6 +129,31 @@ object WorkoutExportWriter {
             append("  </trk>\n</gpx>\n")
         }
     }
+
+    /**
+     * Closest heart-rate reading to [timeEpochMs] from a time-sorted list, or null when the nearest
+     * sample is further than [HEART_RATE_MATCH_WINDOW_MS] away (a long PPG gap next to a fix means
+     * tagging the fix would misrepresent the trace). Pure and package-visible for unit testing.
+     */
+    internal fun nearestHeartRate(
+        sortedSamples: List<Pair<Long, Int>>,
+        timeEpochMs: Long,
+        maxDeltaMs: Long = HEART_RATE_MATCH_WINDOW_MS,
+    ): Int? {
+        if (sortedSamples.isEmpty()) return null
+        var bestBpm: Int? = null
+        var bestDelta = Long.MAX_VALUE
+        for ((sampleTime, bpm) in sortedSamples) {
+            val delta = kotlin.math.abs(sampleTime - timeEpochMs)
+            if (delta < bestDelta) {
+                bestDelta = delta
+                bestBpm = bpm
+            }
+        }
+        return if (bestDelta <= maxDeltaMs) bestBpm else null
+    }
+
+    private const val HEART_RATE_MATCH_WINDOW_MS = 15_000L
 
     private fun xmlEscape(value: String): String = value
         .replace("&", "&amp;")

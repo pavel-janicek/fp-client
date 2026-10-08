@@ -130,10 +130,16 @@ fun WorkoutControlScreen(
                     }
                 }
 
-                // Heart rate BPM readout
+                // Heart rate BPM readout.
+                //
+                // Show the live value in ambient mode too. Ambient used to blank this to "--"
+                // (via `takeUnless { isAmbient }`), which is exactly what a runner sees when they
+                // glance at a dimmed watch mid-workout — the number they most want, hidden. The
+                // last known reading is shown frozen (ambient throttles updates, which is correct);
+                // only the *color* is dropped to white, keeping OLED burn-in safety.
                 item {
                     Text(
-                        text = snapshot.heartRateBpm?.toString()?.takeUnless { isAmbient } ?: "--",
+                        text = snapshot.heartRateBpm?.toString() ?: "--",
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isAmbient) Color.White else zone?.toColor() ?: Color.LightGray,

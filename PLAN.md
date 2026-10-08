@@ -786,6 +786,28 @@ optional. See `docs/WEAR.md`.
 
 ✅ **Done.** Battery profiling confirmed 10–12%/hr battery consumption during continuous GPS+HR recording with ambient-mode throttling (6–8+ hours continuous recording capacity, exceeding >1h target). Sensor accuracy validated with <20m GPS fix accuracy filtering, Haversine track distance, 3-fix elevation smoothing, Health Services & SensorManager fallback, and HR zone intensity mapping. Round, square, and chin-offset layouts verified with `ScalingLazyColumn` and diameter-relative `BoxWithConstraints` scaling. Permission denial and unpaired/standalone offline flows documented and verified. Added Wear OS App section to `README.md` and expanded `docs/WEAR.md`. Root-level CI (`.github/workflows/android.yml`) verified covering `:app` and `:wear` builds, unit tests, and lint.
 
+**9g FIT support on record**
+> Implement FIT file export on the Wear watch so heart rate reaches FitPub even for indoor/treadmill workouts (no GPS). GPX already carries HR via `<gpxtpx:hr>` but only on GPS trackpoints; FIT carries HR on every record. Follow the findings below.
+>
+> **Goal:** Produce a `.fit` file in addition to (not replacing) the GPX+sidecar, and upload the FIT as the primary artifact so FitPub ingests HR for every workout. Keep GPX/sidecar locally for display/archive.
+>
+> **Facts already established (verified against the code):**
+> - **Dependency:** `com.garmin:fit:21.218.0` (official Garmin SDK) is on Maven Central, resolves online, and caches for subsequent `--offline` builds. Re-add `implementation("com.garmin:fit:21.218.0")` to `wear/build.gradle.kts`. (I had added it, then removed it when we paused — it's confirmed safe.)
+> - **Upload endpoints:** Direct upload is `WatchActivityUploader.upload(workout, gpxFile, auth)` → `POST api/web/activities/upload` with multipart field `"file"`, currently MIME `application/gpx+xml`. The phone relay (`PhoneWorkoutSyncWorker`) uploads `inbox.gpxFile(entry)`. **Both must be switched to send the FIT file instead** (or add a parallel FIT upload), because only the uploaded file reaches the server.
+> - **Server ingests FIT natively:** `ActivityRepository.uploadFile` already maps `"fit" -> "application/octet-stream"` (line ~135) and the server records `creationSource` of FIT/GPX/TCX. No server change needed.
+> - **FIT SDK API (confirmed via `javap`):** `FileEncoderMesg`, `FileIdMesg`, `RecordMesg`, `SessionMesg`, `LapMesg`; `DateTime(Instant)`; `File.ACTIVITY`; `Sport.{RUNNING, CYCLING, HIKING, WALKING, GENERIC}`. `RecordMesg` setters take boxed types and return void: `heartRate` = `Short`, `positionLat/positionLong` = `Integer` (semicircles), `altitude`/`distance` = `Float`. Use `Decoder`/`MesgBroadcaster` for round-trip unit tests.
+> - **Data model:** `WorkoutTrackEvent` already has `timeEpochMs`, `latitude`, `longitude`, `altitudeMeters`, `heartRateBpm`, `steps`. `PendingWatchWorkout` has `gpxFileName`/`sidecarFileName` — add a `fitFileName` field. The sidecar already collects `heartRateSamples`.
+>
+> **What to build:**
+> 1. New `WorkoutFitWriter` object (mirror `WorkoutExportWriter`) that encodes events → a valid FIT `File.ACTIVITY`: FileId message, one `RecordMesg` per sample (HR always set; lat/long in semicircles only when present), a `LapMesg`, and a `SessionMesg` with sport + summary (avg/max HR, distance, duration).
+> 2. Map `WorkoutActivityType` → FIT `Sport` (RUN→RUNNING, BIKE→CYCLING, HIKE→HIKING, WALK→WALKING, else GENERIC).
+> 3. Convert lat/long degrees → FIT semicircles (`(value / 180.0 * 2^31).toInt()`).
+> 4. Wire into `queueStoppedWorkout` in `WorkoutRecordingService`: write the FIT alongside GPX, store its filename on `PendingWatchWorkout`.
+> 5. Switch both uploaders (direct + relay) to send the FIT file with `application/octet-stream`; fall back to GPX if FIT encoding fails.
+> 6. Round-trip unit test: encode → `Decoder` → assert record count, HR values, and sport match.
+>
+> **Constraints:** builds must keep working `--offline`; don't remove the working GPX HR path (keep it as fallback); keep the JSON sidecar for local archive. Verify with `:wear:testDebugUnitTest`.
+
 Notes:
 - Reuses concepts and formats from Iteration 8 (state machine, GPX writer,
   upload plumbing) — implement 8 first; the watch module duplicates rather than
