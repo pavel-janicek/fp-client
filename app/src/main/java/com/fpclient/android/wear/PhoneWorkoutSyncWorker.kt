@@ -23,10 +23,12 @@ class PhoneWorkoutSyncWorker(
 
         for (entry in inbox.all().sortedBy { it.receivedAtEpochMs }) {
             if (entry.blocked) continue
-            if (!SessionStore.normalizeServerUrl(entry.ownerServerUrl)
-                    .equals(SessionStore.normalizeServerUrl(session.serverUrl), ignoreCase = true) ||
-                !entry.ownerUsername.equals(session.username, ignoreCase = true)
-            ) continue
+            val matchesOwner = entry.ownerServerUrl.isBlank() ||
+                (SessionStore.normalizeServerUrl(entry.ownerServerUrl)
+                    .equals(SessionStore.normalizeServerUrl(session.serverUrl), ignoreCase = true) &&
+                (entry.ownerUsername.isBlank() || entry.ownerUsername.equals(session.username, ignoreCase = true)))
+
+            if (!matchesOwner) continue
 
             if (entry.uploadedActivityId != null) {
                 if (acknowledge(entry)) inbox.remove(entry.sessionId) else return Result.retry()

@@ -97,7 +97,10 @@ class PhoneWearAuthService : WearableListenerService() {
 
     private suspend fun receiveWorkout(assets: IncomingAssets) {
         if (assets.sessionId < 0L) return
-        val app = com.fpclient.android.FitPubApplication.from(this)
+        val app = FitPubApplication.from(this)
+        val session = app.container.sessionStore.currentSession()
+        val ownerServer = assets.ownerServerUrl.ifBlank { session.serverUrl }
+        val ownerUser = assets.ownerUsername.ifBlank { session.username }
         val store = app.container.wearWorkoutInboxStore
         val previous = store.get(assets.sessionId)
         if (previous?.uploadedActivityId != null) {
@@ -116,8 +119,8 @@ class PhoneWearAuthService : WearableListenerService() {
                 title = assets.title,
                 description = assets.description,
                 visibility = assets.visibility,
-                ownerServerUrl = assets.ownerServerUrl,
-                ownerUsername = assets.ownerUsername,
+                ownerServerUrl = ownerServer,
+                ownerUsername = ownerUser,
                 sourceNodeId = assets.sourceNodeId,
                 dataItemUri = assets.dataItemUri,
                 receivedAtEpochMs = System.currentTimeMillis(),

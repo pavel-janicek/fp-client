@@ -27,9 +27,10 @@ class WatchWorkoutSyncWorker(
         for (original in pending) {
             var workout = original
             if (workout.ownerServerUrl.isBlank() || workout.ownerUsername.isBlank()) {
-                if (!auth.isSignedIn) continue
-                workout = workout.copy(ownerServerUrl = auth.serverUrl, ownerUsername = auth.username)
-                store.upsert(workout)
+                if (auth.isSignedIn) {
+                    workout = workout.copy(ownerServerUrl = auth.serverUrl, ownerUsername = auth.username)
+                    store.upsert(workout)
+                }
             }
 
             val matchesCurrentAccount = auth.isSignedIn &&

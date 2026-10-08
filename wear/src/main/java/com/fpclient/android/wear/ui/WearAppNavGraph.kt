@@ -97,7 +97,10 @@ fun WearAppNavGraph(
             ActivitySelectionScreen(
                 onSelectActivity = { type ->
                     selectedActivityType = type
-                    navController.navigate(WearRoutes.WORKOUT)
+                    onStartWorkout(type)
+                    navController.navigate(WearRoutes.WORKOUT) {
+                        popUpTo(WearRoutes.WORKOUT_SELECT) { inclusive = true }
+                    }
                 },
                 onRequestSensorPermissions = onRequestSensorPermissions,
             )
