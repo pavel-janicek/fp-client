@@ -6,10 +6,8 @@ this release".
 
 ## 1. Bump the version
 
-- [ ] `app/build.gradle.kts` — `versionCode` incremented by 1, `versionName` set to the new version
-- [ ] `wear/build.gradle.kts` — same `versionCode`/`versionName` as `:app`: the watch app is a
-      paired half of the same release (Play lists them together, and they must be signed with the
-      same key), so it moves in lockstep (Iteration 9a, see `docs/WEAR.md`)
+- [ ] `app/build.gradle.kts` — `versionCode` incremented by 1 (e.g. `N`), `versionName` set to the new version
+- [ ] `wear/build.gradle.kts` — `versionName` set to match `:app`, `versionCode` set to a unique integer distinct from `:app` (e.g. `N + 1`). Note: Google Play Console enforces globally unique `versionCode` values across all artifacts uploaded to a release listing, so the Phone AAB and Watch AAB must use distinct versionCodes.
 - [ ] `app/src/main/java/com/fpclient/android/FitPubApplication.kt` — osmdroid `Configuration.getInstance().userAgentValue = "FP-Client/<version>"`
 
 ## 2. Automatic propagation (no manual edit, but verify)
@@ -67,9 +65,9 @@ one — skipping it means the release ships on F-Droid without any changelog:
 The Data Layer only talks to a matched pair, so a version bump that ships the
 watch needs these on top of sections 1–5:
 
-- [ ] Same `versionCode`/`versionName` in `app/build.gradle.kts` **and**
-      `wear/build.gradle.kts`, and the same signing key for both APKs
+- [ ] Unique `versionCode` values in `app/build.gradle.kts` (e.g. `45`) **and** `wear/build.gradle.kts` (e.g. `46`), matching `versionName` (e.g. `3.0.0-rc1`), and the same signing key for both APKs
       (both modules read the identical `KEYSTORE_*` env vars; unsigned when unset).
+      Google Play Console requires globally unique versionCodes for every uploaded artifact in a listing.
       Never mix build types across the pair in testing — install both `debug`
       from the same machine, or both `release` signed with the same key.
       Mismatched signatures make capability discovery return empty and
