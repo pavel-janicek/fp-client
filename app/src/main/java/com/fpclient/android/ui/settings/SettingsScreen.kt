@@ -62,6 +62,7 @@ fun SettingsScreen(
     onOpenRecord: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenEmailChange: () -> Unit,
+    onOpenWearWorkoutInbox: () -> Unit = {},
 ) {
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
@@ -171,6 +172,22 @@ fun SettingsScreen(
                         onClick = onOpenRecord,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     ) { Text("Record a track") }
+                }
+            }
+            val watchPendingCount by container.wearWorkoutInboxStore.pendingCount.collectAsState()
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("Watch Workouts", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (watchPendingCount > 0) "$watchPendingCount watch workout(s) waiting to sync" else "No watch workouts waiting to sync",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                    OutlinedButton(
+                        onClick = onOpenWearWorkoutInbox,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Manage watch workouts ($watchPendingCount)") }
                 }
             }
             UpdateCheckCard()

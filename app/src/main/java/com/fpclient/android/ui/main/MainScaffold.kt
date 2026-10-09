@@ -32,7 +32,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fpclient.android.AppContainer
@@ -45,7 +44,6 @@ import com.fpclient.android.ui.notifications.NotificationsViewModel
 import com.fpclient.android.ui.profile.ProfileScreen
 import com.fpclient.android.ui.record.RecordingBanner
 import com.fpclient.android.ui.timeline.TimelineScreen
-import com.fpclient.android.wear.PhoneWorkoutSyncScheduler
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,6 +63,7 @@ fun MainScaffold(
     onOpenPeaks: (String) -> Unit = {},
     onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     onOpenRecords: () -> Unit = {},
+    onOpenWearInbox: () -> Unit = {},
     requestedTab: String? = null,
     onRequestedTabHandled: () -> Unit = {},
 ) {
@@ -89,7 +88,6 @@ fun MainScaffold(
     val sessionState by appViewModel.uiState.collectAsState()
     val watchWorkoutPending by container.wearWorkoutInboxStore.pendingCount.collectAsState()
     val latestInboxError by container.wearWorkoutInboxStore.latestError.collectAsState()
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -132,14 +130,11 @@ fun MainScaffold(
                 androidx.compose.material3.Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        container.wearWorkoutInboxStore.retryBlocked()
-                        PhoneWorkoutSyncScheduler.enqueue(context)
-                    },
+                    onClick = onOpenWearInbox,
                 ) {
                     Text(
                         text = buildString {
-                            append("$watchWorkoutPending watch workout(s) waiting to sync · tap to retry")
+                            append("$watchWorkoutPending watch workout(s) waiting to sync · tap to manage")
                             latestInboxError?.let { append(" — "); append(it) }
                         },
                         style = MaterialTheme.typography.bodySmall,

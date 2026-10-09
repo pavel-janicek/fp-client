@@ -32,6 +32,9 @@ class WearWorkoutInboxStore(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val lock = Any()
+    private val mutableEntries = MutableStateFlow(readEntries())
+    val entries: StateFlow<List<WearWorkoutInboxEntry>> = mutableEntries
+
     private val mutablePendingCount = MutableStateFlow(readEntries().size)
     val pendingCount: StateFlow<Int> = mutablePendingCount
 
@@ -87,6 +90,16 @@ class WearWorkoutInboxStore(context: Context) {
         writeEntries(readEntries().filterNot { it.sessionId == sessionId })
     }
 
+    fun clearAll() = synchronized(lock) {
+        val current = readEntries()
+        for (entry in current) {
+            archiveSidecar(entry)
+            gpxFile(entry).delete()
+            sidecarFile(entry).delete()
+        }
+        writeEntries(emptyList())
+    }
+
     private fun inboxDirectory() = File(appContext.filesDir, INBOX_DIRECTORY)
 
     private fun readEntries(): List<WearWorkoutInboxEntry> = runCatching {
@@ -96,6 +109,7 @@ class WearWorkoutInboxStore(context: Context) {
     private fun writeEntries(entries: List<WearWorkoutInboxEntry>) {
         val saved = preferences.edit().putString(KEY_ENTRIES, json.encodeToString(serializer, entries)).commit()
         check(saved) { "Could not persist watch workout inbox" }
+        mutableEntries.value = entries
         mutablePendingCount.value = entries.count { it.uploadedActivityId == null }
         mutableLatestError.value = entries.firstNotNullOfOrNull { it.lastError }
     }
