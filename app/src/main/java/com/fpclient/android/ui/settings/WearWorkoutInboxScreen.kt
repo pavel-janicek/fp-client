@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -63,6 +64,7 @@ fun WearWorkoutInboxScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val entries by container.wearWorkoutInboxStore.entries.collectAsState()
     var syncingSessionId by remember { mutableStateOf<Long?>(null) }
+    var showConfirmDeleteAll by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
@@ -85,8 +87,7 @@ fun WearWorkoutInboxScreen(
                             Icon(Icons.Filled.Sync, contentDescription = "Sync all")
                         }
                         IconButton(onClick = {
-                            container.wearWorkoutInboxStore.clearAll()
-                            scope.launch { snackbarHostState.showSnackbar("Cleared all watch workouts") }
+                            showConfirmDeleteAll = true
                         }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Discard all")
                         }
@@ -153,6 +154,30 @@ fun WearWorkoutInboxScreen(
                 }
             }
         }
+    }
+
+    if (showConfirmDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDeleteAll = false },
+            title = { Text("Delete all unsynced workouts?") },
+            text = { Text("Do you want to delete all unsynced workouts?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmDeleteAll = false
+                        container.wearWorkoutInboxStore.clearAll()
+                        scope.launch { snackbarHostState.showSnackbar("Cleared all watch workouts") }
+                    },
+                ) {
+                    Text("Yes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDeleteAll = false }) {
+                    Text("No")
+                }
+            },
+        )
     }
 }
 
