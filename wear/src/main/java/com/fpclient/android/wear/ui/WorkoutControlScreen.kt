@@ -1,6 +1,4 @@
 package com.fpclient.android.wear.ui
-
-import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,21 +59,20 @@ fun WorkoutControlScreen(
 
         LaunchedEffect(isAmbient) { onAmbientModeChanged(isAmbient) }
 
-        // One-second UI tick: keeps the on-screen timer moving whenever the screen is on,
-        // anchored to the session's monotonic start — so it advances even if the recording
-        // service's periodic publish is throttled (ambient, background limits, clock sync).
-        var monotonicNow by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
+        // One-second UI tick: keeps the on-screen active duration timer moving live
+        // while recording, anchored to the session's moving time (excluding pauses).
+        var wallClockNow by remember { mutableStateOf(System.currentTimeMillis()) }
         val recording = snapshot.status == WorkoutStatus.RECORDING
         LaunchedEffect(recording) {
             while (recording) {
                 delay(1_000L)
-                monotonicNow = SystemClock.elapsedRealtime()
+                wallClockNow = System.currentTimeMillis()
             }
         }
-        val elapsedMs = if (recording) {
-            snapshot.session?.liveElapsedMs(monotonicNow, System.currentTimeMillis()) ?: snapshot.elapsedMs
+        val workoutDurationMs = if (recording) {
+            snapshot.session?.movingMsAt(wallClockNow) ?: snapshot.movingMs
         } else {
-            snapshot.elapsedMs
+            snapshot.movingMs
         }
 
         Scaffold(
@@ -158,13 +155,13 @@ fun WorkoutControlScreen(
                     )
                 }
 
-                // Elapsed duration timer
+                // Workout active duration timer
                 item {
                     Text(
-                        text = formatDuration(elapsedMs),
+                        text = formatDuration(workoutDurationMs),
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = if (snapshot.status == WorkoutStatus.PAUSED) MaterialTheme.colors.secondary else Color.White,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -173,9 +170,13 @@ fun WorkoutControlScreen(
                 }
                 item {
                     Text(
-                        text = if (snapshot.status == WorkoutStatus.RECORDING) "ELAPSED TIME" else "TIME",
+                        text = when (snapshot.status) {
+                            WorkoutStatus.PAUSED -> "PAUSED · WORKOUT TIME"
+                            WorkoutStatus.RECORDING -> "WORKOUT TIME"
+                            else -> "TIME"
+                        },
                         style = MaterialTheme.typography.caption2,
-                        color = Color.LightGray,
+                        color = if (snapshot.status == WorkoutStatus.PAUSED) MaterialTheme.colors.secondary else Color.LightGray,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
