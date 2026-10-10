@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,7 +34,19 @@ import androidx.compose.ui.unit.dp
 import com.fpclient.android.AppContainer
 import com.fpclient.android.data.dto.UnitSystems
 import com.fpclient.android.ui.AppViewModel
+import com.fpclient.android.wear.PhoneHandshakeDiagnosticsStore
+import com.fpclient.android.wear.PhoneWearAuthRelay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private fun formatTimestamp(epochMs: Long): String = if (epochMs == 0L) "" else SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(epochMs))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +62,7 @@ fun SettingsScreen(
     onOpenRecord: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenEmailChange: () -> Unit,
+    onOpenWearWorkoutInbox: () -> Unit = {},
 ) {
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
@@ -160,6 +174,22 @@ fun SettingsScreen(
                     ) { Text("Record a track") }
                 }
             }
+            val watchPendingCount by container.wearWorkoutInboxStore.pendingCount.collectAsState()
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("Watch Workouts", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (watchPendingCount > 0) "$watchPendingCount watch workout(s) waiting to sync" else "No watch workouts waiting to sync",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                    OutlinedButton(
+                        onClick = onOpenWearWorkoutInbox,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Manage watch workouts ($watchPendingCount)") }
+                }
+            }
             UpdateCheckCard()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -168,6 +198,59 @@ fun SettingsScreen(
                         onClick = onOpenAbout,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     ) { Text("About this app") }
+                }
+            }
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("Handshake diagnostics", style = MaterialTheme.typography.titleSmall)
+                    val context = LocalContext.current
+                    val diagnosticsStore = remember { PhoneHandshakeDiagnosticsStore(context) }
+                    val diagnostics by diagnosticsStore.diagnostics.collectAsState(initial = com.fpclient.android.wear.PhoneHandshakeDiagnostics())
+                    var reachableNodes by remember { mutableStateOf<List<String>>(emptyList()) }
+                    var sendReplyFeedback by remember { mutableStateOf<String?>(null) }
+
+                    LaunchedEffect(Unit) {
+                        scope.launch {
+                            reachableNodes = try {
+                                PhoneWearAuthRelay.getReachableWatchNodeIds(context.applicationContext)
+                            } catch (e: Exception) {
+                                emptyList()
+                            }
+                        }
+                    }
+
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        Text("Last watch request (node/path/time):", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("node=${diagnostics.lastRequestNodeId.takeIf { it.isNotBlank() } ?: "?"}, path=${diagnostics.lastRequestPath.takeIf { it.isNotBlank() } ?: "?"}, ${formatTimestamp(diagnostics.lastRequestTimestampMs)}", style = MaterialTheme.typography.bodyMedium)
+                        Text("Last reply: ${if (diagnostics.lastReplyFailed) "FAILED" else if (diagnostics.lastReplySent) "sent ${diagnostics.lastReplyType}" else "not sent"} @ ${formatTimestamp(diagnostics.lastReplyTimestampMs)}", style = MaterialTheme.typography.bodySmall, color = if (diagnostics.lastReplyFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Session: ${if (sessionState.loggedIn) "logged in" else "guest"} (server=${sessionState.serverUrl.takeIf { it.isNotBlank() } ?: "?"}, user=${sessionState.username.takeIf { it.isNotBlank() } ?: "?"})", style = MaterialTheme.typography.bodySmall, color = if (sessionState.loggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Reachable watch nodes (best-effort): ${reachableNodes.size}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                val nodeId = diagnostics.lastRequestNodeId.takeIf { it.isNotBlank() }
+                                if (nodeId == null) { sendReplyFeedback = "No watch node recorded"; return@launch }
+                                val session = container.sessionStore.currentSession()
+                                val ok = PhoneWearAuthRelay.sendReplyTo(context, nodeId, session)
+                                sendReplyFeedback = if (ok) "Reply sent" else "Reply failed"
+                            }
+                        }, modifier = Modifier.weight(1f)) { Text("Send handshake reply") }
+                        Button(onClick = {
+                            scope.launch {
+                                reachableNodes = try {
+                                    PhoneWearAuthRelay.getReachableWatchNodeIds(context.applicationContext)
+                                } catch (e: Exception) {
+                                    emptyList()
+                                }
+                            }
+                        }, modifier = Modifier.weight(1f)) { Text("Refresh") }
+                    }
+                    if (sendReplyFeedback != null) {
+                        Text(sendReplyFeedback!!, style = MaterialTheme.typography.labelMedium, color = if (sendReplyFeedback == "Reply sent") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                    }
                 }
             }
             Card(modifier = Modifier.fillMaxWidth()) {

@@ -63,6 +63,7 @@ fun MainScaffold(
     onOpenPeaks: (String) -> Unit = {},
     onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     onOpenRecords: () -> Unit = {},
+    onOpenWearInbox: () -> Unit = {},
     requestedTab: String? = null,
     onRequestedTabHandled: () -> Unit = {},
 ) {
@@ -85,6 +86,8 @@ fun MainScaffold(
 
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
+    val watchWorkoutPending by container.wearWorkoutInboxStore.pendingCount.collectAsState()
+    val latestInboxError by container.wearWorkoutInboxStore.latestError.collectAsState()
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -123,6 +126,22 @@ fun MainScaffold(
             // App-wide "recording in progress" banner (Iteration 8c): visible above
             // every tab while a GPS session runs; tapping it opens the live screen.
             RecordingBanner(onOpen = onOpenRecord)
+            if (watchWorkoutPending > 0) {
+                androidx.compose.material3.Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onOpenWearInbox,
+                ) {
+                    Text(
+                        text = buildString {
+                            append("$watchWorkoutPending watch workout(s) waiting to sync · tap to manage")
+                            latestInboxError?.let { append(" — "); append(it) }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
             val modifier = Modifier.weight(1f).fillMaxWidth()
             when (Routes.BottomTab.valueOf(selectedTab)) {
             Routes.BottomTab.TIMELINE -> TimelineScreen(

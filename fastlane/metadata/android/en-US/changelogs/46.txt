@@ -1,0 +1,4 @@
+3.0.0 (release 3.0.0):
+- Final 3.0.0 release of the Wear OS companion: record workouts on the watch (GPS / heart rate / steps) and sync & share them to your FitPub instance, with the phone relaying sign-in over the Wear OS Data Layer.
+- On-watch workout recording now shows a live heart-rate readout for every workout type (Run, Walk, Hike, Bike, Other), with colour-coded intensity zones and clearer status when the sensor has no signal.
+- Pause / resume a workout directly on the watch, and see the moving elapsed time update live.

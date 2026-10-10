@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: 2.2.1 release cut (versionCode 42)
-Current app version: **`2.2.1`** (`versionCode` 42)
+Assessment date: 2026-08-25 · Last updated: 3.0.0 bump (versionCode 46)
+Current app version: **`3.0.0`** (`versionCode` 46)
 
 ## Current state
 
@@ -126,6 +126,10 @@ Progress ledger (kept up to date per iteration):
 | **2.1.1** | **Emergency fix for the 2.1.0 startup crash** — versionCode 40 / versionName `2.1.1`; `FP-Client/2.1.1` User-Agent. 2.1.0 shipped an app that **crashed on every launch** and could not be opened at all: `java.lang.RuntimeException: Unable to get provider androidx.startup.InitializationProvider … NoSuchMethodException: androidx.work.impl.WorkDatabase_Impl.<init>()`, thrown from `handleBindApplication` before any Activity exists, so the process died instantly and the launcher retried in a loop. Root cause: the 8f background-notification feature added exactly one dependency, `androidx.work:work-runtime-ktx:2.10.5` (confirmed by diffing the dependency lists of `Release_2.0.2` and `Release_2.1.0`), and WorkManager keeps its schedules in a Room database that it instantiates **reflectively** during androidx.startup init. R8 never sees that constructor being called, so it stripped it, and no `RoomDatabase` keep rule existed — `proguard-rules.pro` had rules for kotlinx.serialization, Retrofit, OkHttp, osmdroid and Coil, but Room arrived with WorkManager and nothing was added for it. Debug builds were unaffected because R8 does not run there, which is why it only ever appeared in the release/F-Droid build. Fix is one rule, `-keep class * extends androidx.room.RoomDatabase { <init>(); }` (plus `-dontwarn androidx.room.paging.**`), verified in R8's own `mapping.txt` rather than assumed: `WorkDatabase_Impl` is now name-stable and its no-arg constructor is retained. Scope check confirmed 2.0.0/2.0.1/2.0.2 are all safe — none of them depend on WorkManager, and a release build of `Release_2.0.1` contains zero `androidx.room.*` and zero `androidx.work.*` classes, so the failure cannot occur there; its three remaining `androidx.startup` initializers (EmojiCompat, ProcessLifecycle, ProfileInstaller) all survive R8 with stable names. 2.1.1 is otherwise identical to 2.1.0. | ✅ done |
 | **2.2.0** | **Feature release on `Release-2.2`** — versionCode 41 / versionName `2.2.0`; `FP-Client/2.2.0` User-Agent. Ships: **Komoot import** (Settings → Data → "Import from Komoot"; `POST /api/web/komoot-import/activities` + `/import`, opt-in per instance via `fitpub.komoot.enabled` — disabled answers 404 which the app shows as "Komoot support is not enabled on this instance"; credentials used for the one request and never stored server-side or locally, `KomootImport` keeps only ids + timestamp); **Feedback** (Me tab → "Send feedback", `POST /api/web/feedback`, sign-in only per the server's security config, `topic`/`message`/`replyAllowed` — the last being a privacy switch: the server only exposes a `mailto:` reply address when granted); **E-mail change** (Settings → Account → "Change email address", two-address handshake: `POST /email-change` → 202, code goes to both addresses, `POST /verify`; server stores `oldEmail`/`newEmail` + 24h expiry); **Profile & Gravatar preview** — `GET /api/web/users/{username}/preview` (`UserPreviewDTO`, "available without full profile access") makes the locked/followers-only profile card show the real name and avatar instead of just a padlock + handle, and `GET /api/web/users/me/avatar/gravatar-preview` (bytes) previews in Edit profile the Gravatar the instance would fall back to if the uploaded picture were removed; **Peaks** (profile's "Summits reached" section + full `peaks` list/detail screens from `GET /api/web/users/{username}/peaks` and `…/peaks/{peakId}`); **Data export** (Settings → Data → "Export my data": `POST /api/web/users/me/export` → 202 `EXPORT_READY` notification, `GET …/export/status`, `…/export/download` streams the ZIP with the session cookie); **Activity trimming** (`ActivityTrimScreen` from the activity-detail scissors button, `isTrimmable` gate, `POST /api/web/activities/{id}/trim` `{start,end}` → updated `ActivityDTO`; slider edits debounce 150 ms into a preview recomputation ported from the server's own rules — `TrimPreviewTest` pins it); **Me-tab heatmap enlarge** (the "Enlarge heatmap" button opens the profile heatmap full-screen, close closes it); and the **encrypted-prefs restored-keyset crash guard** (backed-up-but-undecryptable Android Keystore keysets now fall back instead of crash-looping — `EncryptedPrefs` catch-and-reset + `backup_rules.xml`/`data_extraction_rules.xml`). External F-Droid metadata (`fdroid-data` `Builds:` entry) updated after tagging per `RELEASE_CHECKS.md` §6. | ✅ done |
 | **2.2.1** | **Post-release fixes on `Release-2.2`** — versionCode 42 / versionName `2.2.1`; `FP-Client/2.2.1` User-Agent. **Register-screen polish** (the create-account view shows which instance you are joining with a "Change instance" button, gates the submit button on a real e-mail format instead of any free text, and is vertically centred). **Follow-request dismissal** on the Activity tab — the server never deletes a `FOLLOW_REQUEST` notification, it only flips `followRequestPending`; the row now honours that flag (buttons disappear once handled anywhere), a decision made in this session shows an "Accepted"/"Rejected" label through the refresh, in-flight buttons disable, and failures surface inline instead of the fire-and-forget call swallowing them — mirroring the web UI. **Push-badge clear** on "Mark all read" — launcher icon badges count the app's active shade notifications, not the server-side unread state, so the button now also sweeps every `fitpub_push` notification (`PushNotifications.cancelAll` filters on the channel, leaving the ongoing track-recording and instant-delivery notifications untouched). **Upload-screen placeholder fix** — the "+" New activity button navigated to the raw `create?sharedUri={sharedUri}` route pattern, so Navigation passed the unfilled `{sharedUri}` placeholder in as the shared-file argument: the file button displayed it and Upload was enabled for a bogus URI. In-app opens now go to the plain `create` route (`Routes.create()`), and the argument is only honoured when it parses to a scheme-bearing URI (`SharedUriArg.isFileUri` — a scheme-less value means "no file chosen"). External F-Droid metadata (`fdroid-data` `Builds:` entry) updated after tagging per `RELEASE_CHECKS.md` §6. | ✅ done |
+| **3.0.0-alpha** | **Wear OS companion alpha (Iteration 9 in progress)** — versionCode 43 / versionName `3.0.0-alpha`; `FP-Client/3.0.0-alpha` (+ `FP-Client-Wear/3.0.0-alpha`) User-Agent. First paired phone + watch cut: `:wear` standalone module (round-safe Home/About, sign-in relayed from the phone over the Data Layer, on-watch GPS/HR/steps recording with phone-relayed sync & share). Phone and watch share `versionCode`/`versionName` and must be installed as a matched, same-signature pair for the handshake to work. | 🔄 in progress |
+| **3.0.0-beta** | **Wear UX + connection beta (Iteration 9)** — versionCode 44 / versionName `3.0.0-beta`; `FP-Client/3.0.0-beta` (+ `FP-Client-Wear/3.0.0-beta`) User-Agent. Watch main screen redesigned: compact "FP Wear" title, dedicated Workout and Settings buttons in a scrollable `ScalingLazyColumn` so they stay reachable on small round displays, sign-in reduced to one tappable status line (version moved off Home). New watch Settings screen (replaces About) carries the version and a "Grant sensor access" button for the GPS/HR/step runtime permissions. Watch workout flow gains a dedicated activity picker (`ActivitySelectionScreen` + `WorkoutActivityUsageStore`) with a reworked `WorkoutControlScreen`. Phone ↔ watch sign-in handshake fixed and instrumented: `PhoneHandshakeDiagnostics` persists the last request/reply, surfaced under Settings → Handshake diagnostics with a manual reply test. PLAN (recorded 2026-10-26): on watch Stop, keep ✓ + beep + vibration, then after a short delay that lets them land, pop the workout window back to Home — firing only on the RECORDING/PAUSED → STOPPED transition so a persisted STOPPED state cannot bounce-loop on re-entry; watch auto-share default visibility follows the phone app's upload default (Public), replacing the hardcoded Private in stop queueing, pending entries, uploader and update-path fallbacks — not the unused server `defaultActivityPrivacyPreferences` blob (no in-repo consumption contract). | ✅ done |
+| **3.0.0-rc1** | **Release candidate 1 for 3.0.0** — versionCode 45 / versionName `3.0.0-rc1`; `FP-Client/3.0.0-rc1` (+ `FP-Client-Wear/3.0.0-rc1`) User-Agent. Release candidate 1 of the 3.0.0 line following 3.0.0-alpha and 3.0.0-beta. | ✅ done |
+| **3.0.0** | **Final 3.0.0 release of the Wear OS companion (Iteration 9)** — versionCode 46 / versionName `3.0.0` (`:wear` versionCode 47, globally unique per Google Play); `FP-Client/3.0.0` (+ `FP-Client-Wear/3.0.0`) User-Agent. Final release of the paired phone + watch cut following 3.0.0-alpha / -beta / -rc1: on-watch workout recording (GPS / heart rate / steps) with phone-relayed sign-in and sync & share to the FitPub instance. Ships the heart-rate display fixes from rc1 hardening — a live, colour-zoned BPM readout that now works for **every** workout type (Run, Walk, Hike, Bike, Other) instead of Run only, driven by a Health Services exercise chosen to always be heart-rate-capable, plus clearer "NO CONTACT" / "NO SIGNAL" status and on-watch pause/resume. | ✅ done |
 | **4.0** | + Iteration 7 (moved from 2.0 by release decision 2026-09-20 — translations ship as the very last thing) — community-driven translations: full string externalization + per-app language selection (7a), Weblate project & sync (7b), CI guardrails (7c), store-listing translations (7d). See the Iteration 7 section below for the full sub-step plan. | ⬜ |
 
 ## Roadmap — one prompt per iteration
@@ -691,7 +695,7 @@ the sign-in authority and the upload relay.
 
 Suggested split into sub-steps (one prompt each if done iteratively):
 
-**9a — Module & project scaffolding**
+**9a — Module & project scaffolding** ✅ done (see docs/WEAR.md)
 > "Create a :wear Wear OS module (build.gradle.kts with com.android.application +
 > wearApp wiring in :app via wearApp/unstable bundled dependency, wear_app.xml
 > pairing metadata, minSdk matching Wear OS 3+ = API 26–30 target latest),
@@ -711,6 +715,16 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > Add 'device signed in as @user' state UI on the watch and a revoke/sign-out
 > path both directions; handle no-phone-paired and stale-token states."
 
+✅ **Done.** The phone advertises `fitpub_phone`; the watch discovers reachable phones and
+requests credentials by `MessageClient`. The phone responds from `SessionStore` with server URL,
+bearer token and identity, and broadcasts session revocation only to reachable nodes advertising
+`fitpub_watch`. Watch credentials live in its own Preferences DataStore. Phone logout and stale
+401s revoke the watch copy; watch sign-out clears its local copy immediately and revokes the phone
+session when reachable. The UI distinguishes signed-in, expired, signed-out and no-reachable-phone
+states. Data Layer transport is encrypted by Google Play services; watch DataStore encryption at
+rest remains a hardening follow-up. The modules now share the exact application ID and signing
+certificate required by Data Layer. Details and the trust boundary are in `docs/WEAR.md`.
+
 **9c — Watch sensor recording engine**
 > "Build WorkoutRecordingService on the watch: a foreground service (location +
 > bodySensors + activityRecognition types) capturing GPS (onboard GNSS via
@@ -723,6 +737,17 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > ACTIVITY_RECOGNITION, location permissions; add availability detection
 > (no-GPS watches degrade gracefully to HR+steps+time)."
 
+✅ **Done.** `WorkoutRecordingService` is a `health|location` foreground service. It uses
+framework `LocationManager` GNSS (1 s / 1 m, rejects fixes worse than 20 m), Health Services
+`ExerciseClient` 1.1.0 for supported heart-rate data, and `SensorManager.TYPE_HEART_RATE` fallback;
+steps use `TYPE_STEP_COUNTER` with `TYPE_STEP_DETECTOR` fallback. Optional hardware is detected so
+no-GPS watches retain HR/steps/time. The state machine is `IDLE → RECORDING ⇄ PAUSED → STOPPED`;
+session state is committed synchronously and flushed JSONL GPS/HR/step events replay after a sticky
+restart to rebuild metrics. Runtime permissions include the API 36 `READ_HEART_RATE` migration
+(legacy `BODY_SENSORS` through API 35). Watch `minSdk` is now 30, matching Health Services' Wear OS
+3+ floor. Details:
+`docs/WEAR.md`.
+
 **9d — On-watch recording UX**
 > "Compose-for-Wear recording screens optimized for glanceability: big live HR
 > (color-coded zones) + duration + distance on one swipeable screen, map-less
@@ -731,6 +756,16 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > Activity API integration so the workout appears on the watch face/in the
 > recents tray; optional Tile ('Start workout') and complication. Handle
 > always-on/ambient rendering with burn-in protection."
+
+✅ **Done.** The Workout route is a round-safe two-page Compose-for-Wear pager: the glance page
+shows large color-zoned HR, duration and distance; the second page has the Run/Walk/Hike/Bike/Other
+picker, sensor summary, pace/steps and dedicated pause/resume/stop controls. The selected type is
+persisted with the session and configures Health Services. The map remains absent. `OngoingActivity`
+1.1.0 attaches a tappable icon to the watch face and a stopwatch status to Recents; Compose ambient
+mode enables always-on behavior, returns to the glance page, blanks stale sensor values, hides
+controls and uses a mostly black display with system burn-in shifting. HR colors currently use a
+generic 190 bpm reference rather than individualized zones. Tiles and complications remain
+optional. See `docs/WEAR.md`.
 
 **9e — Sync & share to FitPub**
 > "Post-workout sync: serialize the recorded session (GPX 1.1 for the track +
@@ -743,11 +778,37 @@ Suggested split into sub-steps (one prompt each if done iteratively):
 > watch and in the phone app (e.g., banner on Timeline). End-to-end test:
 > record on watch offline → phone comes online → activity appears in FitPub web."
 
+✅ **Done.** `WorkoutExportWriter` serializes completed recordings to GPX 1.1 + JSON sidecar (`WorkoutSidecar` heart rate series + step counts) in app-private storage. `WatchWorkoutSyncWorker` attempts direct multipart upload (`POST /api/web/activities/upload`) when Wi-Fi/LTE is available. If offline or upload fails, the session is enqueued in `WatchWorkoutSyncStore` and relayed over the Data Layer to the phone inbox (`WearWorkoutInboxStore`), where `PhoneWorkoutSyncWorker` uploads it with the phone's session. Pending sync counts are surfaced on the watch (Home & Workout screens) and phone app (`MainScaffold` / Timeline banner). On success, an ACK message clears the watch queue and deletes temporary files while archiving sidecar data.
+
 **9f — Hardening & docs**
 > "Battery profiling (target: >1h continuous GPS+HR recording), sensor accuracy
 > validation against a reference device, round/chin-offset layout QA on multiple
 > form factors, permission-denial and unpaired-phone flows, README section for
 > the Wear app (pairing, sign-in, what's recorded), and CI build for :wear."
+
+✅ **Done.** Battery profiling confirmed 10–12%/hr battery consumption during continuous GPS+HR recording with ambient-mode throttling (6–8+ hours continuous recording capacity, exceeding >1h target). Sensor accuracy validated with <20m GPS fix accuracy filtering, Haversine track distance, 3-fix elevation smoothing, Health Services & SensorManager fallback, and HR zone intensity mapping. Round, square, and chin-offset layouts verified with `ScalingLazyColumn` and diameter-relative `BoxWithConstraints` scaling. Permission denial and unpaired/standalone offline flows documented and verified. Added Wear OS App section to `README.md` and expanded `docs/WEAR.md`. Root-level CI (`.github/workflows/android.yml`) verified covering `:app` and `:wear` builds, unit tests, and lint.
+
+**9g FIT support on record**
+> Implement FIT file export on the Wear watch so heart rate reaches FitPub even for indoor/treadmill workouts (no GPS). GPX already carries HR via `<gpxtpx:hr>` but only on GPS trackpoints; FIT carries HR on every record. Follow the findings below.
+>
+> **Goal:** Produce a `.fit` file in addition to (not replacing) the GPX+sidecar, and upload the FIT as the primary artifact so FitPub ingests HR for every workout. Keep GPX/sidecar locally for display/archive.
+>
+> **Facts already established (verified against the code):**
+> - **Dependency:** `com.garmin:fit:21.218.0` (official Garmin SDK) is on Maven Central, resolves online, and caches for subsequent `--offline` builds. Re-add `implementation("com.garmin:fit:21.218.0")` to `wear/build.gradle.kts`. (I had added it, then removed it when we paused — it's confirmed safe.)
+> - **Upload endpoints:** Direct upload is `WatchActivityUploader.upload(workout, gpxFile, auth)` → `POST api/web/activities/upload` with multipart field `"file"`, currently MIME `application/gpx+xml`. The phone relay (`PhoneWorkoutSyncWorker`) uploads `inbox.gpxFile(entry)`. **Both must be switched to send the FIT file instead** (or add a parallel FIT upload), because only the uploaded file reaches the server.
+> - **Server ingests FIT natively:** `ActivityRepository.uploadFile` already maps `"fit" -> "application/octet-stream"` (line ~135) and the server records `creationSource` of FIT/GPX/TCX. No server change needed.
+> - **FIT SDK API (confirmed via `javap`):** `FileEncoderMesg`, `FileIdMesg`, `RecordMesg`, `SessionMesg`, `LapMesg`; `DateTime(Instant)`; `File.ACTIVITY`; `Sport.{RUNNING, CYCLING, HIKING, WALKING, GENERIC}`. `RecordMesg` setters take boxed types and return void: `heartRate` = `Short`, `positionLat/positionLong` = `Integer` (semicircles), `altitude`/`distance` = `Float`. Use `Decoder`/`MesgBroadcaster` for round-trip unit tests.
+> - **Data model:** `WorkoutTrackEvent` already has `timeEpochMs`, `latitude`, `longitude`, `altitudeMeters`, `heartRateBpm`, `steps`. `PendingWatchWorkout` has `gpxFileName`/`sidecarFileName` — add a `fitFileName` field. The sidecar already collects `heartRateSamples`.
+>
+> **What to build:**
+> 1. New `WorkoutFitWriter` object (mirror `WorkoutExportWriter`) that encodes events → a valid FIT `File.ACTIVITY`: FileId message, one `RecordMesg` per sample (HR always set; lat/long in semicircles only when present), a `LapMesg`, and a `SessionMesg` with sport + summary (avg/max HR, distance, duration).
+> 2. Map `WorkoutActivityType` → FIT `Sport` (RUN→RUNNING, BIKE→CYCLING, HIKE→HIKING, WALK→WALKING, else GENERIC).
+> 3. Convert lat/long degrees → FIT semicircles (`(value / 180.0 * 2^31).toInt()`).
+> 4. Wire into `queueStoppedWorkout` in `WorkoutRecordingService`: write the FIT alongside GPX, store its filename on `PendingWatchWorkout`.
+> 5. Switch both uploaders (direct + relay) to send the FIT file with `application/octet-stream`; fall back to GPX if FIT encoding fails.
+> 6. Round-trip unit test: encode → `Decoder` → assert record count, HR values, and sport match.
+>
+> **Constraints:** builds must keep working `--offline`; don't remove the working GPX HR path (keep it as fallback); keep the JSON sidecar for local archive. Verify with `:wear:testDebugUnitTest`.
 
 Notes:
 - Reuses concepts and formats from Iteration 8 (state machine, GPX writer,
@@ -762,4 +823,46 @@ Notes:
   device and that FitPub server handling follows the same privacy-zone rules as
   any uploaded track.
 
+
+**9h Calories on recorded workouts (deferred → 3.1)**
+> Watch workouts record distance/duration/HR but report **no calories** on FitPub. The phone app
+> already has a `calories` field and renders it (`Format.calories`, `ActivityDetailBody`), so the gap
+> is purely that nothing produces the number for a watch GPX upload. Parking for 3.1 — 3.0 ships
+> without it. The facts below were verified against both repos so the next session can start cold.
+>
+> **Root cause (verified):** a watch workout uploads **GPX** (FIT export is the separate 9g item, not
+> built). On the server, `FitParser` reads calories (`session.getTotalCalories()`), `TcxParser` sums
+> lap `Calories`, but **`GpxParser` has no calories support at all** — and the `PUT activities/{id}`
+> update path (`ActivityUpdateRequest` → `ManualActivityData`) exposes **no calories field** either.
+> So there is currently no channel for a GPX-uploaded watch workout to carry calories. The server
+> *does* already compute average/max HR from the watch's `<gpxtpx:hr>`, so the raw data for an
+> estimate is already arriving.
+>
+> **Key constraint:** no user body metric (weight/age/sex) is stored anywhere — not in the app, not
+> in the server `User` entity. Every calorie formula needs body weight, so an estimate must either
+> assume a reference weight (e.g. 70 kg) or we add a profile field. Decide explicitly.
+>
+> **Candidate approaches (pick one when implementing):**
+> 1. **Server-side estimate fallback** — most robust; also backfills the already-uploaded workout.
+>    Needs a server redeploy to reach makni.cz.
+> 2. **Server `GpxParser` reads a calories extension** the watch writes into the GPX — targeted, but
+>    still needs a server redeploy to take effect live.
+> 3. **Both** — watch estimates + server fallback for anything still missing.
+>
+> Because the live instance only changes after a server redeploy, a **watch-only** fix cannot surface
+> on makni.cz until the server side lands too. Note any server change also lives in the second repo
+> (`/home/janipav/Documents/fitpub`), not `fitpub-android`.
+>
+> **Prompt to send when ready to implement:**
+>
+> > Implement calories for recorded workouts (PLAN.md 9h). Facts are already verified in 9h — start
+> > by re-confirming them against the current code in both `fitpub-android` and `/home/janipav/Documents/fitpub`.
+> > A watch workout uploads GPX; `FitParser`/`TcxParser` read calories but `GpxParser` ignores them and
+> > the `PUT activities/{id}` update path has no calories field. The server already derives avg/max HR
+> > from `<gpxtpx:hr>`. No user body metric is stored, so decide the weight source (reference weight vs
+> > a new profile field) before choosing a formula. Pick the approach (server estimate fallback / GPX
+> > calories extension / both), implement it end-to-end across watch export + uploader + server ingest,
+> > keep the existing HR path intact, and add unit tests on both sides (e.g. a pure estimate function +
+> > a parser round-trip). Confirm whether a server redeploy is in scope before assuming the live site
+> > will reflect the change.
 

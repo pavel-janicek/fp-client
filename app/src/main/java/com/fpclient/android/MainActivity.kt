@@ -330,6 +330,7 @@ private fun FitPubNavGraph(
                 onOpenRecords = { navController.navigate(Routes.RECORDS) },
                 onOpenPeaks = { u -> navController.navigate(Routes.peaks(u)) },
                 onOpenPeak = { u, peakId -> navController.navigate(Routes.peakDetail(u, peakId)) },
+                onOpenWearInbox = { navController.navigate(Routes.WEAR_WORKOUT_INBOX) },
                 requestedTab = requestedTab,
                 onRequestedTabHandled = onRequestedTabHandled,
             )
@@ -427,6 +428,13 @@ private fun FitPubNavGraph(
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
                 onOpenEmailChange = { navController.navigate(Routes.EMAIL_CHANGE) },
+                onOpenWearWorkoutInbox = { navController.navigate(Routes.WEAR_WORKOUT_INBOX) },
+            )
+        }
+        composable(Routes.WEAR_WORKOUT_INBOX) {
+            com.fpclient.android.ui.settings.WearWorkoutInboxScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(Routes.ABOUT) {

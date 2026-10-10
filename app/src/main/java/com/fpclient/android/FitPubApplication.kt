@@ -6,9 +6,16 @@ import com.fpclient.android.notifications.InstantDeliveryService
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
+import com.fpclient.android.wear.PhoneWearAuthRelay
+import com.fpclient.android.wear.PhoneWorkoutSyncScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.osmdroid.config.Configuration
 
 class FitPubApplication : Application() {
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     lateinit var container: AppContainer
         private set
@@ -16,6 +23,8 @@ class FitPubApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        PhoneWearAuthRelay.start(this, container.sessionStore, applicationScope)
+        PhoneWorkoutSyncScheduler.schedulePeriodic(this)
 
         // Background notification delivery (Iteration 8f): create the channel up front so the
         // OS-level toggle for it is visible in system settings even before the first poll, and
@@ -37,7 +46,7 @@ class FitPubApplication : Application() {
         @Suppress("DEPRECATION")
         val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this)
         Configuration.getInstance().load(this, prefs)
-        Configuration.getInstance().userAgentValue = "FP-Client/2.2.1"
+        Configuration.getInstance().userAgentValue = "FP-Client/3.0.0"
 
         // osmdroid needs access to a writeable tile cache dir for modern scoped storage.
         Configuration.getInstance().osmdroidBasePath = filesDir

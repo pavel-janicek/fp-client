@@ -6,13 +6,16 @@ this release".
 
 ## 1. Bump the version
 
-- [ ] `app/build.gradle.kts` — `versionCode` incremented by 1, `versionName` set to the new version
+- [ ] `app/build.gradle.kts` — `versionCode` incremented by 1 (e.g. `N`), `versionName` set to the new version
+- [ ] `wear/build.gradle.kts` — `versionName` set to match `:app`, `versionCode` set to a unique integer distinct from `:app` (e.g. `N + 1`). Note: Google Play Console enforces globally unique `versionCode` values across all artifacts uploaded to a release listing, so the Phone AAB and Watch AAB must use distinct versionCodes.
 - [ ] `app/src/main/java/com/fpclient/android/FitPubApplication.kt` — osmdroid `Configuration.getInstance().userAgentValue = "FP-Client/<version>"`
 
 ## 2. Automatic propagation (no manual edit, but verify)
 
 - [ ] HTTP `User-Agent` header — `ApiClient.kt` builds it from `BuildConfig.VERSION_NAME`; nothing to edit
+- [ ] Watch upload `User-Agent` — `WatchActivityUploader.kt` builds `FP-Client-Wear/<version>` from its own `BuildConfig.VERSION_NAME`; nothing to edit
 - [ ] About screen (Settings → About this app) — version comes from `BuildConfig`; nothing to edit
+- [ ] Watch Settings screen — version comes from the `:wear` `BuildConfig`; nothing to edit
 
 ## 3. Documentation
 
@@ -46,6 +49,9 @@ one — skipping it means the release ships on F-Droid without any changelog:
       entry, `CurrentVersion`/`CurrentVersionCode`, `fdroid lint`) is a separate
       step **after** tagging — see `RELEASE_CHECKS.md` section 6; it is not part
       of the version-bump commit
+- [ ] Watch alpha/beta note: F-Droid ships the phone APK only. The `:wear` APK is
+      installed standalone (Play on the watch / `adb` / Studio `wear` run config)
+      and is never committed to git either — same binary-free rule as `app/release/`
 
 ## 5. Verify the build
 
@@ -53,3 +59,26 @@ one — skipping it means the release ships on F-Droid without any changelog:
 - [ ] APK reports the new version: `aapt dump badging app-debug.apk | grep versionName`
 - [ ] Install the release/minified build and check Settings → About shows the new version
 - [ ] (If touching the network layer) confirm server logs / instance admin sees `FP-Client/<version>` in the User-Agent
+
+## 6. Watch pair extras (only when `:wear` ships in the release)
+
+The Data Layer only talks to a matched pair, so a version bump that ships the
+watch needs these on top of sections 1–5:
+
+- [ ] Unique `versionCode` values in `app/build.gradle.kts` (e.g. `45`) **and** `wear/build.gradle.kts` (e.g. `46`), matching `versionName` (e.g. `3.0.0-rc1`), and the same signing key for both APKs
+      (both modules read the identical `KEYSTORE_*` env vars; unsigned when unset).
+      Google Play Console requires globally unique versionCodes for every uploaded artifact in a listing.
+      Never mix build types across the pair in testing — install both `debug`
+      from the same machine, or both `release` signed with the same key.
+      Mismatched signatures make capability discovery return empty and
+      "Sign in with phone" silently does nothing (watch shows
+      "No paired phone is reachable").
+- [ ] Pairing prerequisites before testing the handshake: phone + watch paired in
+      the Wear OS companion app, Bluetooth on, Play Services on both devices,
+      and **signed in on the phone first** — a signed-out phone answers
+      `signed_out`/`expired` by design and the watch stays signed out.
+- [ ] Watch release checks: `./gradlew :wear:assembleRelease :wear:lintDebug`
+      clean; on-watch Settings shows the new version; `Sign in with phone`
+      reports `Device signed in as @…`; sign-out/revoke both directions still work.
+- [ ] `docs/WEAR.md` touched only if the pairing contract changed (capability
+      names, message paths, `applicationId`, signing or backup rules).

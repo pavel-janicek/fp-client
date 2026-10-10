@@ -12,8 +12,8 @@ android {
         applicationId = "com.fpclient.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 42
-        versionName = "2.2.1"
+        versionCode = 46
+        versionName = "3.0.0"
     }
 
     signingConfigs {
@@ -68,6 +68,15 @@ android {
 }
 
 dependencies {
+    // Wear OS companion (Iteration 9a): there is deliberately NO `wearApp(project(":wear"))`
+    // line here. Up to AGP 8.x that configuration made the Android Gradle plugin embed the watch
+    // APK inside this APK and generate the pairing metadata itself — AGP 9 removed the embedded
+    // Wear support entirely ("wearApp configurations removed"), so on this project's AGP 9.4.1
+    // the bundled dependency cannot exist at all. Wear OS 3+ installs watch apps standalone from
+    // Play anyway, so the phone side declares the pairing by hand instead: res/xml/wear_app.xml
+    // plus the com.google.android.wearable.beta.app meta-data in AndroidManifest.xml. The watch
+    // module itself stays fully independent of :app code. Decision record: docs/WEAR.md.
+
     // Core
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
@@ -99,6 +108,10 @@ dependencies {
     // Background notification polling (Iteration 8f) — the only new dependency the whole
     // push feature needs: the periodic worker that checks the instance for new notifications.
     implementation("androidx.work:work-runtime-ktx:2.10.5")
+
+    // Phone↔watch sign-in relay (Iteration 9b).
+    implementation("com.google.android.gms:play-services-wearable:19.0.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")

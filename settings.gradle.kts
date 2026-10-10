@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "FP Client"
 include(":app")
+include(":wear")

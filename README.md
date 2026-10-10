@@ -22,8 +22,21 @@ later in **Settings → Instance**), sign in, and:
   against your instance, with no third-party push service in between.
 - **Analytics** — dashboard, personal records, achievements, and weekly summaries.
 - **Guest mode** — browse the public timeline without an account.
+- **Wear OS companion app** — standalone watch app for recording workouts on-device with GPS, heart rate, and step tracking.
 
-Built with Kotlin and Jetpack Compose (Material 3).
+Built with Kotlin and Jetpack Compose (Material 3 for phone, Wear Compose for watch).
+
+## Wear OS App (FitPub Wear)
+
+FP Client includes a standalone Wear OS companion module (`:wear`) that allows athletes to leave their phone at home while recording activities:
+
+- **Pairing & Sign-in**: Relays your FitPub instance session from the phone over the secure Android Wearable Data Layer (`"Sign in with phone"`). No manual typing on the watch screen required.
+- **Standalone Workout Recording**: Records GPS tracks, continuous heart rate (Health Services / SensorManager fallback with visual HR intensity zones), and step counts in a foreground service.
+- **Activity Selection**: Choose activity types (Run, Hike, Cycle, Walk, Workout) ordered automatically by your usage frequency.
+- **Offline Sync**: Record offline without network; when Wi-Fi/LTE or paired phone connection returns, recorded sessions are uploaded directly or relayed via the phone.
+- **Battery & Ambient Mode**: Designed for long activities (>6h battery life on continuous GPS+HR recording) with low-power always-on ambient display rendering.
+
+To install on a watch: download the standalone Wear OS app from Google Play on the watch or deploy directly via `./gradlew :wear:installDebug`.
 
 ## Where to get it
 

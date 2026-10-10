@@ -103,7 +103,7 @@ class ApiClient(
             // locally as well so the app returns to the login screen instead of looping
             // on "Unauthorized" forever. Requests without a token (guests, failed logins)
             // are unaffected.
-            runBlocking { sessionStore.logout() }
+            runBlocking { sessionStore.logout(expired = true) }
         }
         response
     }

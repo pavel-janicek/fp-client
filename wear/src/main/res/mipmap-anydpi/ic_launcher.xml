@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The phone app's adaptive icon, minus the -v26 folder qualifier: minSdk is already 26, so the
+  API-gating would be redundant (lint ObsoleteSdkInt). Unlike the phone app's copy this one also
+  carries a monochrome layer so API 33+ launchers can render a themed (white) version of the logo.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

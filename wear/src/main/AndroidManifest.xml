@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Workout recording (Iteration 9c). Sensor features are optional: some watches lack GNSS,
+         a heart-rate sensor, or a step sensor and must still support the available metrics. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission
+        android:name="android.permission.BODY_SENSORS"
+        android:maxSdkVersion="35" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Marks this as a watch app rather than a phone-app variant; Play and the package manager
+         use it to keep the APK off phones. -->
+    <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.heartrate" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
+
+    <!-- Backups are fully off on every Android version: allowBackup covers API ≤ 30,
+         fullBackupContent=false is the Android 11- spelling lint expects alongside
+         dataExtractionRules (Android 12+), which excludes every domain explicitly —
+         see res/xml/data_extraction_rules.xml for what must never leave the watch. -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.FitPubWear">
+
+        <!-- Standalone install: Wear OS 3+ installs this APK on its own (Play on the watch or
+             adb/Studio directly). It is NOT embedded in the phone APK — AGP 9 removed the
+             embedded-wear `wearApp` configuration — so this flag is the truth, not a variant of
+             the old bundled model. Pairing with the phone app is declared on the :app side in
+             res/xml/wear_app.xml. See docs/WEAR.md. -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+        <meta-data
+            android:name="com.google.android.gms.wearable.capabilities"
+            android:resource="@array/android_wear_capabilities" />
+
+        <service
+            android:name=".auth.WatchWearAuthService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpub/auth" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:path="/fitpub/workout/synced" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpub/workout/" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".recording.WorkoutRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="health|location" />
+
+        <activity
+            android:name=".WearMainActivity"
+            android:exported="true"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

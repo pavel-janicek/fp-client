@@ -18,7 +18,9 @@ import com.fpclient.android.data.repository.UserRepository
 import com.fpclient.android.notifications.NotificationPollStore
 import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.recording.RecordingShareManager
+import com.fpclient.android.wear.WearWorkoutInboxStore
 import com.fpclient.android.data.session.SessionStore
+import com.fpclient.android.wear.PhoneWearAuthRelay
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -93,4 +95,9 @@ class AppContainer(context: Context) {
     val recordingShareManager: RecordingShareManager by lazy {
         RecordingShareManager(context, activityRepository, activitiesVersion)
     }
+
+    val wearWorkoutInboxStore: WearWorkoutInboxStore by lazy { WearWorkoutInboxStore(context) }
+
+    /** Phone-side Data Layer relay: watch handshake diagnostics + reply test. */
+    internal val phoneWearAuthRelay: PhoneWearAuthRelay = PhoneWearAuthRelay
 }

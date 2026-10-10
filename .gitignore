@@ -23,6 +23,7 @@ local.properties
 # Release output (F-Droid: source repo must be binary-free)
 app/release/
 *.keystore
+wear/release/
 
 # OS
 .DS_Store

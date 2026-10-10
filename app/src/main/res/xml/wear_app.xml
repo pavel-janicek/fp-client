@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Iteration 9a — pairing metadata for the Wear OS companion module (:wear).
+
+  The descriptor names the watch application id belonging to this phone app. The <unbundled />
+  child tag indicates to Google Play's bundletool that the watch app is distributed standalone /
+  unbundled (installed from Play on Wear OS 3+) rather than embedded inside the phone APK.
+-->
+<wearableApp package="com.fpclient.android">
+    <unbundled />
+</wearableApp>

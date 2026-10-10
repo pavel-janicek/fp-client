@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Iteration 9b — keep the Wear OS Data Layer capability declaration.
+
+  `android_wear_capabilities` is never referenced from Kotlin code (Play services
+  reads it at runtime via Resources), so the release resource shrinker
+  (isShrinkResources=true) strips it. Without it
+  CapabilityClient.getCapability("fitpub_phone") always returns empty, so the
+  watch's "Sign in with phone" silently does nothing in release builds while
+  debug builds work. This raw keep file pins the array in the APK.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/android_wear_capabilities" />

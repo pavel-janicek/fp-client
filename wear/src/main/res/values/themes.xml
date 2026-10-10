@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Watches are OLED-dark: a black window avoids a white flash before the first Compose
+         frame and matches Wear Material's black-by-default palette. NoActionBar because every
+         bit of chrome is drawn by Compose. -->
+    <style name="Theme.FitPubWear" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

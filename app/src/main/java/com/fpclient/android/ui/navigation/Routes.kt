@@ -40,6 +40,7 @@ object Routes {
      * `/settings/export/download`.
      */
     const val DATA_EXPORT = "data_export"
+    const val WEAR_WORKOUT_INBOX = "wear_workout_inbox"
     const val RECORD = "record"
     // The finished recording's session id (= its start epoch ms) selects the workout.
     const val WORKOUT_SUMMARY = "workout_summary/{sessionId}"

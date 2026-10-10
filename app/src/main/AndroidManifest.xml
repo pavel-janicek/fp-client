@@ -42,6 +42,30 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FPClient">
 
+        <!-- Iteration 9a — Wear OS pairing metadata. Points the (legacy) Wear companion lookup
+             at res/xml/wear_app.xml, which names the :wear module's application id. The actual
+             watch APK is no longer embedded in this APK: AGP 9 removed the `wearApp` bundling
+             configuration, and Wear OS 3+ installs the watch app standalone. See docs/WEAR.md. -->
+        <meta-data
+            android:name="com.google.android.wearable.beta.app"
+            android:resource="@xml/wear_app" />
+        <meta-data
+            android:name="com.google.android.gms.wearable.capabilities"
+            android:resource="@array/android_wear_capabilities" />
+
+        <service
+            android:name=".wear.PhoneWearAuthService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpub/auth" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpub/workout/" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

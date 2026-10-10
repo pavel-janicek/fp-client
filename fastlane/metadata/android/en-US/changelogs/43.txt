@@ -1,0 +1,3 @@
+3.0.0-alpha (release 3.0.0-alpha):
+- First Wear OS companion alpha: install the matching phone + watch builds together — the watch signs in by relaying the phone's session over the Wear OS Data Layer.
+- On-watch workout recording alpha (GPS / heart rate / steps) with phone-relayed sync & share to your FitPub instance.
