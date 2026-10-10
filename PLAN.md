@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: 3.0.0-rc1 bump (versionCode 45)
-Current app version: **`3.0.0-rc1`** (`versionCode` 45)
+Assessment date: 2026-08-25 · Last updated: 3.0.0 bump (versionCode 46)
+Current app version: **`3.0.0`** (`versionCode` 46)
 
 ## Current state
 
@@ -129,6 +129,7 @@ Progress ledger (kept up to date per iteration):
 | **3.0.0-alpha** | **Wear OS companion alpha (Iteration 9 in progress)** — versionCode 43 / versionName `3.0.0-alpha`; `FP-Client/3.0.0-alpha` (+ `FP-Client-Wear/3.0.0-alpha`) User-Agent. First paired phone + watch cut: `:wear` standalone module (round-safe Home/About, sign-in relayed from the phone over the Data Layer, on-watch GPS/HR/steps recording with phone-relayed sync & share). Phone and watch share `versionCode`/`versionName` and must be installed as a matched, same-signature pair for the handshake to work. | 🔄 in progress |
 | **3.0.0-beta** | **Wear UX + connection beta (Iteration 9)** — versionCode 44 / versionName `3.0.0-beta`; `FP-Client/3.0.0-beta` (+ `FP-Client-Wear/3.0.0-beta`) User-Agent. Watch main screen redesigned: compact "FP Wear" title, dedicated Workout and Settings buttons in a scrollable `ScalingLazyColumn` so they stay reachable on small round displays, sign-in reduced to one tappable status line (version moved off Home). New watch Settings screen (replaces About) carries the version and a "Grant sensor access" button for the GPS/HR/step runtime permissions. Watch workout flow gains a dedicated activity picker (`ActivitySelectionScreen` + `WorkoutActivityUsageStore`) with a reworked `WorkoutControlScreen`. Phone ↔ watch sign-in handshake fixed and instrumented: `PhoneHandshakeDiagnostics` persists the last request/reply, surfaced under Settings → Handshake diagnostics with a manual reply test. PLAN (recorded 2026-10-26): on watch Stop, keep ✓ + beep + vibration, then after a short delay that lets them land, pop the workout window back to Home — firing only on the RECORDING/PAUSED → STOPPED transition so a persisted STOPPED state cannot bounce-loop on re-entry; watch auto-share default visibility follows the phone app's upload default (Public), replacing the hardcoded Private in stop queueing, pending entries, uploader and update-path fallbacks — not the unused server `defaultActivityPrivacyPreferences` blob (no in-repo consumption contract). | ✅ done |
 | **3.0.0-rc1** | **Release candidate 1 for 3.0.0** — versionCode 45 / versionName `3.0.0-rc1`; `FP-Client/3.0.0-rc1` (+ `FP-Client-Wear/3.0.0-rc1`) User-Agent. Release candidate 1 of the 3.0.0 line following 3.0.0-alpha and 3.0.0-beta. | ✅ done |
+| **3.0.0** | **Final 3.0.0 release of the Wear OS companion (Iteration 9)** — versionCode 46 / versionName `3.0.0` (`:wear` versionCode 47, globally unique per Google Play); `FP-Client/3.0.0` (+ `FP-Client-Wear/3.0.0`) User-Agent. Final release of the paired phone + watch cut following 3.0.0-alpha / -beta / -rc1: on-watch workout recording (GPS / heart rate / steps) with phone-relayed sign-in and sync & share to the FitPub instance. Ships the heart-rate display fixes from rc1 hardening — a live, colour-zoned BPM readout that now works for **every** workout type (Run, Walk, Hike, Bike, Other) instead of Run only, driven by a Health Services exercise chosen to always be heart-rate-capable, plus clearer "NO CONTACT" / "NO SIGNAL" status and on-watch pause/resume. | ✅ done |
 | **4.0** | + Iteration 7 (moved from 2.0 by release decision 2026-09-20 — translations ship as the very last thing) — community-driven translations: full string externalization + per-app language selection (7a), Weblate project & sync (7b), CI guardrails (7c), store-listing translations (7d). See the Iteration 7 section below for the full sub-step plan. | ⬜ |
 
 ## Roadmap — one prompt per iteration
@@ -822,4 +823,46 @@ Notes:
   device and that FitPub server handling follows the same privacy-zone rules as
   any uploaded track.
 
+
+**9h Calories on recorded workouts (deferred → 3.1)**
+> Watch workouts record distance/duration/HR but report **no calories** on FitPub. The phone app
+> already has a `calories` field and renders it (`Format.calories`, `ActivityDetailBody`), so the gap
+> is purely that nothing produces the number for a watch GPX upload. Parking for 3.1 — 3.0 ships
+> without it. The facts below were verified against both repos so the next session can start cold.
+>
+> **Root cause (verified):** a watch workout uploads **GPX** (FIT export is the separate 9g item, not
+> built). On the server, `FitParser` reads calories (`session.getTotalCalories()`), `TcxParser` sums
+> lap `Calories`, but **`GpxParser` has no calories support at all** — and the `PUT activities/{id}`
+> update path (`ActivityUpdateRequest` → `ManualActivityData`) exposes **no calories field** either.
+> So there is currently no channel for a GPX-uploaded watch workout to carry calories. The server
+> *does* already compute average/max HR from the watch's `<gpxtpx:hr>`, so the raw data for an
+> estimate is already arriving.
+>
+> **Key constraint:** no user body metric (weight/age/sex) is stored anywhere — not in the app, not
+> in the server `User` entity. Every calorie formula needs body weight, so an estimate must either
+> assume a reference weight (e.g. 70 kg) or we add a profile field. Decide explicitly.
+>
+> **Candidate approaches (pick one when implementing):**
+> 1. **Server-side estimate fallback** — most robust; also backfills the already-uploaded workout.
+>    Needs a server redeploy to reach makni.cz.
+> 2. **Server `GpxParser` reads a calories extension** the watch writes into the GPX — targeted, but
+>    still needs a server redeploy to take effect live.
+> 3. **Both** — watch estimates + server fallback for anything still missing.
+>
+> Because the live instance only changes after a server redeploy, a **watch-only** fix cannot surface
+> on makni.cz until the server side lands too. Note any server change also lives in the second repo
+> (`/home/janipav/Documents/fitpub`), not `fitpub-android`.
+>
+> **Prompt to send when ready to implement:**
+>
+> > Implement calories for recorded workouts (PLAN.md 9h). Facts are already verified in 9h — start
+> > by re-confirming them against the current code in both `fitpub-android` and `/home/janipav/Documents/fitpub`.
+> > A watch workout uploads GPX; `FitParser`/`TcxParser` read calories but `GpxParser` ignores them and
+> > the `PUT activities/{id}` update path has no calories field. The server already derives avg/max HR
+> > from `<gpxtpx:hr>`. No user body metric is stored, so decide the weight source (reference weight vs
+> > a new profile field) before choosing a formula. Pick the approach (server estimate fallback / GPX
+> > calories extension / both), implement it end-to-end across watch export + uploader + server ingest,
+> > keep the existing HR path intact, and add unit tests on both sides (e.g. a pure estimate function +
+> > a parser round-trip). Confirm whether a server redeploy is in scope before assuming the live site
+> > will reflect the change.
 
