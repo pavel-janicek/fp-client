@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: 3.0.0 bump (versionCode 46)
-Current app version: **`3.0.0`** (`versionCode` 46)
+Assessment date: 2026-08-25 · Last updated: 3.0.0 re-cut (versionCode 48/49 — Play had already consumed 46/47)
+Current app version: **`3.0.0`** (`versionCode` 48 / `:wear` 49)
 
 ## Current state
 
