@@ -31,6 +31,7 @@ import androidx.health.services.client.ExerciseUpdateCallback
 import androidx.health.services.client.HealthServices
 import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataTypeAvailability
+import androidx.health.services.client.data.ExerciseCapabilities
 import androidx.health.services.client.data.ExerciseConfig
 import androidx.health.services.client.data.ExerciseState
 import androidx.health.services.client.data.ExerciseType
@@ -55,6 +56,64 @@ private fun WorkoutActivityType.toHealthExerciseType(): ExerciseType = when (thi
     WorkoutActivityType.HIKE -> ExerciseType.HIKING
     WorkoutActivityType.BIKE -> ExerciseType.BIKING
     WorkoutActivityType.OTHER -> ExerciseType.WORKOUT
+}
+
+/**
+ * Picks the Health Services [ExerciseType] used to *drive the PPG* so heart rate streams for every
+ * workout type, not just Run.
+ *
+ * Run works today because RUNNING is universally supported and always exposes HEART_RATE_BPM, so
+ * [startHealthServices] starts an exercise that keeps the platform `TYPE_HEART_RATE` listener fed.
+ * Other types can be missing HEART_RATE_BPM on some watches, which used to drop straight to the
+ * bare platform sensor — the exact "--" readout users saw on Walk.
+ *
+ * The decision itself lives in [pickHeartRateCapableExerciseType] so it can be unit-tested without
+ * constructing a real (ProtoParcelable) [ExerciseCapabilities].
+ */
+private fun pickHeartRateExerciseType(
+    capabilities: ExerciseCapabilities,
+    preferred: ExerciseType,
+): ExerciseType? = pickHeartRateCapableExerciseType(
+    supportedTypes = capabilities.supportedExerciseTypes,
+    isHeartRateCapable = { type ->
+        // Guarded by `type in supportedTypes` inside the decision, mirroring the original code,
+        // which only ever queried capabilities for types it had confirmed are supported.
+        DataType.HEART_RATE_BPM in capabilities.getExerciseTypeCapabilities(type).supportedDataTypes
+    },
+    preferred = preferred,
+)
+
+/**
+ * Pure policy behind [pickHeartRateExerciseType]:
+ *  1. Keep the user's selected [preferred] type whenever it can actually stream HEART_RATE_BPM.
+ *  2. Otherwise fall back to the closest HR-capable type in a fixed, sensible order, purely to keep
+ *     the sensor alive. This only chooses what Health Services exercise runs; the activity saved and
+ *     exported remains the user's real `WorkoutActivityType` (read from the session, not from here).
+ *  3. Return null only when the watch exposes HEART_RATE_BPM for no exercise type at all, so the
+ *     caller can fall back to the platform sensor as a last resort.
+ */
+internal fun pickHeartRateCapableExerciseType(
+    supportedTypes: Set<ExerciseType>,
+    isHeartRateCapable: (ExerciseType) -> Boolean,
+    preferred: ExerciseType,
+): ExerciseType? {
+    fun supportsHeartRate(type: ExerciseType): Boolean =
+        type in supportedTypes && isHeartRateCapable(type)
+
+    if (supportsHeartRate(preferred)) return preferred
+
+    // Closest sensible fallbacks, tried in order. RUNNING first (the type known to work everywhere),
+    // then the other supported workout types, then the generic WORKOUT.
+    val fallbackOrder = listOf(
+        ExerciseType.RUNNING,
+        ExerciseType.WALKING,
+        ExerciseType.HIKING,
+        ExerciseType.BIKING,
+        ExerciseType.WORKOUT,
+    )
+    return fallbackOrder.firstOrNull { supportsHeartRate(it) }
+        // Last resort: any supported type that happens to expose HEART_RATE_BPM.
+        ?: supportedTypes.firstOrNull { supportsHeartRate(it) }
 }
 
 class WorkoutRecordingService : Service(), SensorEventListener {
@@ -574,24 +633,23 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         }
         try {
             val capabilities = client.getCapabilitiesAsync().await()
-            val exerciseType = session?.activityType?.toHealthExerciseType() ?: ExerciseType.WORKOUT
-            if (exerciseType !in capabilities.supportedExerciseTypes) {
+            val preferredType = session?.activityType?.toHealthExerciseType() ?: ExerciseType.WORKOUT
+            // Drive the PPG through a Health Services exercise for EVERY workout type, exactly the
+            // way Run already does. The selected type is kept when it can stream heart rate; when a
+            // watch does not offer HEART_RATE_BPM for that specific type (or the type itself is
+            // unsupported), fall back to the closest HR-capable type purely to *drive the sensor*.
+            // The saved/exported activity stays the user's real selection — it is read from
+            // session.activityType (a WorkoutActivityType), never from this Health Services type.
+            val exerciseType = pickHeartRateExerciseType(capabilities, preferredType)
+            if (exerciseType == null) {
+                Log.w(TAG, "HS: no exercise type supports HEART_RATE_BPM — falling back to platform sensor")
                 healthServicesAvailable = false
                 healthHeartRateAvailable = false
                 ensureHeartRateSensor()
                 refreshAvailability()
                 return
             }
-            val exerciseCapabilities = capabilities.getExerciseTypeCapabilities(exerciseType)
-            Log.i(TAG, "HS capabilities ok: type=$exerciseType supportsHR=${DataType.HEART_RATE_BPM in exerciseCapabilities.supportedDataTypes}")
-            if (DataType.HEART_RATE_BPM !in exerciseCapabilities.supportedDataTypes) {
-                Log.w(TAG, "HS: HEART_RATE_BPM not supported for $exerciseType — falling back to platform sensor")
-                healthServicesAvailable = false
-                healthHeartRateAvailable = false
-                ensureHeartRateSensor()
-                refreshAvailability()
-                return
-            }
+            Log.i(TAG, "HS capabilities ok: preferred=$preferredType using=$exerciseType supportsHR=true")
 
             val callback = object : ExerciseUpdateCallback {
                 override fun onRegistered() {
