@@ -41,7 +41,8 @@ class WatchWorkoutSyncWorker(
                 store.update(workout.sessionId) { it.copy(directUploadAttempted = true) }
                 workout = workout.copy(directUploadAttempted = true)
                 val gpx = File(applicationContext.filesDir, "workouts/${workout.gpxFileName}")
-                if (uploader.upload(workout, gpx, auth)) {
+                val fit = workout.fitFileName?.let { File(applicationContext.filesDir, "workouts/$it") }
+                if (uploader.upload(workout, gpx, auth, fit)) {
                     store.remove(workout.sessionId)
                     continue
                 }
@@ -79,6 +80,13 @@ class WatchWorkoutSyncWorker(
                 dataMap.putLong(WorkoutSyncProtocol.KEY_SYNC_ATTEMPT, System.currentTimeMillis())
                 dataMap.putAsset(WorkoutSyncProtocol.ASSET_GPX, Asset.createFromBytes(gpx.readBytes()))
                 dataMap.putAsset(WorkoutSyncProtocol.ASSET_SIDECAR, Asset.createFromBytes(sidecar.readBytes()))
+                workout.fitFileName?.let { name ->
+                    val fit = File(applicationContext.filesDir, "workouts/$name")
+                    if (fit.isFile) {
+                        dataMap.putAsset(WorkoutSyncProtocol.ASSET_FIT, Asset.createFromBytes(fit.readBytes()))
+                        dataMap.putString(WorkoutSyncProtocol.KEY_FIT_FILENAME, name)
+                    }
+                }
             }.asPutDataRequest().setUrgent()
             Wearable.getDataClient(applicationContext).putDataItem(request).await()
             true

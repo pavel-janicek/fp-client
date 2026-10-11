@@ -56,14 +56,15 @@ class PhoneWorkoutSyncWorker(
                 continue
             }
 
-            val gpx = inbox.gpxFile(entry)
-            if (!gpx.isFile) {
-                inbox.update(entry.sessionId) { it.copy(lastError = "Workout GPX is missing", blocked = true) }
+            val fit = inbox.fitFile(entry)
+            val uploadFile = if (fit != null && fit.isFile) fit else inbox.gpxFile(entry)
+            if (!uploadFile.isFile) {
+                inbox.update(entry.sessionId) { it.copy(lastError = "Workout file is missing", blocked = true) }
                 continue
             }
 
             when (val result = container.activityRepository.uploadFile(
-                file = gpx,
+                file = uploadFile,
                 title = entry.title,
                 description = entry.description,
                 visibility = entry.visibility,

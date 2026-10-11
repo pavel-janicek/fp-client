@@ -23,6 +23,7 @@ data class PendingWatchWorkout(
     val ownerServerUrl: String = "",
     val ownerUsername: String = "",
     val createdAtEpochMs: Long,
+    val fitFileName: String? = null,
     val directUploadAttempted: Boolean = false,
     val relayRequested: Boolean = false,
     val lastError: String? = null,
@@ -55,10 +56,12 @@ class WatchWorkoutSyncStore(context: Context) {
         if (existing != null) {
             val gpx = File(appContext.filesDir, "workouts/${existing.gpxFileName}")
             val sidecar = File(appContext.filesDir, "workouts/${existing.sidecarFileName}")
+            val fit = existing.fitFileName?.let { File(appContext.filesDir, "workouts/$it") }
             val archive = File(appContext.filesDir, "workout-sync-archive").apply { mkdirs() }
             if (sidecar.isFile) runCatching { sidecar.copyTo(File(archive, sidecar.name), overwrite = true) }
             gpx.delete()
             sidecar.delete()
+            fit?.delete()
         }
         write(read().filterNot { it.sessionId == sessionId })
     }
@@ -68,8 +71,10 @@ class WatchWorkoutSyncStore(context: Context) {
         for (existing in existingList) {
             val gpx = File(appContext.filesDir, "workouts/${existing.gpxFileName}")
             val sidecar = File(appContext.filesDir, "workouts/${existing.sidecarFileName}")
+            val fit = existing.fitFileName?.let { File(appContext.filesDir, "workouts/$it") }
             gpx.delete()
             sidecar.delete()
+            fit?.delete()
         }
         write(emptyList())
     }

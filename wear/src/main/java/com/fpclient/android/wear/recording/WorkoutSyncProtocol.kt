@@ -18,6 +18,8 @@ internal object WorkoutSyncProtocol {
      * on the watch re-puts the same workout and the phone is never told to look at it again.
      */
     const val KEY_SYNC_ATTEMPT = "sync_attempt"
+    const val KEY_FIT_FILENAME = "fit_filename"
     const val ASSET_GPX = "workout_gpx"
     const val ASSET_SIDECAR = "workout_sidecar"
+    const val ASSET_FIT = "workout_fit"
 }

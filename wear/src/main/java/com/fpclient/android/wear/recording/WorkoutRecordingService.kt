@@ -377,12 +377,16 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Workout export could not be saved. Check watch storage.")
             return false
         }
+        val exportedFit = runCatching {
+            WorkoutFitWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
+        }.getOrNull()
         val auth = WearAuthStore(this).state.first()
         syncStore.upsert(
             PendingWatchWorkout(
                 sessionId = stoppedSession.startedAtEpochMs,
                 gpxFileName = exported.gpxFile.name,
                 sidecarFileName = exported.sidecarFile.name,
+                fitFileName = exportedFit?.name,
                 activityType = stoppedSession.activityType.name,
                 title = title,
                 ownerServerUrl = auth.serverUrl.takeIf { auth.isSignedIn }.orEmpty(),
