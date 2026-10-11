@@ -323,7 +323,7 @@ private fun FitPubNavGraph(
                 onOpenCreate = { navController.navigate(Routes.create()) },
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenSettings = { navController.navigate(Routes.settings()) },
                 onOpenFeedback = { navController.navigate(Routes.FEEDBACK) },
                 onOpenFollowers = { username -> navController.navigate(Routes.followList(username, "followers")) },
                 onOpenFollowing = { username -> navController.navigate(Routes.followList(username, "following")) },
@@ -333,6 +333,9 @@ private fun FitPubNavGraph(
                 onOpenWearInbox = { navController.navigate(Routes.WEAR_WORKOUT_INBOX) },
                 requestedTab = requestedTab,
                 onRequestedTabHandled = onRequestedTabHandled,
+                // Tapping the Activity tab's mailbox-disabled banner lands here: open Settings
+                // scrolled straight to the Push section instead of the plain top-of-screen route.
+                onOpenNotificationSettings = { navController.navigate(Routes.settingsScrollPush()) },
             )
         }
         composable(
@@ -386,7 +389,7 @@ private fun FitPubNavGraph(
                 onBack = { navController.popBackStack() },
                 onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
                 onEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenSettings = { navController.navigate(Routes.settings()) },
                 onOpenFollowers = { u -> navController.navigate(Routes.followList(u, "followers")) },
                 onOpenFollowing = { u -> navController.navigate(Routes.followList(u, "following")) },
                 onOpenPeaks = { u -> navController.navigate(Routes.peaks(u)) },
@@ -415,7 +418,13 @@ private fun FitPubNavGraph(
                 onCancel = { navController.popBackStack() },
             )
         }
-        composable(Routes.SETTINGS) {
+        composable(
+            route = Routes.SETTINGS,
+            arguments = listOf(
+                // Optional deep-link target: `?scroll=push` scrolls the Push section into view.
+                navArgument("scroll") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
+        ) {
             com.fpclient.android.ui.settings.SettingsScreen(
                 container = container,
                 appViewModel = appViewModel,
@@ -429,6 +438,8 @@ private fun FitPubNavGraph(
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
                 onOpenEmailChange = { navController.navigate(Routes.EMAIL_CHANGE) },
                 onOpenWearWorkoutInbox = { navController.navigate(Routes.WEAR_WORKOUT_INBOX) },
+                // Deep-linked from the Activity tab's mailbox-disabled banner: scroll to Push.
+                scrollToPush = it.arguments?.getString("scroll") == "push",
             )
         }
         composable(Routes.WEAR_WORKOUT_INBOX) {

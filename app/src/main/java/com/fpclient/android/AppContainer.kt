@@ -15,6 +15,7 @@ import com.fpclient.android.data.repository.PrivacyZoneRepository
 import com.fpclient.android.data.repository.PushRepository
 import com.fpclient.android.data.repository.TimelineRepository
 import com.fpclient.android.data.repository.UserRepository
+import com.fpclient.android.notifications.MailboxNudgeStore
 import com.fpclient.android.notifications.NotificationPollStore
 import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.recording.RecordingShareManager
@@ -52,6 +53,14 @@ class AppContainer(context: Context) {
      * already offered in Settings. Shared by the periodic worker and the Settings → Push card.
      */
     val notificationPollStore: NotificationPollStore by lazy { NotificationPollStore(context) }
+
+    /**
+     * Remembers the "dismiss forever" choice for the mailbox-push-disabled nudge banner on the
+     * Activity (Notifications) tab. Device-global (not per-account): once the user has actively
+     * dismissed the prompt it should never nag again, and enabling push removes the banner anyway
+     * (it is gated on the subscription being absent). Shared with `MailboxDisabledBanner`.
+     */
+    val mailboxNudgeStore: MailboxNudgeStore by lazy { MailboxNudgeStore(context) }
 
     /**
      * Iteration 8h — the mailbox Web Push subscription (endpoint + app-private keypair +
