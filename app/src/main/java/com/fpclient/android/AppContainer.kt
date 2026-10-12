@@ -1,6 +1,7 @@
 package com.fpclient.android
 
 import android.content.Context
+import com.fpclient.android.data.body.BodyProfileStore
 import com.fpclient.android.data.network.ApiClient
 import com.fpclient.android.data.network.MailboxClient
 import com.fpclient.android.data.repository.ActivityRepository
@@ -106,6 +107,12 @@ class AppContainer(context: Context) {
     }
 
     val wearWorkoutInboxStore: WearWorkoutInboxStore by lazy { WearWorkoutInboxStore(context) }
+
+    /**
+     * Body metrics a user opts in for calorie recording (height/weight/age/sex). Health data, so
+     * it is stored only on this phone (encrypted, excluded from backup) and never uploaded.
+     */
+    val bodyProfileStore: BodyProfileStore by lazy { BodyProfileStore(context) }
 
     /** Phone-side Data Layer relay: watch handshake diagnostics + reply test. */
     internal val phoneWearAuthRelay: PhoneWearAuthRelay = PhoneWearAuthRelay

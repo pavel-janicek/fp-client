@@ -196,6 +196,7 @@ fun SettingsScreen(
                     ) { Text("Record a track") }
                 }
             }
+            CalorieRecordingCard(container.bodyProfileStore)
             val watchPendingCount by container.wearWorkoutInboxStore.pendingCount.collectAsState()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {

@@ -12,4 +12,5 @@
 <full-backup-content>
     <exclude domain="sharedpref" path="fitpub_push_keys.xml" />
     <exclude domain="sharedpref" path="fitpub_secure_session.xml" />
+    <exclude domain="sharedpref" path="fitpub_body_profile.xml" />
 </full-backup-content>
