@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -60,17 +60,18 @@ internal fun CalorieRecordingCard(store: BodyProfileStore) {
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "Opt in to calorie recording",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
+                Checkbox(
                     checked = profile.optIn,
                     onCheckedChange = { checked ->
                         // Switching on seeds from what's already stored; switching off wipes it all.
                         if (checked) store.save(store.current().copy(optIn = true)) else store.clear()
                     },
+                )
+                Text(
+                    "I voluntarily provide my body data solely for on-device calorie calculations.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 8.dp),
                 )
             }
 

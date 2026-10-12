@@ -108,6 +108,7 @@ dependencies {
     // Background notification polling (Iteration 8f) — the only new dependency the whole
     // push feature needs: the periodic worker that checks the instance for new notifications.
     implementation("androidx.work:work-runtime-ktx:2.10.5")
+    implementation("com.garmin:fit:21.218.0")
 
     // Phone↔watch sign-in relay (Iteration 9b).
     implementation("com.google.android.gms:play-services-wearable:19.0.0")

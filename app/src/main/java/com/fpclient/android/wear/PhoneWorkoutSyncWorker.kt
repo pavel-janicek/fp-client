@@ -56,9 +56,23 @@ class PhoneWorkoutSyncWorker(
                 continue
             }
 
+            val bodyProfile = container.bodyProfileStore.current()
             val fit = inbox.fitFile(entry)
-            val uploadFile = if (fit != null && fit.isFile) fit else inbox.gpxFile(entry)
-            if (!uploadFile.isFile) {
+            val gpx = inbox.gpxFile(entry)
+
+            val uploadFile = if (bodyProfile.optIn && bodyProfile.isComplete && fit != null && fit.isFile) {
+                val amendedFit = java.io.File(fit.parentFile, "amended-${fit.name}")
+                val success = com.fpclient.android.data.body.CalorieFitAmender.amendFitFileWithCalories(
+                    inputFitFile = fit,
+                    outputFitFile = amendedFit,
+                    bodyProfile = bodyProfile,
+                )
+                if (success) amendedFit else fit
+            } else {
+                gpx.takeIf { it.isFile } ?: fit
+            }
+
+            if (uploadFile == null || !uploadFile.isFile) {
                 inbox.update(entry.sessionId) { it.copy(lastError = "Workout file is missing", blocked = true) }
                 continue
             }
