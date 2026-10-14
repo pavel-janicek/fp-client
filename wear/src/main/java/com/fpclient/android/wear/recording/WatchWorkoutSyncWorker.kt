@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.fpclient.android.wear.auth.WearAuthStore
+import com.fpclient.android.wear.body.BodyProfileSync
+import com.fpclient.android.wear.body.CalorieFitAmender
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.wearable.Asset
@@ -41,7 +43,13 @@ class WatchWorkoutSyncWorker(
                 store.update(workout.sessionId) { it.copy(directUploadAttempted = true) }
                 workout = workout.copy(directUploadAttempted = true)
                 val gpx = File(applicationContext.filesDir, "workouts/${workout.gpxFileName}")
-                if (uploader.upload(workout, gpx, auth)) {
+                val fit = workout.fitFileName?.let { File(applicationContext.filesDir, "workouts/$it") }
+                // A direct upload never passes through the phone, so the watch has to stamp the
+                // calorie estimate into the FIT itself (from the mirrored body profile).
+                val amended = amendFitForCalories(fit)
+                val uploaded = uploader.upload(workout, gpx, auth, amended ?: fit)
+                amended?.let { stale -> runCatching { stale.delete() } }
+                if (uploaded) {
                     store.remove(workout.sessionId)
                     continue
                 }
@@ -58,6 +66,29 @@ class WatchWorkoutSyncWorker(
             }
         }
         return Result.success()
+    }
+
+    /**
+     * Best-effort calorie amendment before a direct upload: the opt-in body profile is mirrored
+     * from the phone (see `WearBodyProfileSync`), so the watch can stamp the estimated
+     * `totalCalories` into the FIT the same way the phone's relay path does. Returns the amended
+     * file to send, or null to upload the original untouched — the estimate must never block an
+     * upload.
+     */
+    private suspend fun amendFitForCalories(fit: File?): File? {
+        if (fit == null || !fit.isFile) return null
+        val profile = BodyProfileSync.read(applicationContext)
+        if (profile == null || !profile.optIn || !profile.isComplete) {
+            android.util.Log.i(TAG, "No calorie estimate: profile=${profile?.let { "optIn=${it.optIn} complete=${it.isComplete}" } ?: "never received from phone"}")
+            return null
+        }
+        val amended = File(fit.parentFile, "amended-${fit.name}")
+        val success = runCatching {
+            CalorieFitAmender.amendFitFileWithCalories(fit, amended, profile)
+        }.getOrDefault(false)
+        android.util.Log.i(TAG, "Calorie amendment of ${fit.name} success=$success")
+        if (!success) runCatching { amended.delete() }
+        return amended.takeIf { success }
     }
 
     private suspend fun relayToPhone(workout: PendingWatchWorkout): Boolean {
@@ -79,6 +110,13 @@ class WatchWorkoutSyncWorker(
                 dataMap.putLong(WorkoutSyncProtocol.KEY_SYNC_ATTEMPT, System.currentTimeMillis())
                 dataMap.putAsset(WorkoutSyncProtocol.ASSET_GPX, Asset.createFromBytes(gpx.readBytes()))
                 dataMap.putAsset(WorkoutSyncProtocol.ASSET_SIDECAR, Asset.createFromBytes(sidecar.readBytes()))
+                workout.fitFileName?.let { name ->
+                    val fit = File(applicationContext.filesDir, "workouts/$name")
+                    if (fit.isFile) {
+                        dataMap.putAsset(WorkoutSyncProtocol.ASSET_FIT, Asset.createFromBytes(fit.readBytes()))
+                        dataMap.putString(WorkoutSyncProtocol.KEY_FIT_FILENAME, name)
+                    }
+                }
             }.asPutDataRequest().setUrgent()
             Wearable.getDataClient(applicationContext).putDataItem(request).await()
             true
@@ -93,3 +131,5 @@ class WatchWorkoutSyncWorker(
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 }
+
+private const val TAG = "WatchWorkoutSync"

@@ -173,6 +173,51 @@ per minute in ambient mode. The ongoing notification is paired with `OngoingActi
 a static watch-face icon, tappable return intent, and elapsed status in the watch-face and Recents
 surfaces. Tiles and complications remain optional follow-up work.
 
+## Calorie estimate for recorded workouts
+
+The opt-in body profile (Settings → "Calorie recording") lives encrypted on the phone
+(`BodyProfileStore`), but a watch that uploads **directly** never passes through the phone, so it
+would otherwise skip the estimate entirely — the FIT written by `WorkoutFitWriter` carries no
+`totalCalories`, and the server's `FitParser` only reports what the file contains. Two mirrored
+paths close the gap, both using the same `CalorieCalculator` (Keytel HR formula with a MET
+fallback) and both stamping `SESSION`/`LAP` `totalCalories` via `CalorieFitAmender`:
+
+- **Phone relay** — `PhoneWorkoutSyncWorker` amends the relayed FIT from the phone's own copy of
+  the profile before uploading (pre-existing).
+- **Direct watch upload** — the phone sends the profile to the watch as a Wear **message** at
+  `/fitpub/body-profile` (`WearBodyProfileSync`): in reply to every watch auth request (sent each
+  time the watch app opens), on every save, and on phone app start. An opt-out sends an empty
+  profile, wiping the watch copy. The watch persists it (`BodyProfileSync`, DataStore
+  `fitpub_wear_body_profile`); `WatchWorkoutSyncWorker` reads it just before
+  `WatchActivityUploader.upload` and amends a temporary `amended-<name>.fit`, falling back to the
+  original file whenever the profile is missing/incomplete or anything fails — an estimate must
+  never block an upload (logcat tag `WatchWorkoutSync` says which).
+  *History:* the first cut mirrored the profile as a DataItem; on a real phone + Xiaomi Watch 2
+  pair it never reached the watch (the watch's Data Layer held no phone-written item), so direct
+  uploads silently went out without calories. Messages are the transport the auth handshake
+  already proves.
+
+The profile stays on the user's own paired devices; it is never sent to the server. Per decision
+1 below, `:wear` mirrors `BodyProfile`, `Sex`, `CalorieCalculator` and `CalorieFitAmender` from
+`:app` instead of sharing a module — the formulas must stay byte-identical, so both sides are
+pinned by unit tests (`CalorieCalculatorTest`/`CalorieFitAmenderTest` exist in each module), and
+the message wire strings are pinned by `PhoneBodyProfileProtocolTest` (`:app`) and
+`BodyProfileProtocolTest` (`:wear`).
+
+## Upload format and steps
+
+Both upload paths send the **FIT** whenever the watch produced one — the watch's direct upload and
+the phone relay alike, with or without the calorie opt-in; the GPX is only the fallback for a
+workout without a FIT. The FIT is the only format whose step total FitPub ingests: `FitParser`
+reads `session.totalStrides` and stores `totalSteps = strides * 2` (its GPX parser ignores
+steps), so `WorkoutFitWriter` stamps strides (steps / 2, rounded) on the session and lap.
+
+Live steps come from both `TYPE_STEP_COUNTER` and `TYPE_STEP_DETECTOR`: the Xiaomi Watch 2's
+counter reports very sparsely (one event across three test workouts), so the per-step detector
+keeps the readout moving while the counter fills in detector drops; the recorded total is the
+larger of the two, never their sum. Each sensor registration (start, resume) re-baselines the
+counter so steps walked while paused are not credited.
+
 ## Decisions
 
 ### 1. Shared code with `:app`: **duplicated DTOs — no `:core-shared` module (yet)**
@@ -270,10 +315,9 @@ repo-specific choices:
 - **applicationId `com.fpclient.android` on both APKs** — Data Layer requires exact package and
  signing-certificate equality. The APKs install on separate devices; `wear_app.xml` points at
  this shared package identity.
-- **Same `versionCode`/`versionName` and same signing keystore** as `:app` (both modules read the
-  identical `KEYSTORE_*` environment variables; release builds are unsigned when unset, which the
-  F-Droid buildserver relies on). The version-bump step in `VERSION_CHECKLIST.md` now covers
-  both files.
+- **Unique `versionCode`, matching `versionName`, and same signing keystore** as `:app` (both modules read the
+  identical `KEYSTORE_*` environment variables; release builds are unsigned when unset).
+  The version-bump step in `VERSION_CHECKLIST.md` covers both files.
 - **Sensor permissions are runtime-gated** in the Workout screen. Optional GPS, heart-rate and
   step-counter hardware declarations let sensor-poor watches install and run gracefully; 9e adds
   `INTERNET` for direct upload.

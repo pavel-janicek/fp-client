@@ -12,15 +12,13 @@ android {
         applicationId = "com.fpclient.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 52
-        versionName = "3.0.0"
+        versionCode = 53
+        versionName = "3.1.0"
     }
 
     signingConfigs {
         // Only wired up when keystore credentials are provided via the
-        // environment (local release signing). F-Droid builds unsigned
-        // releases from source and re-signs with their own key, so the
-        // config must simply be absent — never fail — when unset.
+        // environment (local release signing); unsigned when unset.
         if (System.getenv("KEYSTORE_PATH") != null) {
             create("release") {
                 storeFile = file(System.getenv("KEYSTORE_PATH")!!)
@@ -108,6 +106,7 @@ dependencies {
     // Background notification polling (Iteration 8f) — the only new dependency the whole
     // push feature needs: the periodic worker that checks the instance for new notifications.
     implementation("androidx.work:work-runtime-ktx:2.10.5")
+    implementation("com.garmin:fit:21.218.0")
 
     // Phone↔watch sign-in relay (Iteration 9b).
     implementation("com.google.android.gms:play-services-wearable:19.0.0")

@@ -23,23 +23,28 @@ class WatchActivityUploader(
 ) {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
-    suspend fun upload(workout: PendingWatchWorkout, gpxFile: File, auth: WearAuthState): Boolean =
-        withContext(Dispatchers.IO) {
-            if (!auth.isSignedIn || auth.serverUrl.isBlank() || !gpxFile.isFile) return@withContext false
-            val base = auth.serverUrl.trimEnd('/').toHttpUrlOrNull() ?: return@withContext false
-            val uploadUrl = base.newBuilder().addPathSegments("api/web/activities/upload").build()
-            val response = executeWithCsrf(base) { csrf ->
-                val mediaType = "application/gpx+xml".toMediaTypeOrNull()
-                val multipart = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart("file", gpxFile.name, gpxFile.asRequestBody(mediaType))
-                    .addFormDataPart("title", workout.title)
-                    .addFormDataPart("visibility", workout.visibility.ifBlank { WatchWorkoutSyncStore.DEFAULT_VISIBILITY })
-                    .build()
-                signedRequest(uploadUrl, auth.token, csrf)
-                    .post(multipart)
-                    .build()
-            } ?: return@withContext false
+    suspend fun upload(
+        workout: PendingWatchWorkout,
+        gpxFile: File,
+        auth: WearAuthState,
+        fitFile: File? = null,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val primaryFile = fitFile?.takeIf { it.isFile } ?: gpxFile
+        if (!auth.isSignedIn || auth.serverUrl.isBlank() || !primaryFile.isFile) return@withContext false
+        val base = auth.serverUrl.trimEnd('/').toHttpUrlOrNull() ?: return@withContext false
+        val uploadUrl = base.newBuilder().addPathSegments("api/web/activities/upload").build()
+        val mediaType = if (primaryFile == fitFile) "application/octet-stream".toMediaTypeOrNull() else "application/gpx+xml".toMediaTypeOrNull()
+        val response = executeWithCsrf(base) { csrf ->
+            val multipart = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("file", primaryFile.name, primaryFile.asRequestBody(mediaType))
+                .addFormDataPart("title", workout.title)
+                .addFormDataPart("visibility", workout.visibility.ifBlank { WatchWorkoutSyncStore.DEFAULT_VISIBILITY })
+                .build()
+            signedRequest(uploadUrl, auth.token, csrf)
+                .post(multipart)
+                .build()
+        } ?: return@withContext false
 
             val uploaded = response.use { result ->
                 if (!result.isSuccessful) return@withContext false

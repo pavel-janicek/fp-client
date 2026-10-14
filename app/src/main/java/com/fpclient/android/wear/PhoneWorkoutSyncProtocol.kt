@@ -14,6 +14,8 @@ internal object PhoneWorkoutSyncProtocol {
 
     /** Mirrors the watch's re-relay freshness stamp; ignored when reading the DataMap. */
     const val KEY_SYNC_ATTEMPT = "sync_attempt"
+    const val KEY_FIT_FILENAME = "fit_filename"
     const val ASSET_GPX = "workout_gpx"
     const val ASSET_SIDECAR = "workout_sidecar"
+    const val ASSET_FIT = "workout_fit"
 }

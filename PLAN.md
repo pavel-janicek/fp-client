@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: 3.0.0 re-cut (versionCode 48/49 — Play had already consumed 46/47)
-Current app version: **`3.0.0`** (`versionCode` 48 / `:wear` 49)
+Assessment date: 2026-08-25 · Last updated: 3.1.0 (versionCode 53 / `:wear` 54)
+Current app version: **`3.1.0`** (`versionCode` 53 / `:wear` 54)
 
 ## Current state
 
@@ -130,6 +130,7 @@ Progress ledger (kept up to date per iteration):
 | **3.0.0-beta** | **Wear UX + connection beta (Iteration 9)** — versionCode 44 / versionName `3.0.0-beta`; `FP-Client/3.0.0-beta` (+ `FP-Client-Wear/3.0.0-beta`) User-Agent. Watch main screen redesigned: compact "FP Wear" title, dedicated Workout and Settings buttons in a scrollable `ScalingLazyColumn` so they stay reachable on small round displays, sign-in reduced to one tappable status line (version moved off Home). New watch Settings screen (replaces About) carries the version and a "Grant sensor access" button for the GPS/HR/step runtime permissions. Watch workout flow gains a dedicated activity picker (`ActivitySelectionScreen` + `WorkoutActivityUsageStore`) with a reworked `WorkoutControlScreen`. Phone ↔ watch sign-in handshake fixed and instrumented: `PhoneHandshakeDiagnostics` persists the last request/reply, surfaced under Settings → Handshake diagnostics with a manual reply test. PLAN (recorded 2026-10-26): on watch Stop, keep ✓ + beep + vibration, then after a short delay that lets them land, pop the workout window back to Home — firing only on the RECORDING/PAUSED → STOPPED transition so a persisted STOPPED state cannot bounce-loop on re-entry; watch auto-share default visibility follows the phone app's upload default (Public), replacing the hardcoded Private in stop queueing, pending entries, uploader and update-path fallbacks — not the unused server `defaultActivityPrivacyPreferences` blob (no in-repo consumption contract). | ✅ done |
 | **3.0.0-rc1** | **Release candidate 1 for 3.0.0** — versionCode 45 / versionName `3.0.0-rc1`; `FP-Client/3.0.0-rc1` (+ `FP-Client-Wear/3.0.0-rc1`) User-Agent. Release candidate 1 of the 3.0.0 line following 3.0.0-alpha and 3.0.0-beta. | ✅ done |
 | **3.0.0** | **Final 3.0.0 release of the Wear OS companion (Iteration 9)** — versionCode 46 / versionName `3.0.0` (`:wear` versionCode 47, globally unique per Google Play); `FP-Client/3.0.0` (+ `FP-Client-Wear/3.0.0`) User-Agent. Final release of the paired phone + watch cut following 3.0.0-alpha / -beta / -rc1: on-watch workout recording (GPS / heart rate / steps) with phone-relayed sign-in and sync & share to the FitPub instance. Ships the heart-rate display fixes from rc1 hardening — a live, colour-zoned BPM readout that now works for **every** workout type (Run, Walk, Hike, Bike, Other) instead of Run only, driven by a Health Services exercise chosen to always be heart-rate-capable, plus clearer "NO CONTACT" / "NO SIGNAL" status and on-watch pause/resume. | ✅ done |
+| **3.1.0** | **Calories, steps and heart-rate reliability for watch workouts (Iteration 9h–9j)** — versionCode 53 / versionName `3.1.0` (`:wear` versionCode 54 / `3.1.0`); `FP-Client/3.1.0` (+ `FP-Client-Wear/3.1.0`) User-Agent. Codes chosen above every versionCode either module ever used: after 3.0.0's 46/47 and the 48/49 re-cut, further 3.0.0 re-uploads moved `:wear` to 50 → 51 and `:app` to 52, so 53/54 restore the "watch = phone + 1" convention. **9h** opt-in calorie estimate stamped into the FIT `totalCalories` on both upload paths, with the body profile sent to the watch as a Wear message (the DataItem mirror never arrived). **9i** live BPM no longer needs an app switch: the HR watchdog stops interrupting the ~10 s PPG warm-up (30 s stall window, any callback counts as alive), a stale ambient flag no longer throttles the readout, one PPG listener instead of two duplicates — still `BODY_SENSORS` only, no `HEART_RATE`. **9j** live steps from step counter + detector (larger of the two), FIT `totalStrides` so FitPub ingests `totalSteps`, the phone relay always uploads the FIT, and a Steps row on the phone's activity detail (a deliberate deviation from web parity). No server change. | ✅ done |
 | **4.0** | + Iteration 7 (moved from 2.0 by release decision 2026-09-20 — translations ship as the very last thing) — community-driven translations: full string externalization + per-app language selection (7a), Weblate project & sync (7b), CI guardrails (7c), store-listing translations (7d). See the Iteration 7 section below for the full sub-step plan. | ⬜ |
 
 ## Roadmap — one prompt per iteration
@@ -825,6 +826,19 @@ Notes:
 
 
 **9h Calories on recorded workouts (deferred → 3.1)**
+> **Status 2026-10-14 — client half delivered on `Release-3.x`.** The phone mirrors the opt-in
+> `BodyProfile` to the watch (`WearBodyProfileSync` → Wear message `/fitpub/body-profile`, sent on
+> every watch auth request, save and phone app start — the earlier DataItem mirror never reached a
+> real watch), and both
+> upload paths now stamp `totalCalories` into the FIT before sending: the phone relay
+> (`PhoneWorkoutSyncWorker` + `CalorieFitAmender`) and — new — the watch's **direct** upload
+> (`WatchWorkoutSyncWorker` amends with mirrored-profile copies in `wear/…/body/`), which was the
+> path that silently skipped calories (reported: makni.cz activity ff786513, a direct-uploaded
+> "Walk workout" with HR but no calories). Remaining gaps are server-side only: `GpxParser`
+> (phone-recorded GPX uploads), `ManualActivityData` (manual entries), and no calories field on
+> `PUT activities/{id}` for backfilling existing activities. See docs/WEAR.md → "Calorie estimate
+> for recorded workouts".
+>
 > Watch workouts record distance/duration/HR but report **no calories** on FitPub. The phone app
 > already has a `calories` field and renders it (`Format.calories`, `ActivityDetailBody`), so the gap
 > is purely that nothing produces the number for a watch GPX upload. Parking for 3.1 — 3.0 ships
@@ -866,3 +880,57 @@ Notes:
 > > a parser round-trip). Confirm whether a server redeploy is in scope before assuming the live site
 > > will reflect the change.
 
+
+**9i Heart-rate readout reliability (`BODY_SENSORS` only)**
+> **Status 2026-10-14 — delivered on `Release-3.x`.** Reported: live BPM sometimes appeared on the
+> first try, sometimes only after switching apps on the watch. **Constraint (Google Play review):**
+> no `HEART_RATE` / Health Services permission — the watch must stay on the plain platform
+> `TYPE_HEART_RATE` sensor under `BODY_SENSORS` (see 1d5e2ca). Diagnosed on a Xiaomi Watch 2 from
+> `dumpsys sensorservice` registration history vs the recorded tracks:
+>
+> - **Watchdog fought the PPG warm-up.** The `goodix_heartrate` PPG delivers its first reading ~10 s
+>   after registration; the watchdog re-armed (unregister + register) any listener without a BPM
+>   after exactly 10 s, and every re-arm restarted the warm-up — so BPM only appeared once the three
+>   attempts ran out (~40 s), which is about what an app switch takes. Workout 20:21 shows the re-arm
+>   at +10 s and no BPM; 20:26 got its first BPM at +10.1 s, just past the edge. Fix: the pure
+>   `WorkoutHeartRateWatchdog` policy (unit-tested, the service delegates to it) re-arms only after
+>   **30 s with no HR callback of any kind** — 0 / no-contact readings prove the listener alive — and
+>   now also recovers mid-workout stalls (it used to give up after the first reading); a real BPM
+>   resets the attempt budget.
+> - **Stale ambient flag throttled the readout.** In ambient the service publishes once a minute,
+>   while the workout screen ticks its timer locally — so a stuck ambient flag looked like a running
+>   clock over a "--" BPM; returning to the app re-sent "not ambient", the other half of "switching
+>   apps fixes it". Fix: `ambientMode` resets on `ACTION_START`, and `WorkoutControlScreen` re-sends
+>   the ambient state when recording begins (`LaunchedEffect(isAmbient, recording)`).
+> - **Duplicate HR samples.** Both the wake-up and non-wake-up variants of the same PPG were
+>   registered, recording every reading twice. Now one listener on the wake-up variant (falls back
+>   to the default), which keeps delivering with the screen off.
+>
+> Verify on-device: BPM within ~10 s of Start on every attempt, no app switch; if not, capture
+> `adb logcat -s FitPubWearHR`.
+
+**9j Steps on recorded workouts**
+> **Status 2026-10-14 — delivered on `Release-3.x`.** Reported: during a Walk workout the step count
+> never moved on the watch, and FitPub received no step total.
+>
+> - **Live count.** The service used only `TYPE_STEP_COUNTER` when present, and the Xiaomi Watch 2's
+>   `pedometer_wrist` counter reports very sparsely (one event across three test workouts). Now both
+>   the counter and `TYPE_STEP_DETECTOR` are registered: the detector keeps the readout live, the
+>   counter fills in detector drops (screen off); the two are tracked separately and the total is
+>   the **larger** of them, never their sum. Each registration (start, resume) re-baselines the
+>   counter, which also fixes steps walked while **paused** being credited after resume.
+> - **Upload.** FitPub ingests steps only from FIT (`FitParser`: `totalSteps = session.totalStrides
+>   * 2`; `GpxParser` ignores steps). `WorkoutFitWriter` now stamps `totalStrides` (steps / 2,
+>   rounded up) on the session and lap — so FitPub shows an odd total one higher. Decision
+>   (2026-10-14): **always upload the FIT when one exists** — the phone relay
+>   (`PhoneWorkoutSyncWorker`) no longer falls back to GPX when the calorie opt-in is off; GPX is only
+>   the fallback for a workout without a FIT. The watch's direct upload already sent FIT.
+> - **Phone display.** `ActivityDetailBody` shows a "Steps" row (`Format.steps`, locale digit
+>   grouping) only when `metrics.totalSteps` is present. **Deliberate deviation from 1.x web parity**
+>   — the FitPub web UI stores and returns `totalSteps` but never displays it; added at the
+>   maintainer's request.
+> - No server change: `totalSteps` was already stored and returned by `ActivityMetricsDTO`.
+>   Activities uploaded before this change carry no steps and show no row.
+>
+> See docs/WEAR.md → "Upload format and steps". Verify with a few minutes of real walking: the watch
+> count rises live, and the uploaded activity's `metrics.totalSteps` is roughly that count.

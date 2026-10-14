@@ -26,16 +26,6 @@ import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import androidx.health.services.client.ExerciseClient
-import androidx.health.services.client.ExerciseUpdateCallback
-import androidx.health.services.client.HealthServices
-import androidx.health.services.client.data.DataType
-import androidx.health.services.client.data.DataTypeAvailability
-import androidx.health.services.client.data.ExerciseCapabilities
-import androidx.health.services.client.data.ExerciseConfig
-import androidx.health.services.client.data.ExerciseState
-import androidx.health.services.client.data.ExerciseType
-import androidx.health.services.client.data.ExerciseUpdate
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import com.fpclient.android.wear.auth.WearAuthStore
@@ -50,72 +40,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.flow.first
 
-private fun WorkoutActivityType.toHealthExerciseType(): ExerciseType = when (this) {
-    WorkoutActivityType.RUN -> ExerciseType.RUNNING
-    WorkoutActivityType.WALK -> ExerciseType.WALKING
-    WorkoutActivityType.HIKE -> ExerciseType.HIKING
-    WorkoutActivityType.BIKE -> ExerciseType.BIKING
-    WorkoutActivityType.OTHER -> ExerciseType.WORKOUT
-}
-
-/**
- * Picks the Health Services [ExerciseType] used to *drive the PPG* so heart rate streams for every
- * workout type, not just Run.
- *
- * Run works today because RUNNING is universally supported and always exposes HEART_RATE_BPM, so
- * [startHealthServices] starts an exercise that keeps the platform `TYPE_HEART_RATE` listener fed.
- * Other types can be missing HEART_RATE_BPM on some watches, which used to drop straight to the
- * bare platform sensor — the exact "--" readout users saw on Walk.
- *
- * The decision itself lives in [pickHeartRateCapableExerciseType] so it can be unit-tested without
- * constructing a real (ProtoParcelable) [ExerciseCapabilities].
- */
-private fun pickHeartRateExerciseType(
-    capabilities: ExerciseCapabilities,
-    preferred: ExerciseType,
-): ExerciseType? = pickHeartRateCapableExerciseType(
-    supportedTypes = capabilities.supportedExerciseTypes,
-    isHeartRateCapable = { type ->
-        // Guarded by `type in supportedTypes` inside the decision, mirroring the original code,
-        // which only ever queried capabilities for types it had confirmed are supported.
-        DataType.HEART_RATE_BPM in capabilities.getExerciseTypeCapabilities(type).supportedDataTypes
-    },
-    preferred = preferred,
-)
-
-/**
- * Pure policy behind [pickHeartRateExerciseType]:
- *  1. Keep the user's selected [preferred] type whenever it can actually stream HEART_RATE_BPM.
- *  2. Otherwise fall back to the closest HR-capable type in a fixed, sensible order, purely to keep
- *     the sensor alive. This only chooses what Health Services exercise runs; the activity saved and
- *     exported remains the user's real `WorkoutActivityType` (read from the session, not from here).
- *  3. Return null only when the watch exposes HEART_RATE_BPM for no exercise type at all, so the
- *     caller can fall back to the platform sensor as a last resort.
- */
-internal fun pickHeartRateCapableExerciseType(
-    supportedTypes: Set<ExerciseType>,
-    isHeartRateCapable: (ExerciseType) -> Boolean,
-    preferred: ExerciseType,
-): ExerciseType? {
-    fun supportsHeartRate(type: ExerciseType): Boolean =
-        type in supportedTypes && isHeartRateCapable(type)
-
-    if (supportsHeartRate(preferred)) return preferred
-
-    // Closest sensible fallbacks, tried in order. RUNNING first (the type known to work everywhere),
-    // then the other supported workout types, then the generic WORKOUT.
-    val fallbackOrder = listOf(
-        ExerciseType.RUNNING,
-        ExerciseType.WALKING,
-        ExerciseType.HIKING,
-        ExerciseType.BIKING,
-        ExerciseType.WORKOUT,
-    )
-    return fallbackOrder.firstOrNull { supportsHeartRate(it) }
-        // Last resort: any supported type that happens to expose HEART_RATE_BPM.
-        ?: supportedTypes.firstOrNull { supportsHeartRate(it) }
-}
-
 class WorkoutRecordingService : Service(), SensorEventListener {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var sessionStore: WorkoutSessionStore
@@ -126,7 +50,17 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private lateinit var locationManager: LocationManager
     private var session: WorkoutSessionSnapshot? = null
     private var availability = WorkoutSensorAvailability()
-    private var stepSensor: Sensor? = null
+    private var stepSensors: List<Sensor> = emptyList()
+
+    /**
+     * Step total as derived from TYPE_STEP_COUNTER deltas alone. Kept apart from the
+     * detector's per-step increments so the two sources never add up to a double count — the
+     * recorded total is always the larger of the two.
+     */
+    private var counterSteps = 0
+
+    /** Last raw TYPE_STEP_COUNTER value; null until the first callback of each registration. */
+    private var lastRawStepCounter: Float? = null
     private var heartRateSensor: Sensor? = null
 
     /** Monotonic timestamp of the last PPG (re-)registration, used by the HR watchdog. */
@@ -134,6 +68,13 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     /** True once any heart-rate value has actually reached [publishHeartRate] during this workout. */
     private var heartRateEverReceived = false
+
+    /**
+     * Monotonic timestamp of the last heart-rate callback of *any* kind — including the 0 /
+     * no-contact readings the PPG emits while it warms up or is off the wrist. Any callback proves
+     * the listener is alive, so the watchdog must leave it alone.
+     */
+    private var heartRateLastEventAtMs = 0L
 
     /**
      * True when the PPG last reported no skin contact. Kept so the UI can explain a "--" readout
@@ -145,22 +86,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     /** How many times the HR watchdog has re-armed this workout; caps the recovery loop. */
     private var heartRateRecoveryAttempts = 0
 
-    /**
-     * True while *we* are tearing the Health Services exercise down on purpose (the HR watchdog).
-     * Without this, the ENDING/ENDED updates that [releaseHealthServicesForPlatformSensor] triggers
-     * look identical to the user ending the exercise, and `onExerciseUpdateReceived`'s
-     * `state.isEnded` branch would call [stopSession] — killing a live workout a few seconds in.
-     */
-    private var healthServicesReleasingForHeartRate = false
     private var locationActive = false
     private var sensorsActive = false
-    private var healthExerciseActive = false
-    private var healthExercisePaused = false
-    private var healthServicesAvailable = false
-    private var healthHeartRateAvailable = false
-    private var healthExerciseClient: ExerciseClient? = null
     private var errorMessage: String? = null
-    private var healthCallback: ExerciseUpdateCallback? = null
     private var ticker: Job? = null
     private var ambientMode = false
 
@@ -188,6 +116,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             WorkoutRecordingController.ACTION_START -> {
+                // Start is always a tap on an interactive screen; never inherit a stale ambient
+                // flag, which would throttle the live readout (BPM included) to once a minute.
+                ambientMode = false
                 if (session == null || session?.status == WorkoutStatus.STOPPED) {
                     beginSession(intent.getStringExtra(WorkoutRecordingController.EXTRA_ACTIVITY_TYPE))
                 }
@@ -225,6 +156,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             Sensor.TYPE_HEART_RATE -> {
                 val v = event.values.firstOrNull()?.toInt()
                 Log.i(TAG, "onSensorChanged TYPE_HEART_RATE raw=$v accuracy=${event.accuracy}")
+                heartRateLastEventAtMs = SystemClock.elapsedRealtime()
                 // accuracy == SENSOR_STATUS_NO_CONTACT (2) or UNRELIABLE (0) with a 0 value is the
                 // watch being off the wrist — the PPG has nothing to measure. A 0 is not a valid BPM
                 // and publishHeartRate() discards it, so track the reason here for the UI.
@@ -252,7 +184,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         heartRateEverReceived = false
         heartRateRecoveryAttempts = 0
         heartRateSensorArmedAtMs = 0L
-        healthServicesReleasingForHeartRate = false
+        heartRateLastEventAtMs = 0L
         heartRateNoContact = false
         val fresh = WorkoutSessionTransitions.start(
             now,
@@ -281,7 +213,6 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         }
         metrics.clearSegment()
         stopSensors()
-        pauseHealthExercise()
         ticker?.cancel()
         publish()
         refreshNotification()
@@ -316,20 +247,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         }
         stopSensors()
         ticker?.cancel()
-        val client = healthExerciseClient
-        val callback = healthCallback
-        val shouldEndExercise = healthExerciseActive
-        healthExerciseActive = false
-        healthExercisePaused = false
-        healthServicesAvailable = false
-        healthHeartRateAvailable = false
-        healthCallback = null
         serviceScope.launch {
             if (queueStoppedWorkout(stoppedSession, stoppedAt)) playCompletionFeedback()
-            if (shouldEndExercise && client != null) {
-                runCatching { client.endExerciseAsync().await() }
-                if (callback != null) runCatching { client.clearUpdateCallbackAsync(callback).await() }
-            }
             publish()
             ServiceCompat.stopForeground(this@WorkoutRecordingService, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -377,12 +296,16 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Workout export could not be saved. Check watch storage.")
             return false
         }
+        val exportedFit = runCatching {
+            WorkoutFitWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
+        }.getOrNull()
         val auth = WearAuthStore(this).state.first()
         syncStore.upsert(
             PendingWatchWorkout(
                 sessionId = stoppedSession.startedAtEpochMs,
                 gpxFileName = exported.gpxFile.name,
                 sidecarFileName = exported.sidecarFile.name,
+                fitFileName = exportedFit?.name,
                 activityType = stoppedSession.activityType.name,
                 title = title,
                 ownerServerUrl = auth.serverUrl.takeIf { auth.isSignedIn }.orEmpty(),
@@ -402,7 +325,6 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         reportHeartRateBlockerIfNeeded()
         startLocation()
         startPlatformSensors()
-        serviceScope.launch { startHealthServices() }
     }
 
     private fun enterForeground(): Boolean {
@@ -496,13 +418,25 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun startPlatformSensors() {
         if (sensorsActive) return
         val activityAllowed = Build.VERSION.SDK_INT < 29 || hasPermission(Manifest.permission.ACTIVITY_RECOGNITION)
-        stepSensor = if (activityAllowed) {
-            sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-                ?: sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
-        } else null
-
-        stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
-        sensorsActive = stepSensor != null
+        // Both step sources, when present. The counter is the authoritative cumulative total but
+        // some watches report it rarely — the Xiaomi Watch 2's `pedometer_wrist` delivered a single
+        // event across three test workouts — so on its own the live readout sat at 0. The detector
+        // fires per step and keeps the readout live; the counter fills in steps the detector
+        // dropped (e.g. while the SoC slept with the screen off).
+        stepSensors = if (activityAllowed) {
+            listOfNotNull(
+                sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER),
+                sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR),
+            )
+        } else emptyList()
+        // A fresh registration re-baselines the counter: steps walked while paused (sensors off)
+        // must not be credited on the first callback after resume.
+        lastRawStepCounter = null
+        stepSensors.forEach { sensor ->
+            val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            Log.i(TAG, "startPlatformSensors: registerListener ok=$ok sensor=${sensor.name} type=${sensor.type}")
+        }
+        sensorsActive = stepSensors.isNotEmpty()
         // Also register the platform heart-rate sensor so HR keeps recording if Health Services
         // reports available but never delivers an update (it is torn down only once Health
         // Services actually provides a value).
@@ -525,16 +459,18 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             Log.w(TAG, "ensureHeartRateSensor: no HR permission, skipping")
             return
         }
-        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
+        // One listener on one sensor. Registering every TYPE_HEART_RATE variant (wake-up and
+        // non-wake-up are the same PPG) recorded each reading twice. Prefer the wake-up variant:
+        // it keeps delivering while the screen is off and the SoC would otherwise sleep.
+        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE, true)
+            ?: sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
         if (sensor == null) {
             Log.w(TAG, "ensureHeartRateSensor: no TYPE_HEART_RATE sensor present")
             return
         }
-        // Unregister before re-registering: registering the same listener/sensor pair again is a
-        // no-op on the framework side, so without this the "re-arm" would not take effect.
-        sensorManager.unregisterListener(this, sensor)
-        val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
-        Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name}")
+        for (s in sensorManager.getSensorList(Sensor.TYPE_HEART_RATE)) sensorManager.unregisterListener(this, s)
+        val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+        Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name} isWakeUp=${sensor.isWakeUpSensor}")
         heartRateSensor = sensor
         sensorsActive = true
         heartRateSensorArmedAtMs = SystemClock.elapsedRealtime()
@@ -551,17 +487,21 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         sensorManager.unregisterListener(this)
         sensorsActive = false
         heartRateSensor = null
-        stepSensor = null
+        stepSensors = emptyList()
     }
 
     private fun onStepCounter(rawValue: Float?) {
         val raw = rawValue?.takeIf { it >= 0f } ?: return
-        val previous = metrics.rawStepCounter
-        val newTotal = when {
-            previous == null -> metrics.steps
-            raw >= previous -> metrics.steps + (raw - previous).toInt()
-            else -> metrics.steps
+        val previous = lastRawStepCounter
+        lastRawStepCounter = raw
+        when {
+            // First callback of this registration: a baseline, aligned to whatever the detector
+            // has counted so far.
+            previous == null -> counterSteps = metrics.steps
+            raw > previous -> counterSteps += (raw - previous).toInt()
+            // raw < previous: the counter was reset (reboot / HAL restart); re-baseline silently.
         }
+        val newTotal = maxOf(metrics.steps, counterSteps)
         val current = session ?: return
         appendEvent(
             current,
@@ -585,170 +525,18 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val bpm = value?.takeIf { it in MIN_HEART_RATE_BPM..MAX_HEART_RATE_BPM } ?: return
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
         heartRateEverReceived = true
+        // A real reading means the listener works; let a later stall get the full re-arm budget.
+        heartRateRecoveryAttempts = 0
         // First live reading clears the heart-rate blocker notice, so it does not linger over a
         // readout that is now working.
         if (errorMessage == HEART_RATE_PERMISSION_HINT) errorMessage = null
         appendEvent(current, WorkoutTrackEvent(timeEpochMs = System.currentTimeMillis(), heartRateBpm = bpm))
     }
 
-    /**
-     * A workout can start on location alone, so a missing body-sensors permission would otherwise be
-     * invisible: the session records fine and only the BPM readout stays "--". Report it once, with
-     * an actionable message, instead of leaving the user to guess.
-     */
     private fun reportHeartRateBlockerIfNeeded() {
         if (hasHeartRatePermission()) return
         if (errorMessage != null) return
         errorMessage = HEART_RATE_PERMISSION_HINT
-    }
-
-    private suspend fun startHealthServices() {
-        if (session?.status != WorkoutStatus.RECORDING) return
-        if (!hasHeartRatePermission()) {
-            healthServicesAvailable = false
-            healthHeartRateAvailable = false
-            ensureHeartRateSensor()
-            refreshAvailability()
-            return
-        }
-        val client = runCatching { HealthServices.getClient(this).exerciseClient }.getOrNull() ?: run {
-            healthServicesAvailable = false
-            healthHeartRateAvailable = false
-            ensureHeartRateSensor()
-            refreshAvailability()
-            return
-        }
-        healthExerciseClient = client
-        if (healthExerciseActive) {
-            if (healthExercisePaused) {
-                runCatching { client.resumeExerciseAsync().await() }
-                    .onSuccess { healthExercisePaused = false }
-                    .onFailure {
-                        healthExerciseActive = false
-                        healthHeartRateAvailable = false
-                        ensureHeartRateSensor()
-                    }
-            }
-            return
-        }
-        try {
-            val capabilities = client.getCapabilitiesAsync().await()
-            val preferredType = session?.activityType?.toHealthExerciseType() ?: ExerciseType.WORKOUT
-            // Drive the PPG through a Health Services exercise for EVERY workout type, exactly the
-            // way Run already does. The selected type is kept when it can stream heart rate; when a
-            // watch does not offer HEART_RATE_BPM for that specific type (or the type itself is
-            // unsupported), fall back to the closest HR-capable type purely to *drive the sensor*.
-            // The saved/exported activity stays the user's real selection — it is read from
-            // session.activityType (a WorkoutActivityType), never from this Health Services type.
-            val exerciseType = pickHeartRateExerciseType(capabilities, preferredType)
-            if (exerciseType == null) {
-                Log.w(TAG, "HS: no exercise type supports HEART_RATE_BPM — falling back to platform sensor")
-                healthServicesAvailable = false
-                healthHeartRateAvailable = false
-                ensureHeartRateSensor()
-                refreshAvailability()
-                return
-            }
-            Log.i(TAG, "HS capabilities ok: preferred=$preferredType using=$exerciseType supportsHR=true")
-
-            val callback = object : ExerciseUpdateCallback {
-                override fun onRegistered() {
-                    Log.i(TAG, "HS onRegistered")
-                }
-
-                override fun onRegistrationFailed(throwable: Throwable) {
-                    Log.w(TAG, "HS onRegistrationFailed: ${throwable.message}")
-                    healthExerciseActive = false
-                    healthServicesAvailable = false
-                    healthHeartRateAvailable = false
-                    ensureHeartRateSensor()
-                    refreshAvailability()
-                }
-
-                override fun onExerciseUpdateReceived(update: ExerciseUpdate) {
-                    val latestHeartRate = update.latestMetrics
-                        .getData(DataType.HEART_RATE_BPM)
-                        .lastOrNull()
-                        ?.value
-                        ?.toInt()
-                    Log.i(TAG, "HS onExerciseUpdateReceived hr=$latestHeartRate state=${update.exerciseStateInfo.state}")
-                    if (latestHeartRate != null) publishHeartRate(latestHeartRate)
-                    // Only treat an ENDING/ENDED update as "the exercise is over" when WE did not
-                    // initiate the teardown. The HR watchdog ends the exercise on purpose to reclaim
-                    // the PPG; honouring that as a user-ended workout would stop the recording.
-                    if (update.exerciseStateInfo.state.isEnded && !healthServicesReleasingForHeartRate && session?.status == WorkoutStatus.RECORDING) {
-                        stopSession()
-                    }
-                }
-
-                override fun onLapSummaryReceived(lapSummary: androidx.health.services.client.data.ExerciseLapSummary) = Unit
-
-                override fun onAvailabilityChanged(
-                    dataType: androidx.health.services.client.data.DataType<*, *>,
-                    availability: androidx.health.services.client.data.Availability,
-                ) {
-                    Log.i(TAG, "HS onAvailabilityChanged dt=$dataType avail=$availability")
-                    if (dataType == DataType.HEART_RATE_BPM && availability is DataTypeAvailability) {
-                        healthHeartRateAvailable = availability == DataTypeAvailability.AVAILABLE ||
-                            availability == DataTypeAvailability.ACQUIRING
-                        if (!healthHeartRateAvailable) ensureHeartRateSensor()
-                        refreshAvailability()
-                    }
-                }
-            }
-
-            client.setUpdateCallback(callback)
-            val existingExercise = runCatching { client.getCurrentExerciseInfoAsync().await() }.getOrNull()
-            if (existingExercise?.exerciseType == null || existingExercise.exerciseType == ExerciseType.UNKNOWN) {
-                client.startExerciseAsync(
-                    ExerciseConfig(
-                        exerciseType = exerciseType,
-                        dataTypes = setOf(DataType.HEART_RATE_BPM),
-                        isAutoPauseAndResumeEnabled = false,
-                        isGpsEnabled = false,
-                    ),
-                ).await()
-            } else {
-                val resumed = runCatching { client.resumeExerciseAsync().await() }.isSuccess
-                if (!resumed) {
-                    runCatching { client.clearUpdateCallbackAsync(callback).await() }
-                    healthServicesAvailable = false
-                    healthHeartRateAvailable = false
-                    ensureHeartRateSensor()
-                    refreshAvailability()
-                    return
-                }
-            }
-            healthCallback = callback
-            healthExerciseActive = true
-            healthServicesReleasingForHeartRate = false
-            healthExercisePaused = false
-            healthServicesAvailable = true
-            healthHeartRateAvailable = true
-            refreshAvailability()
-        } catch (_: Exception) {
-            healthCallback = null
-            healthExerciseActive = false
-            healthServicesAvailable = false
-            healthHeartRateAvailable = false
-            ensureHeartRateSensor()
-            refreshAvailability()
-        }
-    }
-
-    private fun pauseHealthExercise() {
-        val client = healthExerciseClient ?: return
-        if (!healthExerciseActive || healthExercisePaused) return
-        serviceScope.launch {
-            runCatching { client.pauseExerciseAsync().await() }
-                .onSuccess { healthExercisePaused = true }
-                .onFailure {
-                    healthExerciseActive = false
-                    healthHeartRateAvailable = false
-                    ensureHeartRateSensor()
-                    refreshAvailability()
-                }
-        }
     }
 
     private fun stopSensors() {
@@ -785,46 +573,28 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     }
 
     /**
-     * Revives a starved heart-rate listener. If a workout is recording, the PPG exists and is
-     * permitted, yet not a single BPM has arrived within [HEART_RATE_WATCHDOG_MS] of arming, the
-     * listener is being starved — by far the most common cause is Health Services holding the PPG
-     * exclusively while its exercise runs, which silences the platform listener with no callback and
-     * no error. Releasing that exercise hands the sensor back, and [ensureHeartRateSensor] re-arms.
+     * Re-arms the PPG listener only when it is genuinely starved: no heart-rate callback at all
+     * (not even a 0 / no-contact one) for [WorkoutHeartRateWatchdog.STALL_MS] since it was armed or last spoke.
      *
-     * This is what turns a permanently "--" workout into a recovering one. Bounded by
-     * [MAX_HEART_RATE_RECOVERY_ATTEMPTS] so a watch that is simply not on the wrist cannot spin.
+     * The window must comfortably exceed the PPG's warm-up. On the Xiaomi Watch 2 the first
+     * reading lands ~10 s after registration; the old 10 s watchdog re-armed right at that edge,
+     * and every re-arm restarted the warm-up — so BPM only appeared after the attempts ran out
+     * (~40 s), which looked like "switching apps fixes it". Covers mid-workout stalls too, not
+     * just a missing first reading.
      */
     private fun watchdogHeartRate() {
-        if (session?.status != WorkoutStatus.RECORDING) return
-        if (heartRateEverReceived) return
-        if (!hasHeartRatePermission()) return
-        if (heartRateSensorArmedAtMs == 0L) return
-        if (heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS) return
-        if (SystemClock.elapsedRealtime() - heartRateSensorArmedAtMs < HEART_RATE_WATCHDOG_MS) return
+        val rearm = WorkoutHeartRateWatchdog.shouldRearm(
+            isRecording = session?.status == WorkoutStatus.RECORDING,
+            hasPermission = hasHeartRatePermission(),
+            armedAtMs = heartRateSensorArmedAtMs,
+            lastEventAtMs = heartRateLastEventAtMs,
+            attempts = heartRateRecoveryAttempts,
+            nowMs = SystemClock.elapsedRealtime(),
+        )
+        if (!rearm) return
         heartRateRecoveryAttempts++
-        Log.w(TAG, "HR watchdog firing: no BPM within window, attempt=$heartRateRecoveryAttempts, hsActive=$healthExerciseActive — releasing HS and re-arming platform sensor")
-        if (healthExerciseActive) releaseHealthServicesForPlatformSensor()
+        Log.w(TAG, "HR watchdog firing: no HR callback for ${WorkoutHeartRateWatchdog.STALL_MS / 1000}s, attempt=$heartRateRecoveryAttempts — re-arming platform sensor")
         ensureHeartRateSensor()
-    }
-
-    /**
-     * Ends the Health Services exercise so the platform PPG listener can take the sensor back.
-     * Flags are cleared synchronously; the teardown itself is fire-and-forget so the watchdog never
-     * blocks the ticker.
-     */
-    private fun releaseHealthServicesForPlatformSensor() {
-        val client = healthExerciseClient
-        val callback = healthCallback
-        healthExerciseActive = false
-        healthExercisePaused = false
-        healthServicesAvailable = false
-        healthHeartRateAvailable = false
-        healthCallback = null
-        healthServicesReleasingForHeartRate = true
-        serviceScope.launch {
-            runCatching { client?.endExerciseAsync()?.await() }
-            if (client != null && callback != null) runCatching { client.clearUpdateCallbackAsync(callback).await() }
-        }
     }
 
     private fun publish() {
@@ -862,14 +632,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             )
         availability = WorkoutSensorAvailability(
             gps = gps,
-            healthServices = healthServicesAvailable,
-            // Honest signal: only claim HR once a BPM has actually arrived, or while a source is
-            // still plausibly warming up (Health Services acquiring, or a freshly armed PPG).
-            // Claiming availability from "the sensor object exists" is what let the UI advertise
-            // "HR" above a permanent "--" readout.
-            heartRate = heartRateEverReceived ||
-                (healthHeartRateAvailable && healthServicesAvailable) ||
-                (hrSensorPresent && !hasExceededHeartRateRecovery()),
+            healthServices = false,
+            heartRate = heartRateEverReceived || (hrSensorPresent && !hasExceededHeartRateRecovery()),
             steps = stepPresent,
             noContact = heartRateNoContact,
         )
@@ -878,7 +642,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     /** True once the watchdog has given up re-arming the PPG for this workout. */
     private fun hasExceededHeartRateRecovery(): Boolean =
-        heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS
+        heartRateRecoveryAttempts >= WorkoutHeartRateWatchdog.MAX_ATTEMPTS
 
     private fun hasHeartRatePermission(): Boolean = WorkoutRecordingController.hasHeartRatePermission(this)
 
@@ -1003,12 +767,6 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         private const val AMBIENT_TICK_INTERVAL_MS = 60_000L
         private const val MIN_HEART_RATE_BPM = 20
         private const val MAX_HEART_RATE_BPM = 250
-
-        /** No BPM within this window of arming means the listener is starved, not idle. */
-        private const val HEART_RATE_WATCHDOG_MS = 10_000L
-
-        /** Caps watchdog re-arms per workout so a watch off the wrist cannot loop forever. */
-        private const val MAX_HEART_RATE_RECOVERY_ATTEMPTS = 3
 
         /**
          * Shown when a workout is running but the body-sensors permission is absent — the workout

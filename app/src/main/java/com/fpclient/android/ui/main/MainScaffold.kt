@@ -39,6 +39,7 @@ import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.ui.analytics.AnalyticsTabContent
 import com.fpclient.android.ui.discover.DiscoverTabContent
 import com.fpclient.android.ui.navigation.Routes
+import com.fpclient.android.ui.notifications.MailboxDisabledBanner
 import com.fpclient.android.ui.notifications.NotificationsTabContent
 import com.fpclient.android.ui.notifications.NotificationsViewModel
 import com.fpclient.android.ui.profile.ProfileScreen
@@ -57,6 +58,7 @@ fun MainScaffold(
     onOpenRecord: () -> Unit = {},
     onOpenEditProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit = onOpenSettings,
     onOpenFeedback: () -> Unit,
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
@@ -172,13 +174,18 @@ fun MainScaffold(
                 onOpenRecords = onOpenRecords,
                 modifier = modifier,
             )
-            Routes.BottomTab.NOTIFICATIONS -> NotificationsTabContent(
-                viewModel = notificationsVm,
-                container = container,
-                onOpenActivity = onOpenActivity,
-                onOpenProfile = onOpenProfile,
-                modifier = modifier,
-            )
+            Routes.BottomTab.NOTIFICATIONS -> {
+                // Nudge banner for mailbox push being off: rendered here (inside the tab, below the
+                // app-wide watch-workout bar) so the two banners stack cleanly instead of colliding.
+                MailboxDisabledBanner(container = container, onOpenSettings = onOpenNotificationSettings)
+                NotificationsTabContent(
+                    viewModel = notificationsVm,
+                    container = container,
+                    onOpenActivity = onOpenActivity,
+                    onOpenProfile = onOpenProfile,
+                    modifier = modifier,
+                )
+            }
             Routes.BottomTab.ME_TAB -> if (!sessionState.loggedIn) {
                 val scope = rememberCoroutineScope()
                 GuestMePanel(

@@ -26,6 +26,7 @@ data class WearWorkoutInboxEntry(
     val lastError: String? = null,
     val blocked: Boolean = false,
     val uploadedActivityId: String? = null,
+    val fitFileName: String? = null,
 )
 
 class WearWorkoutInboxStore(context: Context) {
@@ -50,10 +51,20 @@ class WearWorkoutInboxStore(context: Context) {
 
     fun sidecarFile(entry: WearWorkoutInboxEntry) = File(inboxDirectory(), entry.sidecarFileName)
 
-    fun stage(entry: WearWorkoutInboxEntry, gpxBytes: ByteArray, sidecarBytes: ByteArray) = synchronized(lock) {
+    fun fitFile(entry: WearWorkoutInboxEntry) = entry.fitFileName?.let { File(inboxDirectory(), it) }
+
+    fun stage(
+        entry: WearWorkoutInboxEntry,
+        gpxBytes: ByteArray,
+        sidecarBytes: ByteArray,
+        fitBytes: ByteArray? = null,
+    ) = synchronized(lock) {
         val directory = inboxDirectory().apply { mkdirs() }
         writeAtomically(File(directory, entry.gpxFileName), gpxBytes)
         writeAtomically(File(directory, entry.sidecarFileName), sidecarBytes)
+        if (fitBytes != null && entry.fitFileName != null) {
+            writeAtomically(File(directory, entry.fitFileName), fitBytes)
+        }
         writeEntries(readEntries().filterNot { it.sessionId == entry.sessionId } + entry)
     }
 
@@ -86,6 +97,7 @@ class WearWorkoutInboxStore(context: Context) {
             archiveSidecar(entry)
             gpxFile(entry).delete()
             sidecarFile(entry).delete()
+            fitFile(entry)?.delete()
         }
         writeEntries(readEntries().filterNot { it.sessionId == sessionId })
     }
@@ -96,6 +108,7 @@ class WearWorkoutInboxStore(context: Context) {
             archiveSidecar(entry)
             gpxFile(entry).delete()
             sidecarFile(entry).delete()
+            fitFile(entry)?.delete()
         }
         writeEntries(emptyList())
     }

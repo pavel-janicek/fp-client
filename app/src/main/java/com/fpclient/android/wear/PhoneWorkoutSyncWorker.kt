@@ -56,14 +56,33 @@ class PhoneWorkoutSyncWorker(
                 continue
             }
 
+            val bodyProfile = container.bodyProfileStore.current()
+            val fit = inbox.fitFile(entry)
             val gpx = inbox.gpxFile(entry)
-            if (!gpx.isFile) {
-                inbox.update(entry.sessionId) { it.copy(lastError = "Workout GPX is missing", blocked = true) }
+
+            val uploadFile = if (bodyProfile.optIn && bodyProfile.isComplete && fit != null && fit.isFile) {
+                val amendedFit = java.io.File(fit.parentFile, "amended-${fit.name}")
+                val success = com.fpclient.android.data.body.CalorieFitAmender.amendFitFileWithCalories(
+                    inputFitFile = fit,
+                    outputFitFile = amendedFit,
+                    bodyProfile = bodyProfile,
+                )
+                if (success) amendedFit else fit
+            } else {
+                // Prefer the FIT even without calories: it is the only format whose step total
+                // FitPub ingests (`session.totalStrides`; its GPX parser ignores steps), and it
+                // carries the same track and heart rate. GPX remains the fallback for watches
+                // that did not produce a FIT.
+                fit?.takeIf { it.isFile } ?: gpx
+            }
+
+            if (uploadFile == null || !uploadFile.isFile) {
+                inbox.update(entry.sessionId) { it.copy(lastError = "Workout file is missing", blocked = true) }
                 continue
             }
 
             when (val result = container.activityRepository.uploadFile(
-                file = gpx,
+                file = uploadFile,
                 title = entry.title,
                 description = entry.description,
                 visibility = entry.visibility,

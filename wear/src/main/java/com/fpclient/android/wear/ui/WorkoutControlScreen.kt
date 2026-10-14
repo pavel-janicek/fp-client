@@ -57,12 +57,16 @@ fun WorkoutControlScreen(
         val currentType = snapshot.session?.activityType ?: activityType
         val zone = WorkoutHeartRateZone.fromBpm(snapshot.heartRateBpm)
 
-        LaunchedEffect(isAmbient) { onAmbientModeChanged(isAmbient) }
-
         // One-second UI tick: keeps the on-screen active duration timer moving live
         // while recording, anchored to the session's moving time (excluding pauses).
         var wallClockNow by remember { mutableStateOf(System.currentTimeMillis()) }
         val recording = snapshot.status == WorkoutStatus.RECORDING
+
+        // Keyed on `recording` too: the ambient state is only forwarded while a workout runs, so a
+        // change that happened just before Start (or while this screen was away) must be re-sent
+        // once recording begins. A stale "ambient" in the service throttles every live update —
+        // BPM included — to once a minute while this screen's own timer keeps ticking.
+        LaunchedEffect(isAmbient, recording) { onAmbientModeChanged(isAmbient) }
         LaunchedEffect(recording) {
             while (recording) {
                 delay(1_000L)

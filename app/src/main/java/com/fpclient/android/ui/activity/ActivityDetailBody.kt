@@ -85,6 +85,12 @@ internal fun DetailBody(
                 ),
             )
         }
+        // Steps only exist for activities whose source file carried them (e.g. FIT uploads from
+        // the watch, which stamp `totalStrides`), so the row is shown only when there is a value
+        // rather than as a "—" tile on every ride or manual entry.
+        activity.metrics?.totalSteps?.takeIf { it > 0 }?.let { steps ->
+            item { StatRow(listOf("Steps" to Format.steps(steps))) }
+        }
         item { TrackMap(segments = viewModel.trackSegments(), hasTrack = ui.activity?.simplifiedTrack != null) }
         item { ReactionRow(activityId = activityId, viewModel = viewModel, ui = ui) }
         item { BoostRow(activityId = activityId, viewModel = viewModel, ui = ui, onOpenProfile = onOpenProfile) }

@@ -23,7 +23,9 @@ object Routes {
     const val PRIVACY_ZONES = "privacy_zones"
     /** Full-screen map editor; `zoneId` selects an existing zone, absence creates a new one. */
     const val PRIVACY_ZONE_EDIT = "privacy_zone_edit?zoneId={zoneId}"
-    const val SETTINGS = "settings"
+    const val SETTINGS = "settings?scroll={scroll}"
+    /** Optional `scroll` arg value that scrolls to the Push section on open. */
+    const val SETTINGS_SCROLL_PUSH_ARG = "push"
     const val ABOUT = "about"
     const val BATCH_IMPORT = "batch_import"
     const val KOMOOT_IMPORT = "komoot_import"
@@ -53,6 +55,12 @@ object Routes {
 
     fun peaks(username: String) = "peaks/$username"
     fun peakDetail(username: String, peakId: Long) = "peaks/$username/$peakId"
+
+    /** Settings opened so the Push / mailbox-push section is scrolled into view. */
+    fun settingsScrollPush() = "settings?scroll=push"
+
+    /** Plain Settings (no scroll request), matching the optional-arg route pattern. */
+    fun settings() = "settings"
 
     /** Privacy-zone editor: no argument creates a new zone, a zoneId edits that zone. */
     fun privacyZoneEdit(zoneId: String? = null) =

@@ -1,12 +1,15 @@
 package com.fpclient.android.ui.settings
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,6 +43,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
@@ -48,7 +52,7 @@ import java.util.Locale
 
 private fun formatTimestamp(epochMs: Long): String = if (epochMs == 0L) "" else SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(epochMs))
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(
     container: AppContainer,
@@ -63,11 +67,26 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onOpenEmailChange: () -> Unit,
     onOpenWearWorkoutInbox: () -> Unit = {},
+    scrollToPush: Boolean = false,
 ) {
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val sessionState by appViewModel.uiState.collectAsState()
     var showChangePassword by rememberSaveable { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // The Activity tab's mailbox-disabled banner deep-links here with scrollToPush so the
+    // Push / mailbox-push section is scrolled into view automatically. bringIntoViewRequester
+    // is the Compose-recommended way to scroll a lazily-laid-out section into view (it works
+    // even before the section has been composed/measured, unlike a hardcoded offset).
+    val pushRequester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(scrollToPush) {
+        if (scrollToPush) {
+            // Two frames: let the column lay out first, then bring the Push card into view.
+            withFrameNanos { }
+            pushRequester.bringIntoView()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -85,7 +104,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -137,12 +156,15 @@ fun SettingsScreen(
                 }
             }
             // Push (Iteration 8f): the card owns the notification-permission request and states
-            // the "eventual, not instant" delivery model.
-            PushNotificationCard(container)
-            // Direct mailbox push (Iteration 8h): shown signed-in only, since the subscription
-            // is per-account (probe → mint mailbox → POST /subscribe through the session flow).
-            if (sessionState.loggedIn) {
-                MailboxPushCard(container)
+            // the "eventual, not instant" delivery model. This section is the deep-link target
+            // of the Activity tab's mailbox-disabled banner (scrollToPush).
+            Column(modifier = Modifier.bringIntoViewRequester(pushRequester)) {
+                PushNotificationCard(container)
+                // Direct mailbox push (Iteration 8h): shown signed-in only, since the subscription
+                // is per-account (probe → mint mailbox → POST /subscribe through the session flow).
+                if (sessionState.loggedIn) {
+                    MailboxPushCard(container)
+                }
             }
             if (sessionState.loggedIn) {
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -174,6 +196,7 @@ fun SettingsScreen(
                     ) { Text("Record a track") }
                 }
             }
+            CalorieRecordingCard(container.bodyProfileStore)
             val watchPendingCount by container.wearWorkoutInboxStore.pendingCount.collectAsState()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {

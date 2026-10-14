@@ -25,6 +25,19 @@ class WatchWearAuthService : WearableListenerService() {
             }
             return
         }
+        if (path == com.fpclient.android.wear.body.BodyProfileProtocol.MESSAGE_PATH) {
+            val data = event.data
+            serviceScope.launch {
+                runCatching {
+                    val profile = com.fpclient.android.wear.body.BodyProfileProtocol.decode(data)
+                    com.fpclient.android.wear.body.BodyProfileSync.apply(this@WatchWearAuthService, profile)
+                    android.util.Log.i("WatchWearAuthService", "Applied body profile: optIn=${profile.optIn} complete=${profile.isComplete}")
+                }.onFailure { e ->
+                    android.util.Log.w("WatchWearAuthService", "Failed to apply body profile", e)
+                }
+            }
+            return
+        }
         if (path != WearAuthProtocol.CREDENTIALS_PATH &&
             path != WearAuthProtocol.SIGNED_OUT_PATH &&
             path != WearAuthProtocol.EXPIRED_PATH

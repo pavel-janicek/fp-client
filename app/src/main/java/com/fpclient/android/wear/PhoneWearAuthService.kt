@@ -60,6 +60,9 @@ class PhoneWearAuthService : WearableListenerService() {
                 )
             }
             diagnosticsStore.write(finalState)
+            // The watch asks for auth every time its app opens, so answering with the body
+            // profile here is what keeps its copy (used for direct-upload calories) current.
+            WearBodyProfileSync.sendTo(this@PhoneWearAuthService, nodeId, app.container.bodyProfileStore.current())
         }
     }
 
@@ -75,6 +78,8 @@ class PhoneWearAuthService : WearableListenerService() {
             val gpx = map.getAsset(PhoneWorkoutSyncProtocol.ASSET_GPX) ?: return@forEach
             val sidecar = map.getAsset(PhoneWorkoutSyncProtocol.ASSET_SIDECAR) ?: return@forEach
             val nodeId = item.uri.host ?: return@forEach
+            val fit = map.getAsset(PhoneWorkoutSyncProtocol.ASSET_FIT)
+            val fitFileName = map.getString(PhoneWorkoutSyncProtocol.KEY_FIT_FILENAME)
             incoming += IncomingAssets(
                 sessionId = sessionId,
                 activityType = map.getString(PhoneWorkoutSyncProtocol.KEY_ACTIVITY_TYPE).orEmpty(),
@@ -87,6 +92,8 @@ class PhoneWearAuthService : WearableListenerService() {
                 dataItemUri = item.uri.toString(),
                 gpx = gpx,
                 sidecar = sidecar,
+                fit = fit,
+                fitFileName = fitFileName,
             )
         }
         dataEvents.release()
@@ -114,14 +121,17 @@ class PhoneWearAuthService : WearableListenerService() {
             val dataClient = Wearable.getDataClient(this)
             val gpxBytes = loadAsset(dataClient, assets.gpx)
             val sidecarBytes = loadAsset(dataClient, assets.sidecar)
+            val fitBytes = assets.fit?.let { loadAsset(dataClient, it) }
             if (gpxBytes == null || sidecarBytes == null) {
                 Log.w(TAG, "Dropping relayed workout ${assets.sessionId}: asset load failed (gpx=${gpxBytes != null}, sidecar=${sidecarBytes != null})")
                 return
             }
+            val fitName = assets.fitFileName?.ifBlank { "workout-${assets.sessionId}.fit" } ?: assets.fit?.let { "workout-${assets.sessionId}.fit" }
             val entry = WearWorkoutInboxEntry(
                 sessionId = assets.sessionId,
                 gpxFileName = "workout-${assets.sessionId}.gpx",
                 sidecarFileName = "workout-${assets.sessionId}.json",
+                fitFileName = fitName,
                 activityType = assets.activityType,
                 title = assets.title,
                 description = assets.description,
@@ -132,7 +142,7 @@ class PhoneWearAuthService : WearableListenerService() {
                 dataItemUri = assets.dataItemUri,
                 receivedAtEpochMs = System.currentTimeMillis(),
             )
-            runCatching { store.stage(entry, gpxBytes, sidecarBytes) }
+            runCatching { store.stage(entry, gpxBytes, sidecarBytes, fitBytes) }
                 .onFailure { Log.w(TAG, "Staging relayed workout ${assets.sessionId} failed", it) }
                 .getOrElse { return }
         }
@@ -156,6 +166,8 @@ class PhoneWearAuthService : WearableListenerService() {
         val dataItemUri: String,
         val gpx: Asset,
         val sidecar: Asset,
+        val fit: Asset? = null,
+        val fitFileName: String? = null,
     )
 
     override fun onDestroy() {
