@@ -32,8 +32,8 @@ private sealed interface UpdateCheckUiState {
 /** Play Store listing for the app — updates on Play builds are installed by the Play Store. */
 private const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.fpclient.android"
 
-/** F-Droid package page — updates on F-Droid builds are installed by the F-Droid client. */
-private const val FDROID_PACKAGE_URL = "https://f-droid.org/en/packages/com.fpclient.android/"
+/** GitHub releases page. */
+private const val GITHUB_RELEASES_URL = "https://github.com/pavel-janicek/fp-client/releases"
 
 /**
  * The "Updates" card: a manual "Check for updates" button plus the outcome
@@ -82,9 +82,9 @@ internal fun UpdateCheckCard() {
                             modifier = Modifier.padding(top = 8.dp),
                         ) { Text("Play Store") }
                         OutlinedButton(
-                            onClick = { uriHandler.openUri(FDROID_PACKAGE_URL) },
+                            onClick = { uriHandler.openUri(GITHUB_RELEASES_URL) },
                             modifier = Modifier.padding(top = 8.dp),
-                        ) { Text("F-Droid") }
+                        ) { Text("GitHub") }
                         if (!state.result.releaseUrl.isNullOrBlank()) {
                             OutlinedButton(
                                 onClick = { uriHandler.openUri(state.result.releaseUrl) },
