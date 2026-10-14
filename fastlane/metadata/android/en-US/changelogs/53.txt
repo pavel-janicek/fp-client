@@ -1,0 +1,4 @@
+3.1.0 (release 3.1.0):
+- Calories for watch workouts: opt in under Settings → Calorie recording; your body metrics stay on your phone and watch, never on the server.
+- Steps for watch workouts: live count during the workout, total sent to FitPub and shown on the phone's activity screen.
+- More reliable live heart rate on the watch: BPM appears shortly after Start, no app switching needed.
