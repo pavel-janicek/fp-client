@@ -77,12 +77,16 @@ class WatchWorkoutSyncWorker(
      */
     private suspend fun amendFitForCalories(fit: File?): File? {
         if (fit == null || !fit.isFile) return null
-        val profile = BodyProfileSync.read(applicationContext) ?: return null
-        if (!profile.optIn || !profile.isComplete) return null
+        val profile = BodyProfileSync.read(applicationContext)
+        if (profile == null || !profile.optIn || !profile.isComplete) {
+            android.util.Log.i(TAG, "No calorie estimate: profile=${profile?.let { "optIn=${it.optIn} complete=${it.isComplete}" } ?: "never received from phone"}")
+            return null
+        }
         val amended = File(fit.parentFile, "amended-${fit.name}")
         val success = runCatching {
             CalorieFitAmender.amendFitFileWithCalories(fit, amended, profile)
         }.getOrDefault(false)
+        android.util.Log.i(TAG, "Calorie amendment of ${fit.name} success=$success")
         if (!success) runCatching { amended.delete() }
         return amended.takeIf { success }
     }
@@ -127,3 +131,5 @@ class WatchWorkoutSyncWorker(
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 }
+
+private const val TAG = "WatchWorkoutSync"

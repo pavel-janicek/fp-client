@@ -184,18 +184,24 @@ fallback) and both stamping `SESSION`/`LAP` `totalCalories` via `CalorieFitAmend
 
 - **Phone relay** — `PhoneWorkoutSyncWorker` amends the relayed FIT from the phone's own copy of
   the profile before uploading (pre-existing).
-- **Direct watch upload** — the phone mirrors the profile to the watch over the Data Layer at
-  `/fitpub/body-profile` (`WearBodyProfileSync.push`, on every save and on app start; an opt-out
-  pushes an empty profile, wiping the watch copy). `WatchWorkoutSyncWorker` reads it just before
+- **Direct watch upload** — the phone sends the profile to the watch as a Wear **message** at
+  `/fitpub/body-profile` (`WearBodyProfileSync`): in reply to every watch auth request (sent each
+  time the watch app opens), on every save, and on phone app start. An opt-out sends an empty
+  profile, wiping the watch copy. The watch persists it (`BodyProfileSync`, DataStore
+  `fitpub_wear_body_profile`); `WatchWorkoutSyncWorker` reads it just before
   `WatchActivityUploader.upload` and amends a temporary `amended-<name>.fit`, falling back to the
   original file whenever the profile is missing/incomplete or anything fails — an estimate must
-  never block an upload.
+  never block an upload (logcat tag `WatchWorkoutSync` says which).
+  *History:* the first cut mirrored the profile as a DataItem; on a real phone + Xiaomi Watch 2
+  pair it never reached the watch (the watch's Data Layer held no phone-written item), so direct
+  uploads silently went out without calories. Messages are the transport the auth handshake
+  already proves.
 
 The profile stays on the user's own paired devices; it is never sent to the server. Per decision
 1 below, `:wear` mirrors `BodyProfile`, `Sex`, `CalorieCalculator` and `CalorieFitAmender` from
 `:app` instead of sharing a module — the formulas must stay byte-identical, so both sides are
 pinned by unit tests (`CalorieCalculatorTest`/`CalorieFitAmenderTest` exist in each module), and
-the Data Layer wire strings are pinned by `PhoneBodyProfileProtocolTest` (`:app`) and
+the message wire strings are pinned by `PhoneBodyProfileProtocolTest` (`:app`) and
 `BodyProfileProtocolTest` (`:wear`).
 
 ## Decisions

@@ -826,7 +826,9 @@ Notes:
 
 **9h Calories on recorded workouts (deferred → 3.1)**
 > **Status 2026-10-14 — client half delivered on `Release-3.x`.** The phone mirrors the opt-in
-> `BodyProfile` to the watch (`WearBodyProfileSync` → DataItem `/fitpub/body-profile`), and both
+> `BodyProfile` to the watch (`WearBodyProfileSync` → Wear message `/fitpub/body-profile`, sent on
+> every watch auth request, save and phone app start — the earlier DataItem mirror never reached a
+> real watch), and both
 > upload paths now stamp `totalCalories` into the FIT before sending: the phone relay
 > (`PhoneWorkoutSyncWorker` + `CalorieFitAmender`) and — new — the watch's **direct** upload
 > (`WatchWorkoutSyncWorker` amends with mirrored-profile copies in `wear/…/body/`), which was the

@@ -12,7 +12,7 @@ class PhoneBodyProfileProtocolTest {
 
     @Test
     fun bodyProfileProtocolConstantsMatchDataLayerContract() {
-        assertEquals("/fitpub/body-profile", PhoneBodyProfileProtocol.DATA_PATH)
+        assertEquals("/fitpub/body-profile", PhoneBodyProfileProtocol.MESSAGE_PATH)
         assertEquals("opt_in", PhoneBodyProfileProtocol.KEY_OPT_IN)
         assertEquals("sex", PhoneBodyProfileProtocol.KEY_SEX)
         assertEquals("height_cm", PhoneBodyProfileProtocol.KEY_HEIGHT_CM)

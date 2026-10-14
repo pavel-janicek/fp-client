@@ -7,10 +7,12 @@ import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.wear.PhoneWearAuthRelay
+import com.fpclient.android.wear.WearBodyProfileSync
 import com.fpclient.android.wear.PhoneWorkoutSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 
 class FitPubApplication : Application() {
@@ -25,6 +27,9 @@ class FitPubApplication : Application() {
         container = AppContainer(this)
         PhoneWearAuthRelay.start(this, container.sessionStore, applicationScope)
         PhoneWorkoutSyncScheduler.schedulePeriodic(this)
+        // Catch a reachable watch up with the calorie body profile (it may have been reinstalled
+        // or paired since the last save). Off the main thread: the store opens encrypted prefs.
+        applicationScope.launch { WearBodyProfileSync.broadcast(this@FitPubApplication, container.bodyProfileStore.current()) }
 
         // Background notification delivery (Iteration 8f): create the channel up front so the
         // OS-level toggle for it is visible in system settings even before the first poll, and

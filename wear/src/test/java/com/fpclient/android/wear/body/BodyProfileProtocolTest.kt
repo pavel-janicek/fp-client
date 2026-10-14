@@ -7,17 +7,12 @@ class BodyProfileProtocolTest {
 
     @Test
     fun bodyProfileProtocolConstantsMatchDataLayerContract() {
-        assertEquals("/fitpub/body-profile", BodyProfileProtocol.DATA_PATH)
+        assertEquals("/fitpub/body-profile", BodyProfileProtocol.MESSAGE_PATH)
         assertEquals("opt_in", BodyProfileProtocol.KEY_OPT_IN)
         assertEquals("sex", BodyProfileProtocol.KEY_SEX)
         assertEquals("height_cm", BodyProfileProtocol.KEY_HEIGHT_CM)
         assertEquals("weight_kg", BodyProfileProtocol.KEY_WEIGHT_KG)
         assertEquals("age_years", BodyProfileProtocol.KEY_AGE_YEARS)
-    }
-
-    @Test
-    fun theWildcardReadUriIsWearablePathWithoutADoubleSlash() {
-        assertEquals("wear://*/fitpub/body-profile", BodyProfileProtocol.readUriString())
     }
 
     @Test

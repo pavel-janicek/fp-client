@@ -60,6 +60,9 @@ class PhoneWearAuthService : WearableListenerService() {
                 )
             }
             diagnosticsStore.write(finalState)
+            // The watch asks for auth every time its app opens, so answering with the body
+            // profile here is what keeps its copy (used for direct-upload calories) current.
+            WearBodyProfileSync.sendTo(this@PhoneWearAuthService, nodeId, app.container.bodyProfileStore.current())
         }
     }
 
