@@ -173,6 +173,31 @@ per minute in ambient mode. The ongoing notification is paired with `OngoingActi
 a static watch-face icon, tappable return intent, and elapsed status in the watch-face and Recents
 surfaces. Tiles and complications remain optional follow-up work.
 
+## Calorie estimate for recorded workouts
+
+The opt-in body profile (Settings → "Calorie recording") lives encrypted on the phone
+(`BodyProfileStore`), but a watch that uploads **directly** never passes through the phone, so it
+would otherwise skip the estimate entirely — the FIT written by `WorkoutFitWriter` carries no
+`totalCalories`, and the server's `FitParser` only reports what the file contains. Two mirrored
+paths close the gap, both using the same `CalorieCalculator` (Keytel HR formula with a MET
+fallback) and both stamping `SESSION`/`LAP` `totalCalories` via `CalorieFitAmender`:
+
+- **Phone relay** — `PhoneWorkoutSyncWorker` amends the relayed FIT from the phone's own copy of
+  the profile before uploading (pre-existing).
+- **Direct watch upload** — the phone mirrors the profile to the watch over the Data Layer at
+  `/fitpub/body-profile` (`WearBodyProfileSync.push`, on every save and on app start; an opt-out
+  pushes an empty profile, wiping the watch copy). `WatchWorkoutSyncWorker` reads it just before
+  `WatchActivityUploader.upload` and amends a temporary `amended-<name>.fit`, falling back to the
+  original file whenever the profile is missing/incomplete or anything fails — an estimate must
+  never block an upload.
+
+The profile stays on the user's own paired devices; it is never sent to the server. Per decision
+1 below, `:wear` mirrors `BodyProfile`, `Sex`, `CalorieCalculator` and `CalorieFitAmender` from
+`:app` instead of sharing a module — the formulas must stay byte-identical, so both sides are
+pinned by unit tests (`CalorieCalculatorTest`/`CalorieFitAmenderTest` exist in each module), and
+the Data Layer wire strings are pinned by `PhoneBodyProfileProtocolTest` (`:app`) and
+`BodyProfileProtocolTest` (`:wear`).
+
 ## Decisions
 
 ### 1. Shared code with `:app`: **duplicated DTOs — no `:core-shared` module (yet)**

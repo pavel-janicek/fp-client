@@ -825,6 +825,17 @@ Notes:
 
 
 **9h Calories on recorded workouts (deferred → 3.1)**
+> **Status 2026-10-14 — client half delivered on `Release-3.x`.** The phone mirrors the opt-in
+> `BodyProfile` to the watch (`WearBodyProfileSync` → DataItem `/fitpub/body-profile`), and both
+> upload paths now stamp `totalCalories` into the FIT before sending: the phone relay
+> (`PhoneWorkoutSyncWorker` + `CalorieFitAmender`) and — new — the watch's **direct** upload
+> (`WatchWorkoutSyncWorker` amends with mirrored-profile copies in `wear/…/body/`), which was the
+> path that silently skipped calories (reported: makni.cz activity ff786513, a direct-uploaded
+> "Walk workout" with HR but no calories). Remaining gaps are server-side only: `GpxParser`
+> (phone-recorded GPX uploads), `ManualActivityData` (manual entries), and no calories field on
+> `PUT activities/{id}` for backfilling existing activities. See docs/WEAR.md → "Calorie estimate
+> for recorded workouts".
+>
 > Watch workouts record distance/duration/HR but report **no calories** on FitPub. The phone app
 > already has a `calories` field and renders it (`Format.calories`, `ActivityDetailBody`), so the gap
 > is purely that nothing produces the number for a watch GPX upload. Parking for 3.1 — 3.0 ships

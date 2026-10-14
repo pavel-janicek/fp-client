@@ -21,8 +21,10 @@ enum class Sex(val storageValue: String) {
 }
 
 /**
- * Body data a user opts in for calorie recording. Persisted only on the phone (see
- * [BodyProfileStore]); it is never uploaded. Values are stored canonically in metric units so a
+ * Body data a user opts in for calorie recording. Persisted on the phone (see
+ * [BodyProfileStore]) and mirrored to the paired watch over the local Wear Data Layer so a
+ * directly-uploaded watch workout can carry the same estimate; it is never sent to the server.
+ * Values are stored canonically in metric units so a
  * later calorie estimate has a single representation to work with.
  *
  * The numeric fields are nullable because a user may fill them across several visits;

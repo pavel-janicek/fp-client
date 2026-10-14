@@ -29,10 +29,12 @@ import com.fpclient.android.data.body.Sex
 
 /**
  * "Calorie recording" card: an optional opt-in that, once switched on, reveals the body metrics
- * (height / weight / age / sex) a calorie estimate needs. Everything is stored **only on this
- * phone** through the encrypted [BodyProfileStore] and is never uploaded; turning the switch off
- * wipes the stored values. The estimate itself is computed on-device later — this card only
- * collects and persists the inputs, so it stays useful regardless of when calorie support lands.
+ * (height / weight / age / sex) a calorie estimate needs. Everything is stored **only on your own
+ * devices** — this phone (encrypted, excluded from backup) plus the paired watch over the local
+ * Wear Data Layer, so recorded workouts get an estimate whether they upload through the phone or
+ * straight from the watch — and is never sent to the server. Turning the switch off wipes the
+ * stored values everywhere. The estimate itself is computed on-device at upload time; this card
+ * only collects and persists the inputs.
  */
 @Composable
 internal fun CalorieRecordingCard(store: BodyProfileStore) {
@@ -50,8 +52,8 @@ internal fun CalorieRecordingCard(store: BodyProfileStore) {
             Text("Calorie recording", style = MaterialTheme.typography.titleSmall)
             Text(
                 "Optionally record calories for your workouts. This needs your body metrics, " +
-                    "which are calculated on this phone only and never uploaded. Turn this off " +
-                    "at any time to delete them.",
+                    "which stay on this phone and your paired watch and are never sent to the " +
+                    "server. Turn this off at any time to delete them.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),

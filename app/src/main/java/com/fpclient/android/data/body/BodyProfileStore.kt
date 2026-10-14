@@ -2,6 +2,7 @@ package com.fpclient.android.data.body
 
 import android.content.Context
 import com.fpclient.android.util.openEncryptedPrefs
+import com.fpclient.android.wear.WearBodyProfileSync
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,11 +11,14 @@ import kotlinx.coroutines.flow.asStateFlow
  * Local-only store for the [BodyProfile] a user opts in for calorie recording. It is health
  * data, so it lives in keystore-backed [openEncryptedPrefs] (like the session token) and is
  * excluded from cloud backup / device transfer — see `res/xml/backup_rules.xml` and
- * `res/xml/data_extraction_rules.xml`. It is never sent to the server.
+ * `res/xml/data_extraction_rules.xml`. It is never sent to the server; every save mirrors the
+ * profile to the paired watch (see [WearBodyProfileSync]) so a watch workout uploaded directly
+ * can carry the same calorie estimate the phone's relay path applies.
  */
 class BodyProfileStore(context: Context) {
 
-    private val prefs = openEncryptedPrefs(context, FILE_NAME)
+    private val appContext = context.applicationContext
+    private val prefs = openEncryptedPrefs(appContext, FILE_NAME)
     private val mutableProfile = MutableStateFlow(read())
 
     /** The stored profile; null-safe so a first-time user sees defaults. */
@@ -33,6 +37,9 @@ class BodyProfileStore(context: Context) {
             .putString(KEY_AGE_YEARS, profile.ageYears?.toString() ?: "")
             .apply()
         mutableProfile.value = profile
+        // Mirror to the paired watch so direct watch uploads can amend calories too; clearing
+        // the profile pushes an empty one, wiping the watch's copy in the same step.
+        WearBodyProfileSync.push(appContext, profile)
     }
 
     /** Opts out and wipes every stored value, keeping nothing on the device. */

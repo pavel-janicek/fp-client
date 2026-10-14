@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.fpclient.android.wear.auth.WearAuthStore
+import com.fpclient.android.wear.body.BodyProfileSync
+import com.fpclient.android.wear.body.CalorieFitAmender
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.wearable.Asset
@@ -42,7 +44,12 @@ class WatchWorkoutSyncWorker(
                 workout = workout.copy(directUploadAttempted = true)
                 val gpx = File(applicationContext.filesDir, "workouts/${workout.gpxFileName}")
                 val fit = workout.fitFileName?.let { File(applicationContext.filesDir, "workouts/$it") }
-                if (uploader.upload(workout, gpx, auth, fit)) {
+                // A direct upload never passes through the phone, so the watch has to stamp the
+                // calorie estimate into the FIT itself (from the mirrored body profile).
+                val amended = amendFitForCalories(fit)
+                val uploaded = uploader.upload(workout, gpx, auth, amended ?: fit)
+                amended?.let { stale -> runCatching { stale.delete() } }
+                if (uploaded) {
                     store.remove(workout.sessionId)
                     continue
                 }
@@ -59,6 +66,25 @@ class WatchWorkoutSyncWorker(
             }
         }
         return Result.success()
+    }
+
+    /**
+     * Best-effort calorie amendment before a direct upload: the opt-in body profile is mirrored
+     * from the phone (see `WearBodyProfileSync`), so the watch can stamp the estimated
+     * `totalCalories` into the FIT the same way the phone's relay path does. Returns the amended
+     * file to send, or null to upload the original untouched — the estimate must never block an
+     * upload.
+     */
+    private suspend fun amendFitForCalories(fit: File?): File? {
+        if (fit == null || !fit.isFile) return null
+        val profile = BodyProfileSync.read(applicationContext) ?: return null
+        if (!profile.optIn || !profile.isComplete) return null
+        val amended = File(fit.parentFile, "amended-${fit.name}")
+        val success = runCatching {
+            CalorieFitAmender.amendFitFileWithCalories(fit, amended, profile)
+        }.getOrDefault(false)
+        if (!success) runCatching { amended.delete() }
+        return amended.takeIf { success }
     }
 
     private suspend fun relayToPhone(workout: PendingWatchWorkout): Boolean {

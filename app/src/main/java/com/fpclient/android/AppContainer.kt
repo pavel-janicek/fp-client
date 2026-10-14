@@ -23,6 +23,7 @@ import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.wear.WearWorkoutInboxStore
 import com.fpclient.android.data.session.SessionStore
 import com.fpclient.android.wear.PhoneWearAuthRelay
+import com.fpclient.android.wear.WearBodyProfileSync
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -110,9 +111,14 @@ class AppContainer(context: Context) {
 
     /**
      * Body metrics a user opts in for calorie recording (height/weight/age/sex). Health data, so
-     * it is stored only on this phone (encrypted, excluded from backup) and never uploaded.
+     * it is stored on this phone (encrypted, excluded from backup) and mirrored only to the
+     * paired watch for on-watch calorie estimates — never sent to the server.
      */
-    val bodyProfileStore: BodyProfileStore by lazy { BodyProfileStore(context) }
+    val bodyProfileStore: BodyProfileStore by lazy {
+        // Re-mirror on every app start so a watch paired (or reinstalled) after the last save
+        // catches up without the user having to re-enter anything.
+        BodyProfileStore(context).also { WearBodyProfileSync.push(context, it.current()) }
+    }
 
     /** Phone-side Data Layer relay: watch handshake diagnostics + reply test. */
     internal val phoneWearAuthRelay: PhoneWearAuthRelay = PhoneWearAuthRelay
