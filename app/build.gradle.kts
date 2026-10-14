@@ -12,7 +12,7 @@ android {
         applicationId = "com.fpclient.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 48
+        versionCode = 52
         versionName = "3.0.0"
     }
 

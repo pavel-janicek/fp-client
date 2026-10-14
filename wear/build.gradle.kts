@@ -28,7 +28,7 @@ android {
         targetSdk = 36
         // Unique versionCode distinct from :app (Google Play Console requires globally unique
         // versionCodes across all uploaded artifacts in a release listing).
-        versionCode = 50
+        versionCode = 51
         versionName = "3.0.0"
     }
 
