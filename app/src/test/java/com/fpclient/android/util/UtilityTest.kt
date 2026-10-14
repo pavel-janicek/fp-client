@@ -33,6 +33,8 @@ class UtilityTest {
         assertEquals("5:30 /km", Format.pace(330, "METRIC"))
         assertEquals("8:51 /mi", Format.pace(330, "IMPERIAL"))
         assertEquals("22.4 mph", Format.speedKmh(36.0, "IMPERIAL"))
+        assertEquals("—", Format.steps(null))
+        assertEquals(String.format(java.util.Locale.getDefault(), "%,d", 12345), Format.steps(12345))
     }
 
     @Test

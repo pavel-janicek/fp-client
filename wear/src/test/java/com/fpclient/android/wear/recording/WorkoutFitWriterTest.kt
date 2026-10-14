@@ -96,7 +96,17 @@ class WorkoutFitWriterTest {
 
         assertNotNull(decodedSession)
         assertEquals(Sport.WALKING, decodedSession?.sport)
+        // 30 steps -> 15 strides; FitPub's FitParser stores totalSteps = strides * 2 = 30.
+        assertEquals(15L, decodedSession?.totalStrides)
 
         directory.deleteRecursively()
+    }
+
+    @Test
+    fun stridesRoundToTheNearestStrideAndAreOmittedWithoutSteps() {
+        assertEquals(null, WorkoutFitWriter.stridesFor(0))
+        assertEquals(1L, WorkoutFitWriter.stridesFor(1))
+        assertEquals(4L, WorkoutFitWriter.stridesFor(7))
+        assertEquals(500L, WorkoutFitWriter.stridesFor(1_000))
     }
 }

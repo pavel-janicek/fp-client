@@ -204,6 +204,20 @@ pinned by unit tests (`CalorieCalculatorTest`/`CalorieFitAmenderTest` exist in e
 the message wire strings are pinned by `PhoneBodyProfileProtocolTest` (`:app`) and
 `BodyProfileProtocolTest` (`:wear`).
 
+## Upload format and steps
+
+Both upload paths send the **FIT** whenever the watch produced one — the watch's direct upload and
+the phone relay alike, with or without the calorie opt-in; the GPX is only the fallback for a
+workout without a FIT. The FIT is the only format whose step total FitPub ingests: `FitParser`
+reads `session.totalStrides` and stores `totalSteps = strides * 2` (its GPX parser ignores
+steps), so `WorkoutFitWriter` stamps strides (steps / 2, rounded) on the session and lap.
+
+Live steps come from both `TYPE_STEP_COUNTER` and `TYPE_STEP_DETECTOR`: the Xiaomi Watch 2's
+counter reports very sparsely (one event across three test workouts), so the per-step detector
+keeps the readout moving while the counter fills in detector drops; the recorded total is the
+larger of the two, never their sum. Each sensor registration (start, resume) re-baselines the
+counter so steps walked while paused are not credited.
+
 ## Decisions
 
 ### 1. Shared code with `:app`: **duplicated DTOs — no `:core-shared` module (yet)**

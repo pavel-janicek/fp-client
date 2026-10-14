@@ -50,7 +50,17 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private lateinit var locationManager: LocationManager
     private var session: WorkoutSessionSnapshot? = null
     private var availability = WorkoutSensorAvailability()
-    private var stepSensor: Sensor? = null
+    private var stepSensors: List<Sensor> = emptyList()
+
+    /**
+     * Step total as derived from TYPE_STEP_COUNTER deltas alone. Kept apart from the
+     * detector's per-step increments so the two sources never add up to a double count — the
+     * recorded total is always the larger of the two.
+     */
+    private var counterSteps = 0
+
+    /** Last raw TYPE_STEP_COUNTER value; null until the first callback of each registration. */
+    private var lastRawStepCounter: Float? = null
     private var heartRateSensor: Sensor? = null
 
     /** Monotonic timestamp of the last PPG (re-)registration, used by the HR watchdog. */
@@ -408,13 +418,25 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun startPlatformSensors() {
         if (sensorsActive) return
         val activityAllowed = Build.VERSION.SDK_INT < 29 || hasPermission(Manifest.permission.ACTIVITY_RECOGNITION)
-        stepSensor = if (activityAllowed) {
-            sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-                ?: sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
-        } else null
-
-        stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
-        sensorsActive = stepSensor != null
+        // Both step sources, when present. The counter is the authoritative cumulative total but
+        // some watches report it rarely — the Xiaomi Watch 2's `pedometer_wrist` delivered a single
+        // event across three test workouts — so on its own the live readout sat at 0. The detector
+        // fires per step and keeps the readout live; the counter fills in steps the detector
+        // dropped (e.g. while the SoC slept with the screen off).
+        stepSensors = if (activityAllowed) {
+            listOfNotNull(
+                sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER),
+                sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR),
+            )
+        } else emptyList()
+        // A fresh registration re-baselines the counter: steps walked while paused (sensors off)
+        // must not be credited on the first callback after resume.
+        lastRawStepCounter = null
+        stepSensors.forEach { sensor ->
+            val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            Log.i(TAG, "startPlatformSensors: registerListener ok=$ok sensor=${sensor.name} type=${sensor.type}")
+        }
+        sensorsActive = stepSensors.isNotEmpty()
         // Also register the platform heart-rate sensor so HR keeps recording if Health Services
         // reports available but never delivers an update (it is torn down only once Health
         // Services actually provides a value).
@@ -465,17 +487,21 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         sensorManager.unregisterListener(this)
         sensorsActive = false
         heartRateSensor = null
-        stepSensor = null
+        stepSensors = emptyList()
     }
 
     private fun onStepCounter(rawValue: Float?) {
         val raw = rawValue?.takeIf { it >= 0f } ?: return
-        val previous = metrics.rawStepCounter
-        val newTotal = when {
-            previous == null -> metrics.steps
-            raw >= previous -> metrics.steps + (raw - previous).toInt()
-            else -> metrics.steps
+        val previous = lastRawStepCounter
+        lastRawStepCounter = raw
+        when {
+            // First callback of this registration: a baseline, aligned to whatever the detector
+            // has counted so far.
+            previous == null -> counterSteps = metrics.steps
+            raw > previous -> counterSteps += (raw - previous).toInt()
+            // raw < previous: the counter was reset (reboot / HAL restart); re-baseline silently.
         }
+        val newTotal = maxOf(metrics.steps, counterSteps)
         val current = session ?: return
         appendEvent(
             current,

@@ -879,3 +879,57 @@ Notes:
 > > a parser round-trip). Confirm whether a server redeploy is in scope before assuming the live site
 > > will reflect the change.
 
+
+**9i Heart-rate readout reliability (`BODY_SENSORS` only)**
+> **Status 2026-10-14 — delivered on `Release-3.x`.** Reported: live BPM sometimes appeared on the
+> first try, sometimes only after switching apps on the watch. **Constraint (Google Play review):**
+> no `HEART_RATE` / Health Services permission — the watch must stay on the plain platform
+> `TYPE_HEART_RATE` sensor under `BODY_SENSORS` (see 1d5e2ca). Diagnosed on a Xiaomi Watch 2 from
+> `dumpsys sensorservice` registration history vs the recorded tracks:
+>
+> - **Watchdog fought the PPG warm-up.** The `goodix_heartrate` PPG delivers its first reading ~10 s
+>   after registration; the watchdog re-armed (unregister + register) any listener without a BPM
+>   after exactly 10 s, and every re-arm restarted the warm-up — so BPM only appeared once the three
+>   attempts ran out (~40 s), which is about what an app switch takes. Workout 20:21 shows the re-arm
+>   at +10 s and no BPM; 20:26 got its first BPM at +10.1 s, just past the edge. Fix: the pure
+>   `WorkoutHeartRateWatchdog` policy (unit-tested, the service delegates to it) re-arms only after
+>   **30 s with no HR callback of any kind** — 0 / no-contact readings prove the listener alive — and
+>   now also recovers mid-workout stalls (it used to give up after the first reading); a real BPM
+>   resets the attempt budget.
+> - **Stale ambient flag throttled the readout.** In ambient the service publishes once a minute,
+>   while the workout screen ticks its timer locally — so a stuck ambient flag looked like a running
+>   clock over a "--" BPM; returning to the app re-sent "not ambient", the other half of "switching
+>   apps fixes it". Fix: `ambientMode` resets on `ACTION_START`, and `WorkoutControlScreen` re-sends
+>   the ambient state when recording begins (`LaunchedEffect(isAmbient, recording)`).
+> - **Duplicate HR samples.** Both the wake-up and non-wake-up variants of the same PPG were
+>   registered, recording every reading twice. Now one listener on the wake-up variant (falls back
+>   to the default), which keeps delivering with the screen off.
+>
+> Verify on-device: BPM within ~10 s of Start on every attempt, no app switch; if not, capture
+> `adb logcat -s FitPubWearHR`.
+
+**9j Steps on recorded workouts**
+> **Status 2026-10-14 — delivered on `Release-3.x`.** Reported: during a Walk workout the step count
+> never moved on the watch, and FitPub received no step total.
+>
+> - **Live count.** The service used only `TYPE_STEP_COUNTER` when present, and the Xiaomi Watch 2's
+>   `pedometer_wrist` counter reports very sparsely (one event across three test workouts). Now both
+>   the counter and `TYPE_STEP_DETECTOR` are registered: the detector keeps the readout live, the
+>   counter fills in detector drops (screen off); the two are tracked separately and the total is
+>   the **larger** of them, never their sum. Each registration (start, resume) re-baselines the
+>   counter, which also fixes steps walked while **paused** being credited after resume.
+> - **Upload.** FitPub ingests steps only from FIT (`FitParser`: `totalSteps = session.totalStrides
+>   * 2`; `GpxParser` ignores steps). `WorkoutFitWriter` now stamps `totalStrides` (steps / 2,
+>   rounded up) on the session and lap — so FitPub shows an odd total one higher. Decision
+>   (2026-10-14): **always upload the FIT when one exists** — the phone relay
+>   (`PhoneWorkoutSyncWorker`) no longer falls back to GPX when the calorie opt-in is off; GPX is only
+>   the fallback for a workout without a FIT. The watch's direct upload already sent FIT.
+> - **Phone display.** `ActivityDetailBody` shows a "Steps" row (`Format.steps`, locale digit
+>   grouping) only when `metrics.totalSteps` is present. **Deliberate deviation from 1.x web parity**
+>   — the FitPub web UI stores and returns `totalSteps` but never displays it; added at the
+>   maintainer's request.
+> - No server change: `totalSteps` was already stored and returned by `ActivityMetricsDTO`.
+>   Activities uploaded before this change carry no steps and show no row.
+>
+> See docs/WEAR.md → "Upload format and steps". Verify with a few minutes of real walking: the watch
+> count rises live, and the uploaded activity's `metrics.totalSteps` is roughly that count.

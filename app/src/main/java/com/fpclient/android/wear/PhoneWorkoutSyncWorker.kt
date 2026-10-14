@@ -69,7 +69,11 @@ class PhoneWorkoutSyncWorker(
                 )
                 if (success) amendedFit else fit
             } else {
-                gpx.takeIf { it.isFile } ?: fit
+                // Prefer the FIT even without calories: it is the only format whose step total
+                // FitPub ingests (`session.totalStrides`; its GPX parser ignores steps), and it
+                // carries the same track and heart rate. GPX remains the fallback for watches
+                // that did not produce a FIT.
+                fit?.takeIf { it.isFile } ?: gpx
             }
 
             if (uploadFile == null || !uploadFile.isFile) {

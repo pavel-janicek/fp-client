@@ -143,6 +143,9 @@ object Format {
 
     fun calories(cal: Int?): String = cal?.let { "$it kcal" } ?: "—"
 
+    /** Step total with locale digit grouping ("12,345"); "—" when the activity has none. */
+    fun steps(steps: Int?): String = steps?.let { String.format(Locale.getDefault(), "%,d", it) } ?: "—"
+
     private val dayFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
     private val dayTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy · HH:mm", Locale.getDefault())
 

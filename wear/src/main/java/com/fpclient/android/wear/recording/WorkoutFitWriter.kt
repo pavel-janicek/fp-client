@@ -86,6 +86,9 @@ object WorkoutFitWriter {
         }
 
         val totalDistanceMeters = tempAcc.distanceMeters.toFloat()
+        // FIT has no step total, only strides (one per two steps); FitPub's FitParser reads
+        // `session.totalStrides` and stores `totalSteps = strides * 2`.
+        val totalStrides = WorkoutFitWriter.stridesFor(tempAcc.steps)
 
         // 3. Lap Message
         val lapMesg = LapMesg().apply {
@@ -98,6 +101,7 @@ object WorkoutFitWriter {
             subSport = SubSport.GENERIC
             avgHr?.let { avgHeartRate = it }
             maxHr?.let { maxHeartRate = it }
+            totalStrides?.let { this.totalStrides = it }
         }
         encoder.write(lapMesg)
 
@@ -114,6 +118,7 @@ object WorkoutFitWriter {
             numLaps = 1
             avgHr?.let { avgHeartRate = it }
             maxHr?.let { maxHeartRate = it }
+            totalStrides?.let { this.totalStrides = it }
             sportProfileName = title
         }
         encoder.write(sessionMesg)
@@ -121,4 +126,7 @@ object WorkoutFitWriter {
         encoder.close()
         return fitFile
     }
+
+    /** Strides for [steps] (rounded to the nearest stride), or null when no steps were counted. */
+    internal fun stridesFor(steps: Int): Long? = steps.takeIf { it > 0 }?.let { (it + 1) / 2L }
 }
