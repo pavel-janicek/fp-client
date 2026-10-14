@@ -60,6 +60,13 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private var heartRateEverReceived = false
 
     /**
+     * Monotonic timestamp of the last heart-rate callback of *any* kind — including the 0 /
+     * no-contact readings the PPG emits while it warms up or is off the wrist. Any callback proves
+     * the listener is alive, so the watchdog must leave it alone.
+     */
+    private var heartRateLastEventAtMs = 0L
+
+    /**
      * True when the PPG last reported no skin contact. Kept so the UI can explain a "--" readout
      * (watch off wrist) rather than showing a bare dash that reads like a fault. Cleared on the
      * first valid BPM.
@@ -99,6 +106,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             WorkoutRecordingController.ACTION_START -> {
+                // Start is always a tap on an interactive screen; never inherit a stale ambient
+                // flag, which would throttle the live readout (BPM included) to once a minute.
+                ambientMode = false
                 if (session == null || session?.status == WorkoutStatus.STOPPED) {
                     beginSession(intent.getStringExtra(WorkoutRecordingController.EXTRA_ACTIVITY_TYPE))
                 }
@@ -136,6 +146,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             Sensor.TYPE_HEART_RATE -> {
                 val v = event.values.firstOrNull()?.toInt()
                 Log.i(TAG, "onSensorChanged TYPE_HEART_RATE raw=$v accuracy=${event.accuracy}")
+                heartRateLastEventAtMs = SystemClock.elapsedRealtime()
                 // accuracy == SENSOR_STATUS_NO_CONTACT (2) or UNRELIABLE (0) with a 0 value is the
                 // watch being off the wrist — the PPG has nothing to measure. A 0 is not a valid BPM
                 // and publishHeartRate() discards it, so track the reason here for the UI.
@@ -163,6 +174,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         heartRateEverReceived = false
         heartRateRecoveryAttempts = 0
         heartRateSensorArmedAtMs = 0L
+        heartRateLastEventAtMs = 0L
         heartRateNoContact = false
         val fresh = WorkoutSessionTransitions.start(
             now,
@@ -425,17 +437,19 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             Log.w(TAG, "ensureHeartRateSensor: no HR permission, skipping")
             return
         }
-        val sensors = sensorManager.getSensorList(Sensor.TYPE_HEART_RATE)
-        if (sensors.isEmpty()) {
-            Log.w(TAG, "ensureHeartRateSensor: no TYPE_HEART_RATE sensors present")
+        // One listener on one sensor. Registering every TYPE_HEART_RATE variant (wake-up and
+        // non-wake-up are the same PPG) recorded each reading twice. Prefer the wake-up variant:
+        // it keeps delivering while the screen is off and the SoC would otherwise sleep.
+        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE, true)
+            ?: sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
+        if (sensor == null) {
+            Log.w(TAG, "ensureHeartRateSensor: no TYPE_HEART_RATE sensor present")
             return
         }
-        for (s in sensors) {
-            sensorManager.unregisterListener(this, s)
-            val ok = sensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_FASTEST)
-            Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${s.name} isWakeUp=${s.isWakeUpSensor}")
-        }
-        heartRateSensor = sensors.firstOrNull()
+        for (s in sensorManager.getSensorList(Sensor.TYPE_HEART_RATE)) sensorManager.unregisterListener(this, s)
+        val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+        Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name} isWakeUp=${sensor.isWakeUpSensor}")
+        heartRateSensor = sensor
         sensorsActive = true
         heartRateSensorArmedAtMs = SystemClock.elapsedRealtime()
         refreshAvailability()
@@ -485,6 +499,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val bpm = value?.takeIf { it in MIN_HEART_RATE_BPM..MAX_HEART_RATE_BPM } ?: return
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
         heartRateEverReceived = true
+        // A real reading means the listener works; let a later stall get the full re-arm budget.
+        heartRateRecoveryAttempts = 0
         // First live reading clears the heart-rate blocker notice, so it does not linger over a
         // readout that is now working.
         if (errorMessage == HEART_RATE_PERMISSION_HINT) errorMessage = null
@@ -531,19 +547,27 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     }
 
     /**
-     * A workout can start on location alone, so a missing body-sensors permission would otherwise be
-     * invisible: the session records fine and only the BPM readout stays "--". Report it once, with
-     * an actionable message, instead of leaving the user to guess.
+     * Re-arms the PPG listener only when it is genuinely starved: no heart-rate callback at all
+     * (not even a 0 / no-contact one) for [WorkoutHeartRateWatchdog.STALL_MS] since it was armed or last spoke.
+     *
+     * The window must comfortably exceed the PPG's warm-up. On the Xiaomi Watch 2 the first
+     * reading lands ~10 s after registration; the old 10 s watchdog re-armed right at that edge,
+     * and every re-arm restarted the warm-up — so BPM only appeared after the attempts ran out
+     * (~40 s), which looked like "switching apps fixes it". Covers mid-workout stalls too, not
+     * just a missing first reading.
      */
     private fun watchdogHeartRate() {
-        if (session?.status != WorkoutStatus.RECORDING) return
-        if (heartRateEverReceived) return
-        if (!hasHeartRatePermission()) return
-        if (heartRateSensorArmedAtMs == 0L) return
-        if (heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS) return
-        if (SystemClock.elapsedRealtime() - heartRateSensorArmedAtMs < HEART_RATE_WATCHDOG_MS) return
+        val rearm = WorkoutHeartRateWatchdog.shouldRearm(
+            isRecording = session?.status == WorkoutStatus.RECORDING,
+            hasPermission = hasHeartRatePermission(),
+            armedAtMs = heartRateSensorArmedAtMs,
+            lastEventAtMs = heartRateLastEventAtMs,
+            attempts = heartRateRecoveryAttempts,
+            nowMs = SystemClock.elapsedRealtime(),
+        )
+        if (!rearm) return
         heartRateRecoveryAttempts++
-        Log.w(TAG, "HR watchdog firing: no BPM within window, attempt=$heartRateRecoveryAttempts — re-arming platform sensor")
+        Log.w(TAG, "HR watchdog firing: no HR callback for ${WorkoutHeartRateWatchdog.STALL_MS / 1000}s, attempt=$heartRateRecoveryAttempts — re-arming platform sensor")
         ensureHeartRateSensor()
     }
 
@@ -592,7 +616,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     /** True once the watchdog has given up re-arming the PPG for this workout. */
     private fun hasExceededHeartRateRecovery(): Boolean =
-        heartRateRecoveryAttempts >= MAX_HEART_RATE_RECOVERY_ATTEMPTS
+        heartRateRecoveryAttempts >= WorkoutHeartRateWatchdog.MAX_ATTEMPTS
 
     private fun hasHeartRatePermission(): Boolean = WorkoutRecordingController.hasHeartRatePermission(this)
 
@@ -717,12 +741,6 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         private const val AMBIENT_TICK_INTERVAL_MS = 60_000L
         private const val MIN_HEART_RATE_BPM = 20
         private const val MAX_HEART_RATE_BPM = 250
-
-        /** No BPM within this window of arming means the listener is starved, not idle. */
-        private const val HEART_RATE_WATCHDOG_MS = 10_000L
-
-        /** Caps watchdog re-arms per workout so a watch off the wrist cannot loop forever. */
-        private const val MAX_HEART_RATE_RECOVERY_ATTEMPTS = 3
 
         /**
          * Shown when a workout is running but the body-sensors permission is absent — the workout
