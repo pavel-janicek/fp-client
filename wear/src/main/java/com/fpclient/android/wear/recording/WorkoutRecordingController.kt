@@ -29,20 +29,13 @@ object WorkoutRecordingController {
      * `targetSdk = 36` (see wear/build.gradle.kts) is the separate prerequisite that makes
      * `READ_HEART_RATE` *grantable* on API 36+ devices; it must stay, but it is not the request gate.
      */
-    fun bodySensorPermission(context: Context): String =
-        if (Build.VERSION.SDK_INT >= 36) {
-            READ_HEART_RATE_PERMISSION
-        } else {
-            Manifest.permission.BODY_SENSORS
-        }
+    fun bodySensorPermission(context: Context): String = Manifest.permission.BODY_SENSORS
 
     /**
-     * True when either body-sensors permission is granted. Accepting both keeps heart rate working
-     * across the permission migration (and across an upgrade that flips the target SDK) instead of
-     * demanding the exact one the current build happens to request.
+     * True when the body-sensors permission is granted.
      */
     fun hasHeartRatePermission(context: Context): Boolean =
-        isGranted(context, READ_HEART_RATE_PERMISSION) || isGranted(context, Manifest.permission.BODY_SENSORS)
+        isGranted(context, Manifest.permission.BODY_SENSORS)
 
     private fun isGranted(context: Context, permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -105,6 +98,4 @@ object WorkoutRecordingController {
             .putExtra(EXTRA_ACTIVITY_TYPE, activityType)
         if (foreground) ContextCompat.startForegroundService(context, intent) else context.startService(intent)
     }
-
-    internal const val READ_HEART_RATE_PERMISSION = "android.permission.health.READ_HEART_RATE"
 }

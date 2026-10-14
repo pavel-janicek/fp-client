@@ -22,11 +22,10 @@ import org.junit.Test
  */
 class WorkoutBodySensorPermissionTest {
 
-    /** Mirrors WorkoutRecordingController.bodySensorPermission(). Gate = device OS version. */
-    private fun bodySensorPermission(deviceSdkInt: Int): String =
-        if (deviceSdkInt >= 36) READ_HEART_RATE else BODY_SENSORS
+    /** Mirrors WorkoutRecordingController.bodySensorPermission(). Returns BODY_SENSORS across all API levels. */
+    private fun bodySensorPermission(deviceSdkInt: Int): String = BODY_SENSORS
 
-    /** Mirrors WorkoutRecordingController.hasHeartRatePermission() — accepts either grant. */
+    /** Mirrors WorkoutRecordingController.hasHeartRatePermission() — accepts BODY_SENSORS grant. */
     private fun hasHeartRatePermission(readHeartRateGranted: Boolean, bodySensorsGranted: Boolean): Boolean =
         readHeartRateGranted || bodySensorsGranted
 
@@ -35,11 +34,9 @@ class WorkoutBodySensorPermissionTest {
         locationGranted || hasHeartRate || activityGranted
 
     @Test
-    fun deviceOsVersionSelectsThePermissionThePlatformWillActuallyPromptFor() {
-        // API 36+ device: the health permission exists and (with targetSdk 36) is grantable.
-        assertEquals(READ_HEART_RATE, bodySensorPermission(deviceSdkInt = 36))
-        assertEquals(READ_HEART_RATE, bodySensorPermission(deviceSdkInt = 37))
-        // Older device (API ≤ 35): only BODY_SENSORS exists and can be prompted for.
+    fun deviceOsVersionSelectsBodySensorsPermissionForHardwarePpg() {
+        assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 36))
+        assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 37))
         assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 35))
         assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 34))
         assertEquals(BODY_SENSORS, bodySensorPermission(deviceSdkInt = 30))

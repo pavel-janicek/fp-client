@@ -12,10 +12,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-    <uses-permission
-        android:name="android.permission.BODY_SENSORS"
-        android:maxSdkVersion="35" />
-    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Marks this as a watch app rather than a phone-app variant; Play and the package manager
