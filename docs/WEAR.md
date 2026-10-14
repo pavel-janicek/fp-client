@@ -270,10 +270,9 @@ repo-specific choices:
 - **applicationId `com.fpclient.android` on both APKs** — Data Layer requires exact package and
  signing-certificate equality. The APKs install on separate devices; `wear_app.xml` points at
  this shared package identity.
-- **Same `versionCode`/`versionName` and same signing keystore** as `:app` (both modules read the
-  identical `KEYSTORE_*` environment variables; release builds are unsigned when unset, which the
-  F-Droid buildserver relies on). The version-bump step in `VERSION_CHECKLIST.md` now covers
-  both files.
+- **Unique `versionCode`, matching `versionName`, and same signing keystore** as `:app` (both modules read the
+  identical `KEYSTORE_*` environment variables; release builds are unsigned when unset).
+  The version-bump step in `VERSION_CHECKLIST.md` covers both files.
 - **Sensor permissions are runtime-gated** in the Workout screen. Optional GPS, heart-rate and
   step-counter hardware declarations let sensor-poor watches install and run gracefully; 9e adds
   `INTERNET` for direct upload.
