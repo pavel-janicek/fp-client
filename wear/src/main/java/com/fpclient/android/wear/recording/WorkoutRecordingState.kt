@@ -178,27 +178,12 @@ object WorkoutRecordingBus {
     private val mutableState = MutableStateFlow(WorkoutRecordingSnapshot())
     val state: StateFlow<WorkoutRecordingSnapshot> = mutableState
 
-    /**
-     * The newest snapshot, including ones published [quietly][publishQuietly]. In ambient mode the
-     * service stops notifying [state] observers on every sample (that would recompose the UI each
-     * second), so the workout screen reads this on each ambient tick instead.
-     */
-    @Volatile
-    var latest: WorkoutRecordingSnapshot = WorkoutRecordingSnapshot()
-        private set
-
     fun publish(snapshot: WorkoutRecordingSnapshot) {
-        latest = snapshot
         mutableState.value = snapshot
     }
 
-    /** Records [snapshot] as [latest] without waking [state] observers. */
-    fun publishQuietly(snapshot: WorkoutRecordingSnapshot) {
-        latest = snapshot
-    }
-
     fun publishPendingCount(count: Int) {
-        publish(mutableState.value.copy(pendingSyncCount = count.coerceAtLeast(0)))
+        mutableState.value = mutableState.value.copy(pendingSyncCount = count.coerceAtLeast(0))
     }
 }
 

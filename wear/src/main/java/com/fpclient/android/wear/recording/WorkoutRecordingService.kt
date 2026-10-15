@@ -559,9 +559,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         runCatching {
             trackStore.append(current.startedAtEpochMs, event)
             metrics.add(event)
-            // In ambient the screen only redraws on ambient ticks and reads the bus's `latest`
-            // then; notifying observers per sample would just recompose it every second.
-            if (ambientMode) publish(notifyObservers = false) else publish()
+            if (!ambientMode) publish()
         }.onFailure {
             publishError("Workout data could not be saved. Stop the workout and check watch storage.")
             stopSession()
@@ -604,7 +602,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         ensureHeartRateSensor()
     }
 
-    private fun publish(notifyObservers: Boolean = true) {
+    private fun publish() {
         val current = session
         val now = System.currentTimeMillis()
         val movingMs = current?.movingMsAt(now) ?: 0L
@@ -621,7 +619,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 availability = availability,
                 errorMessage = errorMessage,
             )
-        if (notifyObservers) WorkoutRecordingBus.publish(snapshot) else WorkoutRecordingBus.publishQuietly(snapshot)
+        WorkoutRecordingBus.publish(snapshot)
     }
 
     private fun publishError(message: String) {
