@@ -76,6 +76,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
      */
     private var heartRateLastEventAtMs = 0L
 
+    /** Wall-clock time of the last valid BPM published this service run; null until one arrives. */
+    private var heartRateAtEpochMs: Long? = null
+
     /**
      * True when the PPG last reported no skin contact. Kept so the UI can explain a "--" readout
      * (watch off wrist) rather than showing a bare dash that reads like a fault. Cleared on the
@@ -185,6 +188,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         heartRateRecoveryAttempts = 0
         heartRateSensorArmedAtMs = 0L
         heartRateLastEventAtMs = 0L
+        heartRateAtEpochMs = null
         heartRateNoContact = false
         val fresh = WorkoutSessionTransitions.start(
             now,
@@ -525,6 +529,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val bpm = value?.takeIf { it in MIN_HEART_RATE_BPM..MAX_HEART_RATE_BPM } ?: return
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
         heartRateEverReceived = true
+        heartRateAtEpochMs = System.currentTimeMillis()
         // A real reading means the listener works; let a later stall get the full re-arm budget.
         heartRateRecoveryAttempts = 0
         // First live reading clears the heart-rate blocker notice, so it does not linger over a
@@ -554,7 +559,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         runCatching {
             trackStore.append(current.startedAtEpochMs, event)
             metrics.add(event)
-            if (!ambientMode) publish()
+            // In ambient the screen only redraws on ambient ticks and reads the bus's `latest`
+            // then; notifying observers per sample would just recompose it every second.
+            if (ambientMode) publish(notifyObservers = false) else publish()
         }.onFailure {
             publishError("Workout data could not be saved. Stop the workout and check watch storage.")
             stopSession()
@@ -597,23 +604,24 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         ensureHeartRateSensor()
     }
 
-    private fun publish() {
+    private fun publish(notifyObservers: Boolean = true) {
         val current = session
         val now = System.currentTimeMillis()
         val movingMs = current?.movingMsAt(now) ?: 0L
-        WorkoutRecordingBus.publish(
+        val snapshot =
             WorkoutRecordingSnapshot(
                 session = current,
                 elapsedMs = current?.liveElapsedMs(SystemClock.elapsedRealtime(), now) ?: 0L,
                 movingMs = movingMs,
                 heartRateBpm = metrics.heartRateBpm,
+                heartRateAtEpochMs = heartRateAtEpochMs,
                 distanceMeters = metrics.distanceMeters,
                 paceSecondsPerKm = WorkoutMath.paceSecondsPerKm(movingMs, metrics.distanceMeters),
                 steps = metrics.steps,
                 availability = availability,
                 errorMessage = errorMessage,
-            ),
-        )
+            )
+        if (notifyObservers) WorkoutRecordingBus.publish(snapshot) else WorkoutRecordingBus.publishQuietly(snapshot)
     }
 
     private fun publishError(message: String) {

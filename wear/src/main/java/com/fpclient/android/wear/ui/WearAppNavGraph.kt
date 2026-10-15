@@ -132,7 +132,7 @@ fun WearAppNavGraph(
             }
             WorkoutControlScreen(
                 activityType = selectedActivityType,
-                snapshot = workoutSnapshot,
+                liveSnapshot = workoutSnapshot,
                 permissionError = workoutPermissionError,
                 onStart = onStartWorkout,
                 onPause = onPauseWorkout,

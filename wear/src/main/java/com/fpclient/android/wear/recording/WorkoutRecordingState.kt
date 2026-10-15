@@ -107,6 +107,12 @@ data class WorkoutRecordingSnapshot(
     val elapsedMs: Long = 0L,
     val movingMs: Long = 0L,
     val heartRateBpm: Int? = null,
+    /**
+     * Wall-clock time [heartRateBpm] was measured during this service run; null when the value
+     * was only replayed from the track file (e.g. after a restart). Lets the UI blank a reading
+     * that has gone stale instead of showing it as live indefinitely.
+     */
+    val heartRateAtEpochMs: Long? = null,
     val distanceMeters: Double = 0.0,
     val paceSecondsPerKm: Long? = null,
     val steps: Int = 0,
@@ -151,16 +157,48 @@ object WorkoutSessionTransitions {
     )
 }
 
+/**
+ * How old a BPM may be and still be shown. The PPG delivers ~1 Hz, so anything older means the
+ * readings stopped; a frozen number would be read as live.
+ */
+const val HEART_RATE_STALE_MS = 15_000L
+
+/**
+ * [WorkoutRecordingSnapshot.heartRateBpm] if it was measured within [HEART_RATE_STALE_MS] of
+ * [nowEpochMs], else null. A value with no measurement time (replayed from the track after a
+ * restart) is never shown as live.
+ */
+fun WorkoutRecordingSnapshot.liveHeartRateBpm(nowEpochMs: Long): Int? {
+    val bpm = heartRateBpm ?: return null
+    val measuredAt = heartRateAtEpochMs ?: return null
+    return bpm.takeIf { nowEpochMs - measuredAt <= HEART_RATE_STALE_MS }
+}
+
 object WorkoutRecordingBus {
     private val mutableState = MutableStateFlow(WorkoutRecordingSnapshot())
     val state: StateFlow<WorkoutRecordingSnapshot> = mutableState
 
+    /**
+     * The newest snapshot, including ones published [quietly][publishQuietly]. In ambient mode the
+     * service stops notifying [state] observers on every sample (that would recompose the UI each
+     * second), so the workout screen reads this on each ambient tick instead.
+     */
+    @Volatile
+    var latest: WorkoutRecordingSnapshot = WorkoutRecordingSnapshot()
+        private set
+
     fun publish(snapshot: WorkoutRecordingSnapshot) {
+        latest = snapshot
         mutableState.value = snapshot
     }
 
+    /** Records [snapshot] as [latest] without waking [state] observers. */
+    fun publishQuietly(snapshot: WorkoutRecordingSnapshot) {
+        latest = snapshot
+    }
+
     fun publishPendingCount(count: Int) {
-        mutableState.value = mutableState.value.copy(pendingSyncCount = count.coerceAtLeast(0))
+        publish(mutableState.value.copy(pendingSyncCount = count.coerceAtLeast(0)))
     }
 }
 

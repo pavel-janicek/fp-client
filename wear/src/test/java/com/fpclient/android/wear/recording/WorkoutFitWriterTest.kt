@@ -44,10 +44,12 @@ class WorkoutFitWriterTest {
             decode.read(input, broadcaster)
         }
 
-        assertEquals(3, records.size)
+        // One record per GPS fix; the HR-only event at 2_000 is not a record of its own (a
+        // position-less record would split FitPub's elevation segments) but still counts toward
+        // the session average below.
+        assertEquals(2, records.size)
         assertEquals(100.toShort(), records[0].heartRate)
-        assertEquals(120.toShort(), records[1].heartRate)
-        assertEquals(140.toShort(), records[2].heartRate)
+        assertEquals(140.toShort(), records[1].heartRate)
 
         // Lat 50.0 degrees -> semicircles: (50.0 / 180.0 * 2^31) = 596523235
         assertEquals(596523235, records[0].positionLat)
@@ -108,5 +110,39 @@ class WorkoutFitWriterTest {
         assertEquals(1L, WorkoutFitWriter.stridesFor(1))
         assertEquals(4L, WorkoutFitWriter.stridesFor(7))
         assertEquals(500L, WorkoutFitWriter.stridesFor(1_000))
+    }
+
+    @Test
+    fun gpsWorkoutWritesOnlyPositionedRecordsCarryingTheNearestHeartRate() {
+        // Regression for makni.cz activity 82bb40f7 (3.1.0): elevationGain was null because HR-
+        // and steps-only records sat between GPS records, and FitParser opens a new elevation
+        // segment at every record without a position — leaving each GPS point alone.
+        val directory = Files.createTempDirectory("fit-gps-merge-test").toFile()
+        val session = WorkoutSessionTransitions.start(1_000L, WorkoutActivityType.WALK)
+        val events = (0 until 10).flatMap { i ->
+            val t = 1_000L + i * 1_000L
+            listOf(
+                WorkoutTrackEvent(t, 50.0 + i * 0.0001, 14.0, altitudeMeters = 500.0 + i, accuracyMeters = 5.0),
+                WorkoutTrackEvent(t + 300L, heartRateBpm = 100 + i),
+                WorkoutTrackEvent(t + 600L, steps = (i + 1) * 2),
+            )
+        }
+
+        val fitFile = WorkoutFitWriter.write(directory, session, events, 11_000L)
+
+        val records = mutableListOf<RecordMesg>()
+        val decode = Decode()
+        val broadcaster = MesgBroadcaster(decode)
+        broadcaster.addListener(RecordMesgListener { mesg -> records.add(mesg) })
+        FileInputStream(fitFile).use { decode.read(it, broadcaster) }
+
+        assertEquals(10, records.size)
+        assertTrue(records.all { it.positionLat != null && it.positionLong != null })
+        assertTrue(records.all { it.heartRate != null })
+        // Nearest HR to the fix at t is the reading 300 ms later.
+        assertEquals(100.toShort(), records.first().heartRate)
+        assertEquals(109.toShort(), records.last().heartRate)
+
+        directory.deleteRecursively()
     }
 }

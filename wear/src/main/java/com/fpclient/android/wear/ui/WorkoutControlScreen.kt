@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.AmbientMode
+import androidx.wear.compose.foundation.AmbientTickEffect
 import androidx.wear.compose.foundation.LocalAmbientModeManager
 import androidx.wear.compose.foundation.rememberAmbientModeManager
 import androidx.wear.compose.material.Button
@@ -31,7 +33,9 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.fpclient.android.wear.recording.WorkoutActivityType
 import com.fpclient.android.wear.recording.WorkoutHeartRateZone
+import com.fpclient.android.wear.recording.WorkoutRecordingBus
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
+import com.fpclient.android.wear.recording.liveHeartRateBpm
 import com.fpclient.android.wear.recording.WorkoutStatus
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -39,7 +43,7 @@ import java.util.Locale
 @Composable
 fun WorkoutControlScreen(
     activityType: WorkoutActivityType,
-    snapshot: WorkoutRecordingSnapshot,
+    liveSnapshot: WorkoutRecordingSnapshot,
     permissionError: String?,
     onStart: (WorkoutActivityType) -> Unit,
     onPause: () -> Unit,
@@ -53,13 +57,30 @@ fun WorkoutControlScreen(
     val haptic = LocalHapticFeedback.current
     val ambientManager = rememberAmbientModeManager()
     CompositionLocalProvider(LocalAmbientModeManager provides ambientManager) {
-        val isAmbient = LocalAmbientModeManager.current?.currentAmbientMode is AmbientMode.Ambient
-        val currentType = snapshot.session?.activityType ?: activityType
-        val zone = WorkoutHeartRateZone.fromBpm(snapshot.heartRateBpm)
+        val ambientModeManager = LocalAmbientModeManager.current
+        val isAmbient = ambientModeManager?.currentAmbientMode is AmbientMode.Ambient
+        var wallClockNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-        // One-second UI tick: keeps the on-screen active duration timer moving live
-        // while recording, anchored to the session's moving time (excluding pauses).
-        var wallClockNow by remember { mutableStateOf(System.currentTimeMillis()) }
+        // Ambient frame. In ambient the system only puts a new frame on the display on ambient
+        // ticks (~once a minute); recompositions in between never reach the screen. Without this
+        // the screen froze on whatever was drawn when it dimmed — "--" before the first reading,
+        // later a stale "91" for twenty minutes (makni.cz 82bb40f7, 3.1.0) while the sensor kept
+        // delivering 1 Hz. So in ambient the screen shows a snapshot captured on each tick.
+        var ambientFrame by remember { mutableStateOf<WorkoutRecordingSnapshot?>(null) }
+        LaunchedEffect(isAmbient) {
+            ambientFrame = if (isAmbient) WorkoutRecordingBus.latest else null
+            wallClockNow = System.currentTimeMillis()
+        }
+        ambientModeManager?.AmbientTickEffect {
+            ambientFrame = WorkoutRecordingBus.latest
+            wallClockNow = System.currentTimeMillis()
+        }
+        val snapshot = ambientFrame ?: liveSnapshot
+
+        val currentType = snapshot.session?.activityType ?: activityType
+        // A reading older than the stale window is not shown as if it were live.
+        val heartRateBpm = snapshot.liveHeartRateBpm(wallClockNow)
+        val zone = WorkoutHeartRateZone.fromBpm(heartRateBpm)
         val recording = snapshot.status == WorkoutStatus.RECORDING
 
         // Keyed on `recording` too: the ambient state is only forwarded while a workout runs, so a
@@ -67,8 +88,11 @@ fun WorkoutControlScreen(
         // once recording begins. A stale "ambient" in the service throttles every live update —
         // BPM included — to once a minute while this screen's own timer keeps ticking.
         LaunchedEffect(isAmbient, recording) { onAmbientModeChanged(isAmbient) }
-        LaunchedEffect(recording) {
-            while (recording) {
+        // One-second UI tick: keeps the on-screen active duration timer moving live while
+        // recording, anchored to the session's moving time (excluding pauses). Interactive only —
+        // in ambient the tick above advances it, as the platform expects.
+        LaunchedEffect(recording, isAmbient) {
+            while (recording && !isAmbient) {
                 delay(1_000L)
                 wallClockNow = System.currentTimeMillis()
             }
@@ -136,11 +160,11 @@ fun WorkoutControlScreen(
                 // Show the live value in ambient mode too. Ambient used to blank this to "--"
                 // (via `takeUnless { isAmbient }`), which is exactly what a runner sees when they
                 // glance at a dimmed watch mid-workout — the number they most want, hidden. The
-                // last known reading is shown frozen (ambient throttles updates, which is correct);
-                // only the *color* is dropped to white, keeping OLED burn-in safety.
+                // reading is refreshed on each ambient tick (about once a minute); only the *color*
+                // is dropped to white, keeping OLED burn-in safety.
                 item {
                     Text(
-                        text = snapshot.heartRateBpm?.toString() ?: "--",
+                        text = heartRateBpm?.toString() ?: "--",
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isAmbient) Color.White else zone?.toColor() ?: Color.LightGray,

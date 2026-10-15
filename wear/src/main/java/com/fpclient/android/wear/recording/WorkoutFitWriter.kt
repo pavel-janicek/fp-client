@@ -57,20 +57,33 @@ object WorkoutFitWriter {
             WorkoutActivityType.OTHER -> Sport.GENERIC
         }
 
-        // Filter events that carry HR, GPS, or steps
-        val recordEvents = events.filter {
-            it.heartRateBpm != null || (it.latitude != null && it.longitude != null) || it.steps != null
-        }
+        // One record per GPS fix, tagged with the nearest heart-rate reading — the same shape as
+        // the GPX export. FitPub's FitParser starts a new elevation segment at every record
+        // without a position, so interleaving separate HR-only / steps-only records (HR ~1 Hz,
+        // steps on their own cadence) left every GPS point alone in its segment: no elevation
+        // gain could be computed (`elevationGain` null), and no track point carried HR either.
+        // Workouts without any GPS fix (indoor) keep one record per HR/steps event.
+        val hasGps = events.any { it.isGpsFix() }
+        val heartRateTimeline = events
+            .mapNotNull { event -> event.heartRateBpm?.takeIf { it in 1..300 }?.let { event.timeEpochMs to it } }
+            .sortedBy { it.first }
 
+        // Every event feeds the accumulator (pause boundaries reset the distance segment, step
+        // events carry the running total); only the selected ones become records.
         val tempAcc = WorkoutMetricsAccumulator()
 
-        for (event in recordEvents) {
+        for (event in events) {
             tempAcc.add(event)
+            val writeRecord = if (hasGps) event.isGpsFix() else event.heartRateBpm != null || event.steps != null
+            if (!writeRecord) continue
+            val heartRate = if (hasGps) {
+                WorkoutExportWriter.nearestHeartRate(heartRateTimeline, event.timeEpochMs)
+            } else {
+                event.heartRateBpm?.takeIf { it in 1..300 }
+            }
             val record = RecordMesg().apply {
                 timestamp = DateTime(Date(event.timeEpochMs))
-                event.heartRateBpm?.takeIf { it in 1..300 }?.let {
-                    heartRate = it.toShort()
-                }
+                heartRate?.let { this.heartRate = it.toShort() }
                 if (event.latitude != null && event.longitude != null) {
                     positionLat = (event.latitude / 180.0 * 2147483648.0).toInt()
                     positionLong = (event.longitude / 180.0 * 2147483648.0).toInt()
@@ -126,6 +139,10 @@ object WorkoutFitWriter {
         encoder.close()
         return fitFile
     }
+
+    /** A fix the GPX export would also keep as a trackpoint. */
+    private fun WorkoutTrackEvent.isGpsFix(): Boolean =
+        latitude != null && longitude != null && accuracyMeters != null
 
     /** Strides for [steps] (rounded to the nearest stride), or null when no steps were counted. */
     internal fun stridesFor(steps: Int): Long? = steps.takeIf { it > 0 }?.let { (it + 1) / 2L }
