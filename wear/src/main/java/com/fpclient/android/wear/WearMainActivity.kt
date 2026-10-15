@@ -96,11 +96,11 @@ class WearMainActivity : ComponentActivity() {
                         com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this).resetRelayFlags()
                         com.fpclient.android.wear.recording.WorkoutSyncScheduler.enqueue(this)
                     },
-                    onAmbientModeChanged = { isAmbient ->
+                    onLowPowerModeChanged = { lowPower ->
                         if (workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.RECORDING ||
                             workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.PAUSED
                         ) {
-                            WorkoutRecordingController.setAmbientMode(this, isAmbient)
+                            WorkoutRecordingController.setLowPowerMode(this, lowPower)
                         }
                     },
                 )

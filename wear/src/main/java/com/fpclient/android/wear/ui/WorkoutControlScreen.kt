@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +26,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.wear.compose.foundation.AmbientMode
 import androidx.wear.compose.foundation.AmbientTickEffect
 import androidx.wear.compose.foundation.LocalAmbientModeManager
@@ -55,7 +60,7 @@ fun WorkoutControlScreen(
     onStop: () -> Unit,
     onSyncPending: () -> Unit = {},
     onDiscardPending: () -> Unit = {},
-    onAmbientModeChanged: (Boolean) -> Unit,
+    onLowPowerModeChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -70,11 +75,17 @@ fun WorkoutControlScreen(
         val zone = WorkoutHeartRateZone.fromBpm(heartRateBpm)
         val recording = snapshot.status == WorkoutStatus.RECORDING
 
-        // Keyed on `recording` too: the ambient state is only forwarded while a workout runs, so a
-        // change that happened just before Start (or while this screen was away) must be re-sent
-        // once recording begins. A stale "ambient" in the service throttles every live update —
-        // BPM included — to once a minute while this screen's own timer keeps ticking.
-        LaunchedEffect(isAmbient, recording) { onAmbientModeChanged(isAmbient) }
+        // The service only needs live updates while this screen is visible and awake: dimmed,
+        // backgrounded (lifecycle below STARTED) or navigated away from, it switches to low power
+        // and lets the PPG and GPS batch. Keyed on `recording` too: the state is only forwarded
+        // while a workout runs, so a change that happened just before Start must be re-sent once
+        // recording begins. A stale "low power" in the service throttles every live update — BPM
+        // included — to once a minute while this screen's own timer keeps ticking.
+        val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+        val visible = lifecycleState.isAtLeast(Lifecycle.State.STARTED)
+        LaunchedEffect(isAmbient, visible, recording) { onLowPowerModeChanged(isAmbient || !visible) }
+        val latestOnLowPowerModeChanged by rememberUpdatedState(onLowPowerModeChanged)
+        DisposableEffect(Unit) { onDispose { latestOnLowPowerModeChanged(true) } }
 
         // Ambient shows only the clock and what is recording; waking the screen (wrist raise /
         // tap) brings the full live workout back. Workout data is deliberately not drawn while

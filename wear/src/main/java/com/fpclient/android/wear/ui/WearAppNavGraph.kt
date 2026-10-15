@@ -60,7 +60,7 @@ fun WearAppNavGraph(
     onSyncPending: () -> Unit = {},
     onDiscardPending: () -> Unit = {},
     onResolvePending: () -> Unit = {},
-    onAmbientModeChanged: (Boolean) -> Unit = {},
+    onLowPowerModeChanged: (Boolean) -> Unit = {},
     onRequestSensorPermissions: () -> Unit = {},
     permissionRefreshKey: Int = 0,
     navController: NavHostController = rememberSwipeDismissableNavController(),
@@ -143,7 +143,7 @@ fun WearAppNavGraph(
                 },
                 onSyncPending = onSyncPending,
                 onDiscardPending = onDiscardPending,
-                onAmbientModeChanged = onAmbientModeChanged,
+                onLowPowerModeChanged = onLowPowerModeChanged,
             )
         }
     }

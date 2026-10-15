@@ -12,10 +12,12 @@ import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
+import android.hardware.SensorEventListener2
 import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.location.LocationRequest
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
@@ -63,6 +65,15 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private var lastRawStepCounter: Float? = null
     private var heartRateSensor: Sensor? = null
 
+    /** The one live PPG registration; events from any other [HeartRateListener] are ignored. */
+    private var heartRateListener: HeartRateListener? = null
+
+    /**
+     * Sensor timestamp of the last heart-rate event recorded. A batched → live switch briefly has
+     * two listeners on the same PPG, so the same sample can arrive twice; this drops the repeat.
+     */
+    private var lastHeartRateEventNanos = 0L
+
     /** Monotonic timestamp of the last PPG (re-)registration, used by the HR watchdog. */
     private var heartRateSensorArmedAtMs = 0L
 
@@ -90,10 +101,24 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private var heartRateRecoveryAttempts = 0
 
     private var locationActive = false
+
+    /** True while the GPS registration lets the GNSS chip batch fixes instead of waking the SoC. */
+    private var locationBatched = false
     private var sensorsActive = false
     private var errorMessage: String? = null
     private var ticker: Job? = null
-    private var ambientMode = false
+
+    /**
+     * True while nobody is looking at the live workout: the screen is dimmed (ambient), the user
+     * left the workout screen, or the app is in the background. Live readouts are then throttled
+     * and the PPG and GPS batch their samples in hardware, so the SoC can sleep between batches.
+     */
+    private var lowPowerMode = false
+
+    /** Callbacks waiting for the batched sensors to hand over what they buffered. */
+    private val drainCallbacks = mutableListOf<() -> Unit>()
+    private var pendingFlushes = 0
+    private var drainTimeout: Job? = null
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) = onGpsFix(location)
@@ -101,6 +126,19 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         override fun onProviderDisabled(provider: String) = refreshAvailability()
         @Deprecated("Deprecated in Java")
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+        override fun onFlushComplete(requestCode: Int) = onBatchFlushed()
+    }
+
+    /**
+     * One PPG registration. A fresh object per registration lets a live and a batched
+     * registration overlap for a moment (make-before-break), so the PPG is never switched off
+     * between them and does not restart its ~10 s warm-up.
+     */
+    private inner class HeartRateListener(val batched: Boolean) : SensorEventListener2 {
+        override fun onSensorChanged(event: SensorEvent) = onHeartRateEvent(event)
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) =
+            this@WorkoutRecordingService.onAccuracyChanged(sensor, accuracy)
+        override fun onFlushCompleted(sensor: Sensor?) = onBatchFlushed()
     }
 
     override fun onCreate() {
@@ -119,31 +157,40 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             WorkoutRecordingController.ACTION_START -> {
-                // Start is always a tap on an interactive screen; never inherit a stale ambient
+                // Start is always a tap on an interactive screen; never inherit a stale low-power
                 // flag, which would throttle the live readout (BPM included) to once a minute.
-                ambientMode = false
+                lowPowerMode = false
                 if (session == null || session?.status == WorkoutStatus.STOPPED) {
                     beginSession(intent.getStringExtra(WorkoutRecordingController.EXTRA_ACTIVITY_TYPE))
                 }
                 else promoteAndRestartSensors()
             }
-            WorkoutRecordingController.ACTION_PAUSE -> pauseSession()
+            // Pause and stop first collect what the PPG and GPS still hold in their batches, so
+            // no sample recorded before the tap lands after the PAUSE / STOP boundary or is lost.
+            WorkoutRecordingController.ACTION_PAUSE -> drainBatches(::pauseSession)
             WorkoutRecordingController.ACTION_RESUME -> resumeSession()
-            WorkoutRecordingController.ACTION_STOP -> stopSession()
-            WorkoutRecordingController.ACTION_AMBIENT -> {
-                ambientMode = intent.getBooleanExtra(WorkoutRecordingController.EXTRA_IS_AMBIENT, false)
+            WorkoutRecordingController.ACTION_STOP -> drainBatches(::stopSession)
+            WorkoutRecordingController.ACTION_LOW_POWER -> {
+                lowPowerMode = intent.getBooleanExtra(WorkoutRecordingController.EXTRA_LOW_POWER, false)
                 if (session?.status == WorkoutStatus.RECORDING) {
                     ticker?.cancel()
                     startTicker()
+                    applyPowerMode()
                 }
             }
-            else -> restoreAfterRestart()
+            else -> {
+                // Restarted by the system: no workout screen is attached until one says so.
+                lowPowerMode = true
+                restoreAfterRestart()
+            }
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
         ticker?.cancel()
+        drainTimeout?.cancel()
+        drainCallbacks.clear()
         stopLocation()
         stopPlatformSensors()
         trackStore.close()
@@ -153,24 +200,41 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?) = null
 
+    /** Step sensors only; heart rate arrives through [HeartRateListener]. */
     override fun onSensorChanged(event: SensorEvent) {
         if (session?.status != WorkoutStatus.RECORDING) return
         when (event.sensor.type) {
-            Sensor.TYPE_HEART_RATE -> {
-                val v = event.values.firstOrNull()?.toInt()
-                Log.i(TAG, "onSensorChanged TYPE_HEART_RATE raw=$v accuracy=${event.accuracy}")
-                heartRateLastEventAtMs = SystemClock.elapsedRealtime()
-                // accuracy == SENSOR_STATUS_NO_CONTACT (2) or UNRELIABLE (0) with a 0 value is the
-                // watch being off the wrist — the PPG has nothing to measure. A 0 is not a valid BPM
-                // and publishHeartRate() discards it, so track the reason here for the UI.
-                heartRateNoContact = v == 0 || event.accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT
-                if (v != null && v != 0) heartRateNoContact = false
-                publishHeartRate(v)
-            }
-            Sensor.TYPE_STEP_COUNTER -> onStepCounter(event.values.firstOrNull())
-            Sensor.TYPE_STEP_DETECTOR -> onStepDetected()
+            Sensor.TYPE_STEP_COUNTER -> onStepCounter(event.values.firstOrNull(), sensorEventEpochMs(event))
+            Sensor.TYPE_STEP_DETECTOR -> onStepDetected(sensorEventEpochMs(event))
         }
     }
+
+    private fun onHeartRateEvent(event: SensorEvent) {
+        if (session?.status != WorkoutStatus.RECORDING) return
+        if (event.timestamp <= lastHeartRateEventNanos) return
+        lastHeartRateEventNanos = event.timestamp
+        val v = event.values.firstOrNull()?.toInt()
+        // Per-sample logging kept the log buffer busy at 1 Hz for the whole workout; enable with
+        // `adb shell setprop log.tag.FitPubWearHR DEBUG` when diagnosing the PPG.
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "HR event raw=$v accuracy=${event.accuracy}")
+        heartRateLastEventAtMs = SystemClock.elapsedRealtime()
+        // accuracy == SENSOR_STATUS_NO_CONTACT (2) or UNRELIABLE (0) with a 0 value is the
+        // watch being off the wrist — the PPG has nothing to measure. A 0 is not a valid BPM
+        // and publishHeartRate() discards it, so track the reason here for the UI.
+        heartRateNoContact = v == 0 || event.accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT
+        if (v != null && v != 0) heartRateNoContact = false
+        publishHeartRate(v, sensorEventEpochMs(event))
+    }
+
+    /**
+     * Wall-clock time the sample was measured. A batched sample is delivered up to
+     * [LOW_POWER_REPORT_LATENCY_MS] late, so the delivery time would smear the track.
+     */
+    private fun sensorEventEpochMs(event: SensorEvent): Long = WorkoutMath.sensorEventEpochMs(
+        eventNanos = event.timestamp,
+        nowEpochMs = System.currentTimeMillis(),
+        nowElapsedNanos = SystemClock.elapsedRealtimeNanos(),
+    )
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         Log.i(TAG, "onAccuracyChanged sensor=${sensor?.type} accuracy=$accuracy")
@@ -190,6 +254,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         heartRateLastEventAtMs = 0L
         heartRateAtEpochMs = null
         heartRateNoContact = false
+        lastHeartRateEventNanos = 0L
         val fresh = WorkoutSessionTransitions.start(
             now,
             WorkoutActivityType.fromStorage(activityTypeName),
@@ -329,6 +394,8 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         reportHeartRateBlockerIfNeeded()
         startLocation()
         startPlatformSensors()
+        // Already-running registrations keep their old delivery mode; bring them in line.
+        applyPowerMode()
     }
 
     private fun enterForeground(): Boolean {
@@ -382,7 +449,25 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             refreshAvailability()
             return
         }
-        try {
+        locationActive = registerLocation(batched = lowPowerMode)
+        refreshAvailability()
+    }
+
+    /**
+     * (Re-)registers GPS updates. Batched, the GNSS chip keeps a 1 s fix rate but holds the fixes
+     * and hands them over every [LOW_POWER_REPORT_LATENCY_MS] instead of waking the SoC each
+     * second. Registering the same listener again replaces its request without stopping GNSS.
+     */
+    private fun registerLocation(batched: Boolean): Boolean = try {
+        if (Build.VERSION.SDK_INT >= 31) {
+            val request = LocationRequest.Builder(LOCATION_INTERVAL_MS)
+                .setQuality(LocationRequest.QUALITY_HIGH_ACCURACY)
+                .setMinUpdateDistanceMeters(LOCATION_MIN_DISTANCE_METERS)
+                .setMaxUpdateDelayMillis(if (batched) LOW_POWER_REPORT_LATENCY_MS else 0L)
+                .build()
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, request, mainExecutor, locationListener)
+            locationBatched = batched
+        } else {
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
                 LOCATION_INTERVAL_MS,
@@ -390,19 +475,82 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 locationListener,
                 mainLooper,
             )
-            locationActive = true
-        } catch (_: SecurityException) {
-            locationActive = false
-        } catch (_: IllegalArgumentException) {
-            locationActive = false
+            locationBatched = false
         }
-        refreshAvailability()
+        true
+    } catch (_: SecurityException) {
+        false
+    } catch (_: IllegalArgumentException) {
+        false
     }
 
     private fun stopLocation() {
         if (!locationActive) return
         locationManager.removeUpdates(locationListener)
         locationActive = false
+        locationBatched = false
+    }
+
+    /** Moves the PPG and GPS registrations to match [lowPowerMode]. */
+    private fun applyPowerMode() {
+        if (session?.status != WorkoutStatus.RECORDING) return
+        if (lowPowerMode) {
+            if (heartRateListener?.batched == false) switchHeartRateListener(batched = true)
+            if (locationActive && !locationBatched) registerLocation(batched = true)
+        } else {
+            // Collect the buffered samples first, then go live; the live readout refreshes once
+            // they are in, rather than jumping back and forth.
+            drainBatches {
+                if (lowPowerMode || session?.status != WorkoutStatus.RECORDING) return@drainBatches
+                if (heartRateListener?.batched == true) switchHeartRateListener(batched = false)
+                if (locationActive && locationBatched) registerLocation(batched = false)
+                publish()
+            }
+        }
+    }
+
+    /**
+     * Runs [then] once the batched PPG / GPS samples have been delivered, or right away when
+     * nothing is batched. A flush that never reports back is given up on after
+     * [DRAIN_TIMEOUT_MS], so a pause or stop can never hang.
+     */
+    private fun drainBatches(then: () -> Unit) {
+        drainCallbacks += then
+        if (pendingFlushes > 0) return
+        heartRateListener?.takeIf { it.batched }?.let {
+            if (sensorManager.flush(it)) pendingFlushes++
+        }
+        if (locationActive && locationBatched && Build.VERSION.SDK_INT >= 31) {
+            runCatching {
+                locationManager.requestFlush(LocationManager.GPS_PROVIDER, locationListener, FLUSH_REQUEST_CODE)
+                pendingFlushes++
+            }
+        }
+        if (pendingFlushes == 0) {
+            finishDrain()
+            return
+        }
+        drainTimeout?.cancel()
+        drainTimeout = serviceScope.launch {
+            delay(DRAIN_TIMEOUT_MS)
+            Log.w(TAG, "Batch flush timed out with $pendingFlushes pending")
+            finishDrain()
+        }
+    }
+
+    private fun onBatchFlushed() {
+        if (pendingFlushes == 0) return
+        pendingFlushes--
+        if (pendingFlushes == 0) finishDrain()
+    }
+
+    private fun finishDrain() {
+        pendingFlushes = 0
+        drainTimeout?.cancel()
+        drainTimeout = null
+        val callbacks = drainCallbacks.toList()
+        drainCallbacks.clear()
+        callbacks.forEach { it() }
     }
 
     private fun onGpsFix(location: Location) {
@@ -472,14 +620,39 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             Log.w(TAG, "ensureHeartRateSensor: no TYPE_HEART_RATE sensor present")
             return
         }
-        for (s in sensorManager.getSensorList(Sensor.TYPE_HEART_RATE)) sensorManager.unregisterListener(this, s)
-        val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST)
-        Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name} isWakeUp=${sensor.isWakeUpSensor}")
+        heartRateListener?.let(sensorManager::unregisterListener)
+        heartRateListener = null
+        val listener = HeartRateListener(batched = lowPowerMode)
+        val ok = registerHeartRate(listener, sensor)
+        Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name} isWakeUp=${sensor.isWakeUpSensor} batched=${listener.batched}")
+        if (ok) heartRateListener = listener
         heartRateSensor = sensor
         sensorsActive = true
         heartRateSensorArmedAtMs = SystemClock.elapsedRealtime()
         refreshAvailability()
     }
+
+    /**
+     * Swaps the PPG between live and batched delivery without a gap: the new registration is
+     * made before the old one is dropped, so the sensor stays on and skips the warm-up a full
+     * re-arm costs. Samples both registrations deliver are dropped by [lastHeartRateEventNanos].
+     */
+    private fun switchHeartRateListener(batched: Boolean) {
+        val sensor = heartRateSensor ?: return
+        val old = heartRateListener ?: return
+        val replacement = HeartRateListener(batched)
+        if (!registerHeartRate(replacement, sensor)) return
+        heartRateListener = replacement
+        sensorManager.unregisterListener(old)
+    }
+
+    private fun registerHeartRate(listener: HeartRateListener, sensor: Sensor): Boolean =
+        sensorManager.registerListener(
+            listener,
+            sensor,
+            SensorManager.SENSOR_DELAY_FASTEST,
+            if (listener.batched) (LOW_POWER_REPORT_LATENCY_MS * 1_000L).toInt() else 0,
+        )
 
     private fun stopFallbackHeartRate() {
         // Keep the hardware PPG heart-rate sensor active continuously during recording
@@ -489,12 +662,14 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private fun stopPlatformSensors() {
         if (!sensorsActive) return
         sensorManager.unregisterListener(this)
+        heartRateListener?.let(sensorManager::unregisterListener)
+        heartRateListener = null
         sensorsActive = false
         heartRateSensor = null
         stepSensors = emptyList()
     }
 
-    private fun onStepCounter(rawValue: Float?) {
+    private fun onStepCounter(rawValue: Float?, timeEpochMs: Long) {
         val raw = rawValue?.takeIf { it >= 0f } ?: return
         val previous = lastRawStepCounter
         lastRawStepCounter = raw
@@ -510,32 +685,32 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         appendEvent(
             current,
             WorkoutTrackEvent(
-                timeEpochMs = System.currentTimeMillis(),
+                timeEpochMs = timeEpochMs,
                 steps = newTotal,
                 rawStepCounter = raw,
             ),
         )
     }
 
-    private fun onStepDetected() {
+    private fun onStepDetected(timeEpochMs: Long) {
         val current = session ?: return
         appendEvent(
             current,
-            WorkoutTrackEvent(timeEpochMs = System.currentTimeMillis(), steps = metrics.steps + 1),
+            WorkoutTrackEvent(timeEpochMs = timeEpochMs, steps = metrics.steps + 1),
         )
     }
 
-    private fun publishHeartRate(value: Int?) {
+    private fun publishHeartRate(value: Int?, measuredAtEpochMs: Long) {
         val bpm = value?.takeIf { it in MIN_HEART_RATE_BPM..MAX_HEART_RATE_BPM } ?: return
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
         heartRateEverReceived = true
-        heartRateAtEpochMs = System.currentTimeMillis()
+        heartRateAtEpochMs = measuredAtEpochMs
         // A real reading means the listener works; let a later stall get the full re-arm budget.
         heartRateRecoveryAttempts = 0
         // First live reading clears the heart-rate blocker notice, so it does not linger over a
         // readout that is now working.
         if (errorMessage == HEART_RATE_PERMISSION_HINT) errorMessage = null
-        appendEvent(current, WorkoutTrackEvent(timeEpochMs = System.currentTimeMillis(), heartRateBpm = bpm))
+        appendEvent(current, WorkoutTrackEvent(timeEpochMs = measuredAtEpochMs, heartRateBpm = bpm))
     }
 
     private fun reportHeartRateBlockerIfNeeded() {
@@ -559,7 +734,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         runCatching {
             trackStore.append(current.startedAtEpochMs, event)
             metrics.add(event)
-            if (!ambientMode) publish()
+            if (!lowPowerMode) publish()
         }.onFailure {
             publishError("Workout data could not be saved. Stop the workout and check watch storage.")
             stopSession()
@@ -572,7 +747,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             while (isActive && session?.status == WorkoutStatus.RECORDING) {
                 publish()
                 watchdogHeartRate()
-                delay(if (ambientMode) AMBIENT_TICK_INTERVAL_MS else TICK_INTERVAL_MS)
+                delay(if (lowPowerMode) LOW_POWER_TICK_INTERVAL_MS else TICK_INTERVAL_MS)
             }
         }
     }
@@ -770,7 +945,16 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         private const val LOCATION_INTERVAL_MS = 1_000L
         private const val LOCATION_MIN_DISTANCE_METERS = 1f
         private const val TICK_INTERVAL_MS = 1_000L
-        private const val AMBIENT_TICK_INTERVAL_MS = 60_000L
+        private const val LOW_POWER_TICK_INTERVAL_MS = 60_000L
+
+        /**
+         * How long the PPG and GNSS may hold samples while nobody watches the live readout. Below
+         * [WorkoutHeartRateWatchdog.STALL_MS] so a batch never looks like a starved PPG, and
+         * small enough for the GNSS batch buffer (20 fixes on the Xiaomi Watch 2) at 1 fix/s.
+         */
+        private const val LOW_POWER_REPORT_LATENCY_MS = 15_000L
+        private const val DRAIN_TIMEOUT_MS = 2_000L
+        private const val FLUSH_REQUEST_CODE = 1
         private const val MIN_HEART_RATE_BPM = 20
         private const val MAX_HEART_RATE_BPM = 250
 

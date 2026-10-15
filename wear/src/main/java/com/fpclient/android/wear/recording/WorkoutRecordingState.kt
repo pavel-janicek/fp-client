@@ -205,6 +205,16 @@ object WorkoutMath {
         return 2 * EARTH_RADIUS_METERS * kotlin.math.asin(kotlin.math.sqrt(haversine.coerceIn(0.0, 1.0)))
     }
 
+    /**
+     * Wall-clock time of a sensor sample. [eventNanos] is `SensorEvent.timestamp`, on the
+     * `elapsedRealtimeNanos` clock; batched or buffered samples arrive late, so the delivery time
+     * is not the measurement time. Never in the future, which a clock skew could otherwise give.
+     */
+    fun sensorEventEpochMs(eventNanos: Long, nowEpochMs: Long, nowElapsedNanos: Long): Long {
+        val ageMs = ((nowElapsedNanos - eventNanos) / 1_000_000L).coerceAtLeast(0L)
+        return nowEpochMs - ageMs
+    }
+
     fun paceSecondsPerKm(movingMs: Long, distanceMeters: Double): Long? {
         if (movingMs <= 0L || distanceMeters < MIN_PACE_DISTANCE_METERS) return null
         return (movingMs / 1000.0 / (distanceMeters / 1000.0)).toLong().coerceAtLeast(0L)
