@@ -22,4 +22,11 @@ class WorkoutSensorEventTimeTest {
     fun `a sample stamped after now is clamped to now`() {
         assertEquals(nowEpochMs, WorkoutMath.sensorEventEpochMs(nowElapsedNanos + 5_000_000L, nowEpochMs, nowElapsedNanos))
     }
+
+    @Test
+    fun `a replayed pre-workout sample is placed at registration, not before START`() {
+        val replayed3MinAgo = nowElapsedNanos - 180_000_000_000L
+        val registeredAt = nowEpochMs - 1_000L
+        assertEquals(registeredAt, WorkoutMath.sensorEventEpochMs(replayed3MinAgo, nowEpochMs, nowElapsedNanos, registeredAt))
+    }
 }

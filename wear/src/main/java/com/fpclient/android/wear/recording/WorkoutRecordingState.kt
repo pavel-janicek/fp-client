@@ -208,11 +208,13 @@ object WorkoutMath {
     /**
      * Wall-clock time of a sensor sample. [eventNanos] is `SensorEvent.timestamp`, on the
      * `elapsedRealtimeNanos` clock; batched or buffered samples arrive late, so the delivery time
-     * is not the measurement time. Never in the future, which a clock skew could otherwise give.
+     * is not the measurement time. Never in the future, which a clock skew could otherwise give,
+     * and never before [notBeforeEpochMs]: an on-change sensor replays its last, pre-workout value
+     * on registration, and that sample must not land before the workout's START.
      */
-    fun sensorEventEpochMs(eventNanos: Long, nowEpochMs: Long, nowElapsedNanos: Long): Long {
+    fun sensorEventEpochMs(eventNanos: Long, nowEpochMs: Long, nowElapsedNanos: Long, notBeforeEpochMs: Long = 0L): Long {
         val ageMs = ((nowElapsedNanos - eventNanos) / 1_000_000L).coerceAtLeast(0L)
-        return nowEpochMs - ageMs
+        return maxOf(nowEpochMs - ageMs, minOf(notBeforeEpochMs, nowEpochMs))
     }
 
     fun paceSecondsPerKm(movingMs: Long, distanceMeters: Double): Long? {
