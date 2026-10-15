@@ -1,8 +1,10 @@
 package com.fpclient.android.ui.profile
 
 import com.fpclient.android.data.dto.HeatmapViewport
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -450,69 +452,89 @@ private fun ProfileBody(
     modifier: Modifier = Modifier,
 ) {
     val user = ui.user ?: return
+    val headerUrl = com.fpclient.android.util.UrlBuilder.avatar(serverUrl, user.profileHeaderUrl)
     LazyColumn(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                UserAvatar(avatarUrl = user.avatarUrl, displayName = user.displayName, serverUrl = serverUrl, size = 84)
-                Spacer(Modifier.height(10.dp))
-                Text(user.displayName ?: "", style = MaterialTheme.typography.titleLarge)
-                Text("@${user.username}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (!user.bio.isNullOrBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    // Bios come back HTML-encoded (e.g. emoticons as &#x1F609;) — decode
-                    // them so Compose renders the same characters as the web client.
-                    Text(Format.decodeHtml(user.bio) ?: user.bio, style = MaterialTheme.typography.bodyMedium)
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+            // The uploaded profile header, edge to edge behind the top of the card; the avatar
+            // overlaps its lower edge. Without a header the card keeps its plain layout.
+            Box {
+                if (headerUrl != null) ProfileHeaderImage(headerUrl)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = if (headerUrl != null) HEADER_HEIGHT - HEADER_AVATAR_OVERLAP else 16.dp,
+                        bottom = 16.dp,
+                    ),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    StatPill("Activities", (user.activityCount ?: 0).toString(), Modifier.weight(1f))
-                    StatPill(
-                        "Followers",
-                        (user.followersCount ?: 0).toString(),
-                        Modifier.weight(1f),
-                        onClick = { onOpenFollowers(user.username ?: "me") },
-                    )
-                    StatPill(
-                        "Following",
-                        (user.followingCount ?: 0).toString(),
-                        Modifier.weight(1f),
-                        onClick = { onOpenFollowing(user.username ?: "me") },
-                    )
-                }
-                if (isMe) {
-                    OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
-                    // Feedback to the instance admins. Sign-in only, which is exactly when
-                    // this branch renders (the Me tab shows GuestMePanel otherwise).
-                    OutlinedButton(
-                        onClick = onSendFeedback,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    ) { Text("Send feedback") }
-                } else {
-                    val status = ui.followStatus
-                    val following = status?.isAccepted == true
-                    Button(onClick = onToggleFollow, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            when {
-                                status?.isFollowRequestReceived == true -> "Respond to follow request"
-                                following -> "Unfollow"
-                                status?.isPending == true -> "Requested"
-                                else -> "Follow"
-                            },
+                    if (headerUrl != null) {
+                        // A ring in the background colour keeps the avatar readable over the photo.
+                        Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.background) {
+                            Box(Modifier.padding(3.dp)) {
+                                UserAvatar(avatarUrl = user.avatarUrl, displayName = user.displayName, serverUrl = serverUrl, size = 84)
+                            }
+                        }
+                    } else {
+                        UserAvatar(avatarUrl = user.avatarUrl, displayName = user.displayName, serverUrl = serverUrl, size = 84)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(user.displayName ?: "", style = MaterialTheme.typography.titleLarge)
+                    Text("@${user.username}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!user.bio.isNullOrBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        // Bios come back HTML-encoded (e.g. emoticons as &#x1F609;) — decode
+                        // them so Compose renders the same characters as the web client.
+                        Text(Format.decodeHtml(user.bio) ?: user.bio, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        StatPill("Activities", (user.activityCount ?: 0).toString(), Modifier.weight(1f))
+                        StatPill(
+                            "Followers",
+                            (user.followersCount ?: 0).toString(),
+                            Modifier.weight(1f),
+                            onClick = { onOpenFollowers(user.username ?: "me") },
+                        )
+                        StatPill(
+                            "Following",
+                            (user.followingCount ?: 0).toString(),
+                            Modifier.weight(1f),
+                            onClick = { onOpenFollowing(user.username ?: "me") },
                         )
                     }
-                    if (ui.error != null) {
-                        Text(
-                            ui.error!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                    if (isMe) {
+                        OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
+                        // Feedback to the instance admins. Sign-in only, which is exactly when
+                        // this branch renders (the Me tab shows GuestMePanel otherwise).
+                        OutlinedButton(
+                            onClick = onSendFeedback,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        ) { Text("Send feedback") }
+                    } else {
+                        val status = ui.followStatus
+                        val following = status?.isAccepted == true
+                        Button(onClick = onToggleFollow, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                when {
+                                    status?.isFollowRequestReceived == true -> "Respond to follow request"
+                                    following -> "Unfollow"
+                                    status?.isPending == true -> "Requested"
+                                    else -> "Follow"
+                                },
+                            )
+                        }
+                        if (ui.error != null) {
+                            Text(
+                                ui.error!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -570,6 +592,37 @@ private fun ProfileBody(
                 }
             }
         }
+    }
+}
+
+private val HEADER_HEIGHT = 150.dp
+
+/** How far the avatar (84 dp + 3 dp ring) reaches up into the header: about half of it. */
+private val HEADER_AVATAR_OVERLAP = 45.dp
+
+/**
+ * The profile header photo. A dark gradient along the top keeps the overlaid toolbar icons
+ * (record / create / settings on the Me tab) legible over a light photo.
+ */
+@Composable
+private fun ProfileHeaderImage(url: String) {
+    Box(Modifier.fillMaxWidth().height(HEADER_HEIGHT)) {
+        coil.compose.AsyncImage(
+            model = url,
+            contentDescription = "Profile header",
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), androidx.compose.ui.graphics.Color.Transparent),
+                    ),
+                ),
+        )
     }
 }
 
