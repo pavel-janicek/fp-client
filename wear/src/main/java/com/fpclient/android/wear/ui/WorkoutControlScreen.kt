@@ -77,7 +77,7 @@ fun WorkoutControlScreen(
 
         // The service only needs live updates while this screen is visible and awake: dimmed,
         // backgrounded (lifecycle below STARTED) or navigated away from, it switches to low power
-        // and lets the PPG and GPS batch. Keyed on `recording` too: the state is only forwarded
+        // and publishes once a minute. Keyed on `recording` too: the state is only forwarded
         // while a workout runs, so a change that happened just before Start must be re-sent once
         // recording begins. A stale "low power" in the service throttles every live update — BPM
         // included — to once a minute while this screen's own timer keeps ticking.

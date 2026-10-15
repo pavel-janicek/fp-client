@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import com.fpclient.android.wear.auth.CredentialRequestResult
 import com.fpclient.android.wear.auth.WatchWearAuthRelay
 import com.fpclient.android.wear.auth.WearAuthStore
+import com.fpclient.android.wear.recording.HeartRatePrewarm
 import com.fpclient.android.wear.recording.WorkoutRecordingBus
 import com.fpclient.android.wear.recording.WorkoutRecordingController
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
@@ -31,6 +32,7 @@ class WearMainActivity : ComponentActivity() {
 
     private lateinit var authStore: WearAuthStore
     private lateinit var authRelay: WatchWearAuthRelay
+    private lateinit var heartRatePrewarm: HeartRatePrewarm
     private var phoneReachable by mutableStateOf<Boolean?>(null)
     /** Transient handshake status shown on Home until the phone answers (9b diagnostics). */
     private var authStatus by mutableStateOf<String?>(null)
@@ -41,6 +43,7 @@ class WearMainActivity : ComponentActivity() {
     private val workoutPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
+        heartRatePrewarm.start()
         startWorkoutIfAllowed()
     }
 
@@ -51,12 +54,14 @@ class WearMainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         permissionsVersion++
+        heartRatePrewarm.start()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         authStore = WearAuthStore(this)
         authRelay = WatchWearAuthRelay(this, authStore)
+        heartRatePrewarm = HeartRatePrewarm(this)
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val syncStore = com.fpclient.android.wear.recording.WatchWorkoutSyncStore(applicationContext)
             WorkoutRecordingBus.publishPendingCount(syncStore.all().size)
@@ -108,6 +113,18 @@ class WearMainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        WearLog.i(TAG, "onStart")
+        heartRatePrewarm.start()
+    }
+
+    override fun onStop() {
+        WearLog.i(TAG, "onStop")
+        heartRatePrewarm.stopLater()
+        super.onStop()
+    }
+
     private fun requestCredentials() {
         phoneReachable = null
         authStatus = "Looking for phone…"
@@ -149,6 +166,7 @@ class WearMainActivity : ComponentActivity() {
     }
 
     private fun startWorkoutIfAllowed() {
+        WearLog.i(TAG, "startWorkoutIfAllowed type=$pendingWorkoutType")
         if (!WorkoutRecordingController.canStart(this)) {
             workoutPermissionError = "Grant a health or location permission to start recording."
             return
@@ -157,3 +175,5 @@ class WearMainActivity : ComponentActivity() {
         workoutPermissionError = null
     }
 }
+
+private const val TAG = "WearMainActivity"

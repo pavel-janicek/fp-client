@@ -81,8 +81,7 @@ object WorkoutRecordingController {
 
     /**
      * Tells the service whether anyone is watching the live workout. Low power (screen dimmed,
-     * workout screen left, app in the background) throttles the live readout and lets the PPG
-     * and GPS batch samples in hardware.
+     * workout screen left, app in the background) throttles the live readout to once a minute.
      */
     fun setLowPowerMode(context: Context, lowPower: Boolean) {
         context.startService(

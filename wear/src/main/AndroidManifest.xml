@@ -28,6 +28,7 @@
          dataExtractionRules (Android 12+), which excludes every domain explicitly —
          see res/xml/data_extraction_rules.xml for what must never leave the watch. -->
     <application
+        android:name=".FitPubWearApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
