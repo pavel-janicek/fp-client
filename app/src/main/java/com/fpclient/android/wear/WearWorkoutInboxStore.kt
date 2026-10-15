@@ -27,6 +27,12 @@ data class WearWorkoutInboxEntry(
     val blocked: Boolean = false,
     val uploadedActivityId: String? = null,
     val fitFileName: String? = null,
+    /**
+     * The server refused this file (permanent 4xx, see `isPermanentUploadRejection`). It stays
+     * blocked with the server's message: the periodic worker no longer resends it every 15
+     * minutes; only a user-initiated sync ([WearWorkoutInboxStore.retryManually]) tries again.
+     */
+    val rejectedByServer: Boolean = false,
 )
 
 class WearWorkoutInboxStore(context: Context) {
@@ -72,8 +78,21 @@ class WearWorkoutInboxStore(context: Context) {
         writeEntries(readEntries().map { if (it.sessionId == sessionId) transform(it) else it })
     }
 
+    /**
+     * Automatic pass (start of every sync run): unblocks transient failures. Entries the server
+     * rejected stay blocked, keeping their message visible — resending them unchanged would only
+     * be rejected again.
+     */
     fun retryBlocked() = synchronized(lock) {
-        writeEntries(readEntries().map { it.copy(blocked = false, lastError = null) })
+        writeEntries(readEntries().afterAutomaticRetry())
+    }
+
+    /**
+     * User-initiated sync: gives the entry with [sessionId] (or, when null, every entry) another
+     * try — server-rejected ones included.
+     */
+    fun retryManually(sessionId: Long? = null) = synchronized(lock) {
+        writeEntries(readEntries().afterManualRetry(sessionId))
     }
 
     fun archiveSidecar(entry: WearWorkoutInboxEntry) {
@@ -143,3 +162,17 @@ class WearWorkoutInboxStore(context: Context) {
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
     }
 }
+
+/** [WearWorkoutInboxStore.retryBlocked] as a pure transform: server-rejected entries stay blocked. */
+internal fun List<WearWorkoutInboxEntry>.afterAutomaticRetry(): List<WearWorkoutInboxEntry> =
+    map { if (it.rejectedByServer) it else it.copy(blocked = false, lastError = null) }
+
+/** [WearWorkoutInboxStore.retryManually] as a pure transform; [sessionId] null means every entry. */
+internal fun List<WearWorkoutInboxEntry>.afterManualRetry(sessionId: Long?): List<WearWorkoutInboxEntry> =
+    map {
+        if (sessionId == null || it.sessionId == sessionId) {
+            it.copy(blocked = false, lastError = null, rejectedByServer = false)
+        } else {
+            it
+        }
+    }

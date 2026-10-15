@@ -1,5 +1,10 @@
 package com.fpclient.android.data.repository
 
+import com.fpclient.android.data.upload.ActivityArchive
+import com.fpclient.android.data.upload.PreparedUpload
+import com.fpclient.android.data.upload.RejectedUploadFileException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import android.content.Context
 import android.net.Uri
 import com.fpclient.android.data.dto.ActivityDto
@@ -109,7 +114,19 @@ class ActivityRepository(
         val file = copyUriToCache(context, uri)
             ?: return ApiResult.Error("Could not read the selected file")
         val name = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { null } ?: file.name
-        return uploadFile(file, name, title, description, visibility)
+        // A ZIP (e.g. Garmin Connect "Export original") is unwrapped to its single activity and
+        // discarded; one without exactly one supported activity is rejected without any request.
+        val prepared = withContext(Dispatchers.IO) { ActivityArchive.prepare(file, name, context.cacheDir) }
+        return when (prepared) {
+            is PreparedUpload.Rejected ->
+                ApiResult.Error(prepared.message, throwable = RejectedUploadFileException(prepared.message))
+            is PreparedUpload.Ready -> try {
+                uploadFile(prepared.file, prepared.name, title, description, visibility)
+            } finally {
+                // The cached copy is single-use; never leave it (or an unwrapped ZIP entry) behind.
+                prepared.file.delete()
+            }
+        }
     }
 
     /**

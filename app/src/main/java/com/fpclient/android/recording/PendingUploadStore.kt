@@ -38,6 +38,12 @@ data class PendingUpload(
     /** Message of the most recent failed attempt, shown in the pending list. */
     val lastError: String? = null,
     /**
+     * The most recent attempt was refused by the server for this file (a permanent 4xx, see
+     * `isPermanentUploadRejection`), not lost to the network. The app-start pass no longer
+     * resends it and a retry pass moves on past it; a user-driven retry still tries it again.
+     */
+    val rejectedByServer: Boolean = false,
+    /**
      * Metadata chosen on the post-workout summary screen, persisted on a failed attempt
      * so later automatic/manual retries replay exactly what the user entered.
      */
@@ -87,6 +93,7 @@ class PendingUploadStore(private val file: File) {
         description: String?,
         visibility: String?,
         activityType: String,
+        rejectedByServer: Boolean = false,
     ) = synchronized(lock) {
         val updated = read().map { entry ->
             if (entry.sessionId != sessionId) {
@@ -96,6 +103,7 @@ class PendingUploadStore(private val file: File) {
                     requestedByUser = true,
                     attempts = entry.attempts + 1,
                     lastError = error,
+                    rejectedByServer = rejectedByServer,
                     title = title ?: entry.title,
                     description = description ?: entry.description,
                     visibility = visibility ?: entry.visibility,

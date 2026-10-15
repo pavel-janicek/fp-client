@@ -80,7 +80,7 @@ fun WearWorkoutInboxScreen(
                 actions = {
                     if (entries.isNotEmpty()) {
                         IconButton(onClick = {
-                            container.wearWorkoutInboxStore.retryBlocked()
+                            container.wearWorkoutInboxStore.retryManually()
                             PhoneWorkoutSyncScheduler.enqueue(context)
                             scope.launch { snackbarHostState.showSnackbar("Sync triggered for all watch workouts") }
                         }) {
@@ -121,7 +121,7 @@ fun WearWorkoutInboxScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(onClick = {
-                        container.wearWorkoutInboxStore.retryBlocked()
+                        container.wearWorkoutInboxStore.retryManually()
                         PhoneWorkoutSyncScheduler.enqueue(context)
                         scope.launch { snackbarHostState.showSnackbar("Sync triggered") }
                     }) {
@@ -138,7 +138,7 @@ fun WearWorkoutInboxScreen(
                             entry = entry,
                             isSyncing = syncingSessionId == entry.sessionId,
                             onSync = {
-                                container.wearWorkoutInboxStore.retryBlocked()
+                                container.wearWorkoutInboxStore.retryManually(entry.sessionId)
                                 PhoneWorkoutSyncScheduler.enqueue(context)
                                 scope.launch { snackbarHostState.showSnackbar("Sync triggered for '${entry.title}'") }
                             },

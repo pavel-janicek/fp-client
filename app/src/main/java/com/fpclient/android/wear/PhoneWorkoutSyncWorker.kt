@@ -1,5 +1,6 @@
 package com.fpclient.android.wear
 
+import com.fpclient.android.data.network.isPermanentUploadRejection
 import android.net.Uri
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -125,6 +126,7 @@ class PhoneWorkoutSyncWorker(
                             attempts = it.attempts + 1,
                             lastError = result.message ?: "Workout upload failed",
                             blocked = !retryable,
+                            rejectedByServer = isPermanentUploadRejection(statusCode),
                         )
                     }
                     if (retryable) return Result.retry()
