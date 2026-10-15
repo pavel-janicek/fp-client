@@ -474,9 +474,8 @@ interface FitPubApi {
     // `HeatmapMapper`.)
     @GET("api/web/heatmap/me")
     suspend fun myHeatmap(): Response<HeatmapFeatureCollectionDto>
-
-    @POST("api/web/heatmap/me/rebuild")
-    suspend fun rebuildHeatmap(): Response<Unit>
+    // No rebuild call: FitPub #549 removed `POST /me/rebuild` — generation is a background job
+    // and `myHeatmap()` reports its state (`generationStatus`, `hasHeatmap`).
 
     // ------------------------------------------------------------------
     // Batch import

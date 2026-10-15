@@ -509,7 +509,12 @@ private fun ProfileBody(
         }
         val heatmap = ui.heatmap
         item {
-            HeatmapCard(points = heatmap?.points.orEmpty(), bounds = heatmap?.bounds)
+            HeatmapCard(
+                points = heatmap?.points.orEmpty(),
+                bounds = heatmap?.bounds,
+                generationStatus = heatmap?.generationStatus,
+                hasHeatmap = heatmap?.hasHeatmap,
+            )
         }
         // Summits reached — a profile feature, not an analytics one (the server's web client
         // keeps peaks under `templates/profile/`, none under `templates/analytics/`). Hidden

@@ -1,5 +1,7 @@
 package com.fpclient.android.ui.profile
 
+import androidx.compose.foundation.layout.Spacer
+import com.fpclient.android.data.dto.HeatmapMapper
 import android.view.MotionEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,9 +52,15 @@ fun HeatmapCard(
     points: List<HeatmapPointDto>,
     bounds: HeatmapBoundsDto?,
     modifier: Modifier = Modifier,
+    generationStatus: String? = null,
+    hasHeatmap: Boolean? = null,
 ) {
     val valid = points.filter { it.latitude != null && it.longitude != null }
-    if (valid.isEmpty()) return
+    // Like the web heatmap page: the generation status is always shown, the map only once a
+    // heatmap exists. Without a known status (older server) the card keeps its old rule —
+    // shown only when there are points to draw.
+    val status = HeatmapMapper.statusMessage(generationStatus)
+    if (valid.isEmpty() && status == null) return
     var expanded by rememberSaveable { mutableStateOf(false) }
 
     Card(modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -61,6 +69,30 @@ fun HeatmapCard(
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(start = 14.dp, top = 12.dp),
         )
+        status?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (generationStatus == "FAILED") {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp),
+            )
+        }
+        if (valid.isEmpty() || hasHeatmap == false) {
+            if (generationStatus == "NO_HEATMAP") {
+                Text(
+                    "No GPS tracks yet. Upload activities with GPS tracks to get started.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(14.dp),
+                )
+            } else {
+                Spacer(Modifier.height(12.dp))
+            }
+            return@Card
+        }
         Box {
             HeatmapCanvas(
                 points = valid,
