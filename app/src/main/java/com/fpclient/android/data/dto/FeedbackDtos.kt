@@ -1,5 +1,6 @@
 package com.fpclient.android.data.dto
 
+import com.fpclient.android.util.TextLimits
 import kotlinx.serialization.Serializable
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,28 @@ data class FeedbackSubmissionRequest(
     val message: String,
     val replyAllowed: Boolean = false,
 )
+
+/**
+ * The note appended to every feedback message. The endpoint belongs to the FitPub instance, so its
+ * admins read everything sent here — including reports that are really about this app, which
+ * they cannot fix. The note says where the message came from and where app bugs belong.
+ */
+object FeedbackMessage {
+    const val CLIENT_NOTE =
+        "This was sent using the FP Client app. If you believe the request is not related to " +
+            "FitPub, please raise a bug at https://github.com/pavel-janicek/fp-client/issues"
+    private const val SEPARATOR = "\n\n---\n"
+
+    /**
+     * What the user may type, so message + note still fit the server's limit. Rounded down to a
+     * whole hundred: the counter shows "… / 4800" rather than an odd "… / 4831", and a longer
+     * note simply drops it to the next hundred.
+     */
+    const val MAX_USER_LENGTH =
+        (TextLimits.FEEDBACK_MESSAGE - SEPARATOR.length - CLIENT_NOTE.length) / 100 * 100
+
+    fun withClientNote(userMessage: String): String = userMessage.trim() + SEPARATOR + CLIENT_NOTE
+}
 
 /** `POST /api/web/feedback` answers **201** with just the new id. */
 @Serializable
