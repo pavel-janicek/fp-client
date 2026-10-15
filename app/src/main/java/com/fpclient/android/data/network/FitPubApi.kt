@@ -472,8 +472,15 @@ interface FitPubApi {
     // not invent one. (The old `api/web/heatmap/user/{username}` call 404'd on every profile,
     // own included, and the GeoJSON payload it should have been reading is mapped by
     // `HeatmapMapper`.)
+    /** Without a viewport: every cell at the finest grid (the web's initial load). */
     @GET("api/web/heatmap/me")
-    suspend fun myHeatmap(): Response<HeatmapFeatureCollectionDto>
+    suspend fun myHeatmap(
+        @Query("minLon") minLon: Double? = null,
+        @Query("minLat") minLat: Double? = null,
+        @Query("maxLon") maxLon: Double? = null,
+        @Query("maxLat") maxLat: Double? = null,
+        @Query("zoom") zoom: Double? = null,
+    ): Response<HeatmapFeatureCollectionDto>
     // No rebuild call: FitPub #549 removed `POST /me/rebuild` — generation is a background job
     // and `myHeatmap()` reports its state (`generationStatus`, `hasHeatmap`).
 

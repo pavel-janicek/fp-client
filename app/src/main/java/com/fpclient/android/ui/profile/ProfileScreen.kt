@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.profile
 
+import com.fpclient.android.data.dto.HeatmapViewport
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -121,6 +122,13 @@ class ProfileViewModel(
         val localName = if (ActorHandle.isFullHandle(cleaned)) ActorHandle.localPart(cleaned) else cleaned.removePrefix("@")
         loadLocalProfile(localName.ifBlank { cleaned })
     }
+
+    /**
+     * Heatmap cells for the area the map now shows, at its zoom — the web's reload after a
+     * pan/zoom. Null on any failure (including the 429 rate limit), so the map keeps its cells.
+     */
+    suspend fun heatmapFor(viewport: HeatmapViewport): HeatmapResponse? =
+        (users.heatmap(viewport) as? ApiResult.Success)?.data
 
     /** Loads a remote (federated) actor discovered via WebFinger — no activities/heatmap available. */
     private fun loadRemoteProfile(handle: String) {
@@ -341,6 +349,7 @@ fun ProfileScreen(
                 onSendFeedback = onSendFeedback,
                 onOpenPeaks = onOpenPeaks,
                 onOpenPeak = onOpenPeak,
+                loadHeatmapViewport = vm::heatmapFor,
                 modifier = modifier,
             )
         }
@@ -437,6 +446,7 @@ private fun ProfileBody(
     onSendFeedback: () -> Unit = {},
     onOpenPeaks: (String) -> Unit = {},
     onOpenPeak: (String, Long) -> Unit = { _, _ -> },
+    loadHeatmapViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)? = null,
     modifier: Modifier = Modifier,
 ) {
     val user = ui.user ?: return
@@ -514,6 +524,8 @@ private fun ProfileBody(
                 bounds = heatmap?.bounds,
                 generationStatus = heatmap?.generationStatus,
                 hasHeatmap = heatmap?.hasHeatmap,
+                maxIntensity = heatmap?.maxIntensity,
+                loadViewport = loadHeatmapViewport,
             )
         }
         // Summits reached — a profile feature, not an analytics one (the server's web client

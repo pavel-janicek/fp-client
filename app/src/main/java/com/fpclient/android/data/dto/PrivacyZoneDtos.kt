@@ -57,6 +57,24 @@ data class HeatmapResponse(
     val generationStatus: String? = null,
     /** Whether a heatmap exists yet; null on servers that predate the field. */
     val hasHeatmap: Boolean? = null,
+    /**
+     * The account's highest per-cell count. The web scales every cell against it
+     * (`log(1 + intensity) / log(1 + maxIntensity)`), so the heat layer needs it too.
+     */
+    val maxIntensity: Int? = null,
+)
+
+/**
+ * The visible map area a heatmap is requested for — what the web page sends on every
+ * `moveend` (`minLon`, `minLat`, `maxLon`, `maxLat`, `zoom`); the server then aggregates the
+ * cells for that zoom (0.01° up to zoom 8, 0.001° to 12, 0.0001° beyond).
+ */
+data class HeatmapViewport(
+    val minLon: Double,
+    val minLat: Double,
+    val maxLon: Double,
+    val maxLat: Double,
+    val zoom: Double,
 )
 
 @Serializable
@@ -155,6 +173,7 @@ object HeatmapMapper {
             bounds = boundsOf(points),
             generationStatus = dto.generationStatus,
             hasHeatmap = dto.hasHeatmap,
+            maxIntensity = dto.maxIntensity,
         )
     }
 

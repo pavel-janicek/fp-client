@@ -27,6 +27,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import kotlin.math.floor
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -36,13 +38,17 @@ import com.fpclient.android.data.dto.HeatmapPointDto
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.simplefastpoint.SimpleFastPointOverlay
-import org.osmdroid.views.overlay.simplefastpoint.SimpleFastPointOverlayOptions
-import org.osmdroid.views.overlay.simplefastpoint.SimplePointTheme
+import com.fpclient.android.data.dto.HeatmapResponse
+import com.fpclient.android.data.dto.HeatmapViewport
+import androidx.compose.runtime.rememberUpdatedState
+import org.osmdroid.events.DelayedMapListener
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 
 /**
- * Activity-location heatmap rendered as a fast point overlay over an OSM base map,
- * mirroring the web app's profile heatmap. Shown only when the server returns points.
+ * Activity-location heatmap over an OSM base map, drawn like the web heatmap page — gradient
+ * blobs from [HeatmapOverlay], cells reloaded for the visible area after every pan/zoom.
  *
  * The card can be maximized: the "Enlarge heatmap" button opens the same map full-screen
  * (system Back closes it), just like the activity-detail track map.
@@ -54,6 +60,8 @@ fun HeatmapCard(
     modifier: Modifier = Modifier,
     generationStatus: String? = null,
     hasHeatmap: Boolean? = null,
+    maxIntensity: Int? = null,
+    loadViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)? = null,
 ) {
     val valid = points.filter { it.latitude != null && it.longitude != null }
     // Like the web heatmap page: the generation status is always shown, the map only once a
@@ -97,6 +105,8 @@ fun HeatmapCard(
             HeatmapCanvas(
                 points = valid,
                 bounds = bounds,
+                maxIntensity = maxIntensity,
+                loadViewport = loadViewport,
                 modifier = Modifier.fillMaxWidth().height(200.dp),
             )
             FilledTonalIconButton(
@@ -118,7 +128,13 @@ fun HeatmapCard(
         ) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-                    HeatmapCanvas(points = valid, bounds = bounds, modifier = Modifier.fillMaxSize())
+                    HeatmapCanvas(
+                        points = valid,
+                        bounds = bounds,
+                        maxIntensity = maxIntensity,
+                        loadViewport = loadViewport,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                     // Same translucent tonal button, same top-right corner as the
                     // "Enlarge heatmap" button — the familiar affordance closes the view.
                     FilledTonalIconButton(
@@ -150,18 +166,39 @@ fun HeatmapCard(
 private fun HeatmapCanvas(
     points: List<HeatmapPointDto>,
     bounds: HeatmapBoundsDto?,
+    maxIntensity: Int?,
+    loadViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)?,
     modifier: Modifier = Modifier,
 ) {
     // Frame the data once per point set, not on every recomposition: re-running
     // zoomToBoundingBox from the update block would snap the camera back under the
-    // user's finger mid-pan (scrolling the list recomposes the card).
+    // user's finger mid-pan (scrolling the list recomposes the card). Keyed on the initial
+    // (full) data only, so the per-viewport reloads below never re-frame the map.
     var fitted by remember { mutableStateOf(false) }
     LaunchedEffect(points, bounds) { fitted = false }
+
+    // Like the web page: after the map settles (500 ms, its `moveend` debounce) ask for the
+    // cells of the visible area at this zoom, which the server aggregates coarser when zoomed
+    // out. Each new viewport cancels the previous request, so only the newest one lands; a
+    // failure (e.g. the endpoint's 429 rate limit) keeps the cells already shown.
+    var viewport by remember { mutableStateOf<HeatmapViewport?>(null) }
+    var viewportData by remember(points) { mutableStateOf<HeatmapResponse?>(null) }
+    val currentLoad by rememberUpdatedState(loadViewport)
+    LaunchedEffect(viewport) {
+        val area = viewport ?: return@LaunchedEffect
+        currentLoad?.invoke(area)?.let { viewportData = it }
+    }
+    val shownPoints = viewportData?.points ?: points
+    val shownMax = viewportData?.maxIntensity ?: maxIntensity
 
     AndroidView(
         factory = { context ->
             MapView(context).apply {
                 setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                // Tiles at 256 dp, as in a browser: labels stay readable, and a zoom level then
+                // covers the same ground as on the web, which the heat radii (CSS px → dp) and
+                // the server's zoom-dependent grid both assume.
+                isTilesScaledToDpi = true
                 setMultiTouchControls(true)
                 setOnTouchListener { v, event ->
                     if (event.action == MotionEvent.ACTION_DOWN) {
@@ -169,14 +206,34 @@ private fun HeatmapCanvas(
                     }
                     false
                 }
+                overlays.add(HeatmapOverlay(context.resources.displayMetrics.density))
+                addMapListener(
+                    DelayedMapListener(
+                        object : MapListener {
+                            override fun onScroll(event: ScrollEvent?) = report(this@apply)
+                            override fun onZoom(event: ZoomEvent?) = report(this@apply)
+                            private fun report(map: MapView): Boolean {
+                                val box = map.boundingBox
+                                // The web skips a degenerate (single-point) box the same way.
+                                if (box.lonWest != box.lonEast && box.latSouth != box.latNorth) {
+                                    viewport = HeatmapViewport(
+                                        minLon = box.lonWest,
+                                        minLat = box.latSouth,
+                                        maxLon = box.lonEast,
+                                        maxLat = box.latNorth,
+                                        zoom = map.zoomLevelDouble,
+                                    )
+                                }
+                                return false
+                            }
+                        },
+                        VIEWPORT_RELOAD_DELAY_MS,
+                    ),
+                )
             }
         },
         update = { map ->
-            map.overlays.removeAll { it is SimpleFastPointOverlay }
-            val geoPoints = points.map { GeoPoint(it.latitude!!, it.longitude!!) }
-            val theme = SimplePointTheme(geoPoints.toList(), false)
-            val options = SimpleFastPointOverlayOptions.getDefaultStyle()
-            map.overlays.add(SimpleFastPointOverlay(theme, options))
+            map.overlays.filterIsInstance<HeatmapOverlay>().forEach { it.setPoints(shownPoints, shownMax) }
             if (!fitted) {
                 val box = if (bounds != null &&
                     bounds.minLatitude != null && bounds.minLongitude != null &&
@@ -184,16 +241,31 @@ private fun HeatmapCanvas(
                 ) {
                     BoundingBox(bounds.maxLatitude!!, bounds.maxLongitude!!, bounds.minLatitude!!, bounds.minLongitude!!)
                 } else {
-                    BoundingBox.fromGeoPoints(geoPoints)
+                    BoundingBox.fromGeoPoints(points.map { GeoPoint(it.latitude!!, it.longitude!!) })
                 }
                 map.post {
-                    map.zoomToBoundingBox(box.increaseByScale(1.15f), false)
+                    // Leaflet's fitBounds (what the web uses) snaps to a whole zoom level
+                    // (zoomSnap 1), which is what leaves room around the data; osmdroid fits a
+                    // fractional zoom edge to edge. So: fit with a border the size of a blob
+                    // (radius + blur at the widest), then round the zoom down like Leaflet.
+                    val border = (FIT_BORDER_DP * map.resources.displayMetrics.density).toInt()
+                    map.zoomToBoundingBox(box, false, border)
+                    map.controller.setZoom(floor(map.zoomLevelDouble))
                 }
                 fitted = true
             }
             map.invalidate()
         },
         onRelease = { map -> map.onDetach() },
-        modifier = modifier,
+        // osmdroid draws its tiles past its own bounds when the parent does not clip, which
+        // painted the map over the card's title and status line — and the heat layer, drawn
+        // within the bounds only, then looked cut off along the map's real edge.
+        modifier = modifier.clipToBounds(),
     )
 }
+
+/** Room kept around the data when framing it: the widest blob, radius 25 + blur 10 (dp). */
+private const val FIT_BORDER_DP = 35
+
+/** The web page's `moveend` debounce before reloading the visible area. */
+private const val VIEWPORT_RELOAD_DELAY_MS = 500L
