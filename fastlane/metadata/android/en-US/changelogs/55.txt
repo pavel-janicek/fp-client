@@ -1,0 +1,6 @@
+3.2.0 (release 3.2.0):
+- Upload a ZIP: open Garmin Connect's "Export Original" download in FP Client to upload the activity inside.
+- Watch: while the screen is dimmed it shows the time and the running workout; wake it for live data.
+- Watch: heart rate no longer freezes or shows a stale value.
+- Watch workouts now report elevation gain.
+- A file the server rejects no longer blocks or endlessly retries your other uploads.

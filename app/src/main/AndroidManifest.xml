@@ -75,8 +75,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- Share sheet / "Open with" for GPS track files (GPX, FIT). FIT has no
-                 registered MIME type (providers report it as octet-stream) and GPX is
-                 frequently reported as generic XML, so the generic types are matched too. -->
+                 registered MIME type (providers report it as octet-stream, sometimes
+                 application/vnd.ant.fit) and GPX is frequently reported as generic XML, so the
+                 generic types are matched too. ZIP covers Garmin Connect's web "Export
+                 original", a ZIP holding one FIT; the app unwraps it (ActivityArchive). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -84,6 +86,9 @@
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="application/xml" />
                 <data android:mimeType="text/xml" />
+                <data android:mimeType="application/vnd.ant.fit" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -93,6 +98,9 @@
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="application/xml" />
                 <data android:mimeType="text/xml" />
+                <data android:mimeType="application/vnd.ant.fit" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
         </activity>
         <service

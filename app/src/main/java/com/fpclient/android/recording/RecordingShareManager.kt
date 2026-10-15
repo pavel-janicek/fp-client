@@ -1,5 +1,6 @@
 package com.fpclient.android.recording
 
+import com.fpclient.android.data.network.isPermanentUploadRejection
 import android.content.Context
 import com.fpclient.android.data.dto.ActivityDto
 import com.fpclient.android.data.dto.ActivityUpdateRequest
@@ -184,6 +185,7 @@ class RecordingShareManager(
                     description = description,
                     visibility = visibility,
                     activityType = activityType,
+                    rejectedByServer = isPermanentUploadRejection(result.statusCode),
                 )
                 refresh()
                 result
@@ -192,32 +194,31 @@ class RecordingShareManager(
     }
 
     /**
-     * Retries pending uploads oldest-first, stopping at the first failure (a dead network
-     * would otherwise turn every entry's attempt counter into noise). Returns the number of
-     * workouts that made it to the server.
+     * Retries pending uploads oldest-first, stopping at the first transient failure (a dead
+     * network would otherwise turn every entry's attempt counter into noise). A workout the
+     * server refuses outright (permanent 4xx, e.g. a GPX without a single GPS fix) is passed
+     * over instead — stopping there would block every newer workout behind it for good. It
+     * stays in the list with the server's message until the user retries or discards it.
+     * Returns the number of workouts that made it to the server.
      *
      * [onlyUserRequested] is the fix for workouts being published without being asked for.
      * The app-start pass sets it, so it retries only entries the user actually tried to
      * share — a failed share still recovers on its own, which is what the pass is *for*. A
      * user-driven "share"/"retry" from the Record or summary screen leaves it false and
      * uploads everything pending, because at that point the user is explicitly saying "yes,
-     * all of these".
+     * all of these". The app-start pass also leaves server-rejected entries alone: resending
+     * an unchanged file on every launch would only be refused again.
      */
-    suspend fun retryPending(onlyUserRequested: Boolean = false): Int {
-        var uploaded = 0
-        for (entry in pendingStore.all().sortedBy { it.createdAtEpochMs }) {
-            if (onlyUserRequested && !entry.requestedByUser) continue
-            val result = upload(
+    suspend fun retryPending(onlyUserRequested: Boolean = false): Int =
+        retryPendingUploads(pendingStore.all(), onlyUserRequested) { entry ->
+            upload(
                 sessionId = entry.sessionId,
                 activityType = entry.activityType,
                 title = entry.title,
                 description = entry.description,
                 visibility = entry.visibility,
             )
-            if (result is ApiResult.Success) uploaded++ else break
         }
-        return uploaded
-    }
 
     /** Drops a recorded session without sharing it, removing its local files. */
     fun discard(sessionId: Long) {
@@ -242,4 +243,26 @@ class RecordingShareManager(
         const val GPX_PREFIX = "workout-"
         const val GPX_EXT = "gpx"
     }
+}
+
+/**
+ * The retry policy behind [RecordingShareManager.retryPending], kept free of Android so it can be
+ * unit-tested: oldest first; the app-start pass ([onlyUserRequested]) skips entries never shared
+ * and entries the server already refused; a permanent rejection is passed over, any other failure
+ * stops the pass. Returns how many uploads succeeded.
+ */
+internal suspend fun retryPendingUploads(
+    entries: List<PendingUpload>,
+    onlyUserRequested: Boolean,
+    upload: suspend (PendingUpload) -> ApiResult<*>,
+): Int {
+    var uploaded = 0
+    for (entry in entries.sortedBy { it.createdAtEpochMs }) {
+        if (onlyUserRequested && (!entry.requestedByUser || entry.rejectedByServer)) continue
+        when (val result = upload(entry)) {
+            is ApiResult.Success -> uploaded++
+            is ApiResult.Error -> if (!isPermanentUploadRejection(result.statusCode)) break
+        }
+    }
+    return uploaded
 }

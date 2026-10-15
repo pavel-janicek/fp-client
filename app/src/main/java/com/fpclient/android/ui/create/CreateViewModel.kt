@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.create
 
+import com.fpclient.android.data.upload.RejectedUploadFileException
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -62,6 +63,8 @@ class CreateViewModel(
         val busy: Boolean = false,
         val error: String? = null,
         val done: Boolean = false,
+        /** The chosen file was refused on the device (e.g. a ZIP without one activity): drop it. */
+        val fileRejected: Boolean = false,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -75,7 +78,10 @@ class CreateViewModel(
                     activitiesVersion.value += 1
                     _ui.value = UiState(done = true)
                 }
-                is ApiResult.Error -> _ui.value = UiState(error = r.message)
+                is ApiResult.Error -> _ui.value = UiState(
+                    error = r.message,
+                    fileRejected = r.throwable is RejectedUploadFileException,
+                )
             }
         }
     }

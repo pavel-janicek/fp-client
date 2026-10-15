@@ -12,8 +12,8 @@ instance — a federated, self-hosted fitness activity sharing platform (think "
 meets the Fediverse"). Enter your instance's URL on first launch (you can change it
 later in **Settings → Instance**), sign in, and:
 
-- **Track & share** — upload FIT / GPX / TCX files or log activities manually, view them
-  on an OpenStreetMap track, and share them with followers on any instance.
+- **Track & share** — upload FIT / GPX / TCX files (also inside a ZIP) or log activities
+  manually, view them on an OpenStreetMap track, and share them with followers on any instance.
 - **Timelines** — federated, public, and personal feeds of activities.
 - **Social** — comment, react, boost, and follow athletes; discover them via search.
 - **Notifications** — reactions, comments, and follows, with an unread badge. FP Client also
@@ -37,6 +37,34 @@ FP Client includes a standalone Wear OS companion module (`:wear`) that allows a
 - **Battery & Ambient Mode**: Designed for long activities (>6h battery life on continuous GPS+HR recording) with low-power always-on ambient display rendering.
 
 To install on a watch: download the standalone Wear OS app from Google Play on the watch or deploy directly via `./gradlew :wear:installDebug`.
+
+## Recorded on a Garmin? Uploading your activities
+
+FP Client does **not** connect to Garmin watches or to your Garmin Connect account, and it does
+not sync anything automatically. What it does is make the manual route short: Garmin Connect
+lets you download any activity as a file, and FP Client accepts that download exactly as Garmin
+provides it, so you never have to unpack or convert anything.
+
+**One activity** (requires FP Client 3.2.0 or newer):
+
+1. On [connect.garmin.com](https://connect.garmin.com) — your phone's browser works too — open the
+   activity and choose **Export Original** from its menu. Garmin downloads a ZIP containing the
+   original FIT file.
+2. Open the downloaded file and pick **FP Client**, or share it to FP Client. Alternatively, tap
+   **+** (*New activity*) on the timeline, keep **Upload file** selected, and choose the ZIP.
+3. Add a title and visibility if you like, and upload. FP Client takes the activity out of the ZIP
+   and sends only that; the ZIP itself is not kept.
+
+A ZIP must contain exactly one activity (FIT, GPX or TCX); other files in it are ignored. If there
+is none, or more than one, FP Client tells you why and uploads nothing.
+
+**Your whole history:** request a data export from your Garmin account (Account → *Data
+Management*). The activities sit in further ZIP files inside it, under
+`DI_CONNECT/DI-Connect-Uploaded-Files/`. Unzip the export once and upload those inner ZIP files in
+**Settings → Batch import activities**.
+
+Garmin and Garmin Connect are trademarks of Garmin Ltd. or its subsidiaries. FP Client is not
+affiliated with, endorsed by, or sponsored by Garmin.
 
 ## Where to get it
 

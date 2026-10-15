@@ -107,6 +107,12 @@ data class WorkoutRecordingSnapshot(
     val elapsedMs: Long = 0L,
     val movingMs: Long = 0L,
     val heartRateBpm: Int? = null,
+    /**
+     * Wall-clock time [heartRateBpm] was measured during this service run; null when the value
+     * was only replayed from the track file (e.g. after a restart). Lets the UI blank a reading
+     * that has gone stale instead of showing it as live indefinitely.
+     */
+    val heartRateAtEpochMs: Long? = null,
     val distanceMeters: Double = 0.0,
     val paceSecondsPerKm: Long? = null,
     val steps: Int = 0,
@@ -149,6 +155,23 @@ object WorkoutSessionTransitions {
         accumulatedMovingMs = session.movingMsAt(nowEpochMs),
         resumedAtEpochMs = null,
     )
+}
+
+/**
+ * How old a BPM may be and still be shown. The PPG delivers ~1 Hz, so anything older means the
+ * readings stopped; a frozen number would be read as live.
+ */
+const val HEART_RATE_STALE_MS = 15_000L
+
+/**
+ * [WorkoutRecordingSnapshot.heartRateBpm] if it was measured within [HEART_RATE_STALE_MS] of
+ * [nowEpochMs], else null. A value with no measurement time (replayed from the track after a
+ * restart) is never shown as live.
+ */
+fun WorkoutRecordingSnapshot.liveHeartRateBpm(nowEpochMs: Long): Int? {
+    val bpm = heartRateBpm ?: return null
+    val measuredAt = heartRateAtEpochMs ?: return null
+    return bpm.takeIf { nowEpochMs - measuredAt <= HEART_RATE_STALE_MS }
 }
 
 object WorkoutRecordingBus {

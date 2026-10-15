@@ -46,6 +46,16 @@ fun UploadForm(ui: CreateViewModel.UiState, vm: CreateViewModel, sharedUri: Uri?
         if (sharedUri != null) pickedName = resolveDisplayName(context, sharedUri) ?: "File selected"
     }
 
+    // A file refused on the device (a ZIP without exactly one activity) is already deleted by the
+    // repository; clear the selection too, so the button asks for a new file instead of
+    // offering to upload the rejected one again. The error message stays visible.
+    LaunchedEffect(ui.fileRejected) {
+        if (ui.fileRejected) {
+            pickedUri = null
+            pickedName = null
+        }
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             pickedUri = uri
@@ -78,7 +88,7 @@ fun UploadForm(ui: CreateViewModel.UiState, vm: CreateViewModel, sharedUri: Uri?
     }
     Spacer(Modifier.height(14.dp))
     OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-        Text(pickedName ?: "Choose FIT / GPX / TCX file")
+        Text(pickedName ?: "Choose FIT / GPX / TCX file or ZIP")
     }
     if (ui.error != null) {
         Text(ui.error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
