@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -35,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.fpclient.android.data.dto.ReactionPalette
@@ -219,4 +222,59 @@ internal fun MapCanvas(segments: List<List<org.osmdroid.util.GeoPoint>>, modifie
         onRelease = { map -> map.onDetach() },
         modifier = modifier,
     )
+}
+
+/** The web detail page's "Indoor" badge (house icon + label) shown next to the title. */
+@Composable
+internal fun IndoorBadge(modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+        modifier = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        ) {
+            Icon(
+                Icons.Filled.Home,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+            )
+            Text("Indoor", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/**
+ * Shown instead of the map for an indoor activity, like the web's `indoorPlaceholder`: the
+ * activity-type emoji, the type's name, and "No GPS track available". A trainer ride's file can
+ * still carry coordinates (Zwift writes its virtual course), which must not be drawn as a route.
+ */
+@Composable
+internal fun IndoorPlaceholder(activityType: String?) {
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+        ) {
+            Text(
+                com.fpclient.android.data.dto.ActivityTypes.icon(activityType),
+                fontSize = 64.sp,
+            )
+            Text(
+                activityType?.let { com.fpclient.android.util.Format.uppercaseFirst(it) } ?: "Indoor Activity",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                "No GPS track available",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
