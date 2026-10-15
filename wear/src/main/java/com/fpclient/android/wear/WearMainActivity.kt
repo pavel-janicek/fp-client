@@ -1,5 +1,6 @@
 package com.fpclient.android.wear
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -18,6 +19,7 @@ import com.fpclient.android.wear.recording.WorkoutRecordingController
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutActivityType
 import com.fpclient.android.wear.recording.WorkoutSyncScheduler
+import com.fpclient.android.wear.tile.WorkoutTileAction
 import com.fpclient.android.wear.ui.FitPubWearTheme
 import com.fpclient.android.wear.ui.WearAppNavGraph
 import kotlinx.coroutines.launch
@@ -39,6 +41,9 @@ class WearMainActivity : ComponentActivity() {
     private var workoutSnapshot by mutableStateOf(WorkoutRecordingSnapshot())
     private var workoutPermissionError by mutableStateOf<String?>(null)
     private var pendingWorkoutType = WorkoutActivityType.RUN
+
+    /** A tap on the quick-start tile, waiting for the nav graph to act on it. */
+    private var tileAction by mutableStateOf<WorkoutTileAction?>(null)
 
     private val workoutPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -62,6 +67,8 @@ class WearMainActivity : ComponentActivity() {
         authStore = WearAuthStore(this)
         authRelay = WatchWearAuthRelay(this, authStore)
         heartRatePrewarm = HeartRatePrewarm(this)
+        // Only a fresh launch carries the tap; a recreated activity must not start a second workout.
+        if (savedInstanceState == null) tileAction = WorkoutTileAction.from(intent)
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val syncStore = com.fpclient.android.wear.recording.WatchWorkoutSyncStore(applicationContext)
             WorkoutRecordingBus.publishPendingCount(syncStore.all().size)
@@ -101,6 +108,8 @@ class WearMainActivity : ComponentActivity() {
                         com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this).resetRelayFlags()
                         com.fpclient.android.wear.recording.WorkoutSyncScheduler.enqueue(this)
                     },
+                    tileAction = tileAction,
+                    onTileActionHandled = { tileAction = null },
                     onLowPowerModeChanged = { lowPower ->
                         if (workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.RECORDING ||
                             workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.PAUSED
@@ -111,6 +120,11 @@ class WearMainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        WorkoutTileAction.from(intent)?.let { tileAction = it }
     }
 
     override fun onStart() {

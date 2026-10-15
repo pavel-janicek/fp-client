@@ -13,8 +13,11 @@ import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.fpclient.android.wear.auth.WearAuthState
 import com.fpclient.android.wear.recording.WorkoutActivityType
+import com.fpclient.android.wear.recording.WorkoutActivityUsageStore
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutStatus
+import com.fpclient.android.wear.tile.WorkoutTileAction
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 
 /** Route table for the watch nav graph. */
@@ -63,6 +66,8 @@ fun WearAppNavGraph(
     onResolvePending: () -> Unit = {},
     onLowPowerModeChanged: (Boolean) -> Unit = {},
     onRequestSensorPermissions: () -> Unit = {},
+    tileAction: WorkoutTileAction? = null,
+    onTileActionHandled: () -> Unit = {},
     permissionRefreshKey: Int = 0,
     navController: NavHostController = rememberSwipeDismissableNavController(),
 ) {
@@ -77,6 +82,29 @@ fun WearAppNavGraph(
     val currentWorkoutPermissionError by rememberUpdatedState(workoutPermissionError)
     val currentPermissionRefreshKey by rememberUpdatedState(permissionRefreshKey)
     var selectedActivityType by remember { mutableStateOf(WorkoutActivityType.RUN) }
+    val context = LocalContext.current
+
+    // A tap on the quick-start tile: start straight away, or open the right screen. A workout
+    // already running always wins — the tile may have been rendered before it started.
+    LaunchedEffect(tileAction) {
+        val action = tileAction ?: return@LaunchedEffect
+        onTileActionHandled()
+        val running = currentWorkoutSnapshot.status == WorkoutStatus.RECORDING ||
+            currentWorkoutSnapshot.status == WorkoutStatus.PAUSED
+        when {
+            running || action == WorkoutTileAction.OpenWorkout -> navController.navigate(
+                if (running) WearRoutes.WORKOUT else WearRoutes.WORKOUT_SELECT,
+            ) { popUpTo(WearRoutes.HOME) }
+            action is WorkoutTileAction.Start -> {
+                WorkoutActivityUsageStore(context).recordUsage(action.type)
+                selectedActivityType = action.type
+                onStartWorkout(action.type)
+                navController.navigate(WearRoutes.WORKOUT) { popUpTo(WearRoutes.HOME) }
+            }
+            action == WorkoutTileAction.ChooseActivity ->
+                navController.navigate(WearRoutes.WORKOUT_SELECT) { popUpTo(WearRoutes.HOME) }
+        }
+    }
 
     SwipeDismissableNavHost(
         navController = navController,

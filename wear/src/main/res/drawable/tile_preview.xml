@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Picker preview of the idle quick-start tile: label, activity, start + list buttons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path android:fillColor="#FF000000" android:pathData="M96,0a96,96 0,1 1,0 192a96,96 0,1 1,0 -192z" />
+    <path android:fillColor="#FF2E9E52" android:pathData="M74,30h44v6h-44z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M66,48h60v10h-60z" />
+    <path android:fillColor="#FF2E9E52" android:pathData="M68,74a28,28 0,1 1,0 56a28,28 0,1 1,0 -56z" />
+    <path android:fillColor="#FF000000" android:pathData="M60,90v24l20,-12z" />
+    <path android:fillColor="#FF303133" android:pathData="M124,74a28,28 0,1 1,0 56a28,28 0,1 1,0 -56z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M112,95h4v4h-4zM120,95h16v4h-16zM112,103h4v4h-4zM120,103h16v4h-16zM112,111h4v4h-4zM120,111h16v4h-16z" />
+</vector>

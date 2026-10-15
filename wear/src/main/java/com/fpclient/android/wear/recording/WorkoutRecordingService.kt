@@ -29,6 +29,7 @@ import androidx.core.app.ServiceCompat
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import com.fpclient.android.wear.auth.WearAuthStore
+import com.fpclient.android.wear.tile.requestWorkoutTileUpdate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -233,6 +234,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         )
         session = fresh
         sessionStore.save(fresh)
+        requestWorkoutTileUpdate(this)
         if (!appendBoundary(fresh.startedAtEpochMs, "START")) {
             stopSession()
             return
@@ -248,6 +250,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val now = System.currentTimeMillis()
         session = WorkoutSessionTransitions.pause(current, now) ?: return
         sessionStore.save(session!!)
+        requestWorkoutTileUpdate(this)
         if (!appendBoundary(current.startedAtEpochMs, "PAUSE")) {
             stopSession()
             return
@@ -265,6 +268,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val now = System.currentTimeMillis()
         session = WorkoutSessionTransitions.resume(current, now) ?: return
         sessionStore.save(session!!)
+        requestWorkoutTileUpdate(this)
         if (!appendBoundary(current.startedAtEpochMs, "RESUME")) {
             stopSession()
             return
@@ -285,6 +289,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         session = WorkoutSessionTransitions.stop(current, stoppedAt)
         val stoppedSession = session!!
         sessionStore.save(session!!)
+        requestWorkoutTileUpdate(this)
         runCatching {
             trackStore.append(current.startedAtEpochMs, WorkoutTrackEvent(System.currentTimeMillis(), boundary = "STOP"))
         }
@@ -376,6 +381,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Grant heart-rate, activity, or location permission to start a workout.")
             session = null
             sessionStore.clear()
+            requestWorkoutTileUpdate(this)
             stopSelf()
             return false
         }
@@ -391,6 +397,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Workout permissions changed. Grant access and try again.")
             session = null
             sessionStore.clear()
+            requestWorkoutTileUpdate(this)
             stopSelf()
             false
         } catch (e: Exception) {
@@ -399,6 +406,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Could not enter workout foreground (${e.javaClass.simpleName}). Retry.")
             session = null
             sessionStore.clear()
+            requestWorkoutTileUpdate(this)
             stopSelf()
             false
         }
