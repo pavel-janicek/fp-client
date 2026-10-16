@@ -38,7 +38,7 @@ class WatchActivityUploader(
             val multipart = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file", primaryFile.name, primaryFile.asRequestBody(mediaType))
-                .addFormDataPart("title", workout.title)
+                .apply { workout.title.takeIf { it.isNotBlank() }?.let { addFormDataPart("title", it) } }
                 .addFormDataPart("visibility", workout.visibility.ifBlank { WatchWorkoutSyncStore.DEFAULT_VISIBILITY })
                 .build()
             signedRequest(uploadUrl, auth.token, csrf)

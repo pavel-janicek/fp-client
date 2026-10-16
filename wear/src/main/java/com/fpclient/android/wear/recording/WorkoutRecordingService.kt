@@ -337,15 +337,14 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private suspend fun queueStoppedWorkout(stoppedSession: WorkoutSessionSnapshot, stoppedAt: Long): Boolean {
         if (syncStore.get(stoppedSession.startedAtEpochMs) != null) return true
         val events = trackStore.readEvents(stoppedSession.startedAtEpochMs)
-        val title = "${stoppedSession.activityType.label} workout"
         val exported = runCatching {
-            WorkoutExportWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
+            WorkoutExportWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt)
         }.getOrElse {
             publishError("Workout export could not be saved. Check watch storage.")
             return false
         }
         val exportedFit = runCatching {
-            WorkoutFitWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
+            WorkoutFitWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt)
         }.getOrNull()
         val auth = WearAuthStore(this).state.first()
         syncStore.upsert(
@@ -355,7 +354,6 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 sidecarFileName = exported.sidecarFile.name,
                 fitFileName = exportedFit?.name,
                 activityType = stoppedSession.activityType.name,
-                title = title,
                 ownerServerUrl = auth.serverUrl.takeIf { auth.isSignedIn }.orEmpty(),
                 ownerUsername = auth.username.takeIf { auth.isSignedIn }.orEmpty(),
                 createdAtEpochMs = stoppedAt,

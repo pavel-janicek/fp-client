@@ -106,4 +106,16 @@ class WorkoutExportWriterTest {
         assertEquals(WorkoutActivityType.RUN.name, files.sidecar.activityType)
         directory.deleteRecursively()
     }
+
+    @Test
+    fun gpxWithoutTitleHasNoNameSoTheServerGeneratesOne() {
+        val directory = Files.createTempDirectory("watch-gpx-untitled-test").toFile()
+        val session = WorkoutSessionTransitions.start(1_000L, WorkoutActivityType.WALK)
+        val files = WorkoutExportWriter.write(directory, session, emptyList(), 3_000L)
+        val gpx = files.gpxFile.readText()
+
+        assertFalse(gpx.contains("<name>"))
+        assertTrue(gpx.contains("<type>WALK</type>"))
+        directory.deleteRecursively()
+    }
 }

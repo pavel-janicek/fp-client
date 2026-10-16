@@ -140,11 +140,11 @@ fun WearWorkoutInboxScreen(
                             onSync = {
                                 container.wearWorkoutInboxStore.retryManually(entry.sessionId)
                                 PhoneWorkoutSyncScheduler.enqueue(context)
-                                scope.launch { snackbarHostState.showSnackbar("Sync triggered for '${entry.title}'") }
+                                scope.launch { snackbarHostState.showSnackbar("Sync triggered for '${entry.displayTitle()}'") }
                             },
                             onDiscard = {
                                 container.wearWorkoutInboxStore.remove(entry.sessionId)
-                                scope.launch { snackbarHostState.showSnackbar("Discarded '${entry.title}'") }
+                                scope.launch { snackbarHostState.showSnackbar("Discarded '${entry.displayTitle()}'") }
                             },
                         )
                     }
@@ -196,7 +196,7 @@ private fun WorkoutInboxCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = entry.title.ifBlank { "${entry.activityType} workout" },
+                    text = entry.displayTitle(),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
@@ -256,3 +256,6 @@ private fun WorkoutInboxCard(
         }
     }
 }
+
+/** Watch workouts arrive untitled (the server names them on upload); show the type until then. */
+private fun WearWorkoutInboxEntry.displayTitle(): String = title.ifBlank { "$activityType workout" }

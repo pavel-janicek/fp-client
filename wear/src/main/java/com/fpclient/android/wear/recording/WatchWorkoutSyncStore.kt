@@ -12,7 +12,8 @@ data class PendingWatchWorkout(
     val gpxFileName: String,
     val sidecarFileName: String,
     val activityType: String,
-    val title: String,
+    /** Blank = let the server name it from the start time ("Morning Walk"), as the phone app does. */
+    val title: String = "",
     val description: String? = null,
     /**
      * "PUBLIC" literal: matches the phone app's upload default rather than Private — kept as a

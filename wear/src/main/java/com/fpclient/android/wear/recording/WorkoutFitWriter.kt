@@ -22,7 +22,7 @@ object WorkoutFitWriter {
         session: WorkoutSessionSnapshot,
         events: List<WorkoutTrackEvent>,
         stoppedAtEpochMs: Long,
-        title: String = "${session.activityType.label} workout",
+        title: String? = null,
     ): JavaFile {
         directory.mkdirs()
         val sessionId = session.startedAtEpochMs
@@ -155,7 +155,7 @@ object WorkoutFitWriter {
             totalStrides?.let { this.totalStrides = it }
             avgCadence?.let { this.avgCadence = it }
             maxCadence?.let { this.maxCadence = it }
-            sportProfileName = title
+            sportProfileName = title?.takeIf { it.isNotBlank() } ?: session.activityType.label
         }
         encoder.write(sessionMesg)
 
