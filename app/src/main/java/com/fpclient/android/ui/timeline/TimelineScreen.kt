@@ -134,7 +134,7 @@ class TimelineViewModel(
                 is ApiResult.Success -> _ui.value = _ui.value.copy(
                     loading = false,
                     isRefreshing = false,
-                    activities = result.data,
+                    activities = result.data.distinctBy { it.timelineKey },
                     hasMore = result.data.size >= PAGE_SIZE,
                 )
                 is ApiResult.Error -> _ui.value = _ui.value.copy(
@@ -157,7 +157,7 @@ class TimelineViewModel(
             when (val result = repository.load(current, page = nextPage, search = query)) {
                 is ApiResult.Success -> _ui.value = _ui.value.copy(
                     loadingMore = false,
-                    activities = (st.activities + result.data).distinctBy { it.id },
+                    activities = (st.activities + result.data).distinctBy { it.timelineKey },
                     hasMore = result.data.size >= PAGE_SIZE,
                 )
                 is ApiResult.Error -> _ui.value = _ui.value.copy(loadingMore = false, error = result.message)
@@ -316,7 +316,10 @@ fun TimelineScreen(
                             }
                         }
                         else -> {
-                            items(ui.activities, key = { it.id }) { activity ->
+                            // Keyed by event: a boosted activity is on the timeline twice with the
+                            // same activity id (ORIGINAL + BOOST), and a repeated key crashes the
+                            // LazyColumn (makni.cz public timeline, 2026-10-16).
+                            items(ui.activities, key = { it.timelineKey }) { activity ->
                                 ActivityCard(
                                     activity = activity,
                                     serverUrl = serverUrl,
