@@ -1,0 +1,8 @@
+3.3.0 (release 3.3.0):
+- Watch: "FP Wear" tile starts a workout in one tap.
+- Watch: live heart rate coloured by effort zone, faster first reading.
+- Watch: distance, pace and steps now fit on the workout screen.
+- Watch workouts report cadence and get names like "Morning Walk".
+- Profiles show their header image.
+- Profile heatmap looks like the web's and shows its status.
+- Indoor activities (Zwift, trainer) show an "Indoor" badge and power instead of a map.

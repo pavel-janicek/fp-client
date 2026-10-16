@@ -12,8 +12,8 @@ android {
         applicationId = "com.fpclient.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 55
-        versionName = "3.2.0"
+        versionCode = 57
+        versionName = "3.3.0"
     }
 
     signingConfigs {
