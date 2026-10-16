@@ -143,6 +143,9 @@ object Format {
 
     fun calories(cal: Int?): String = cal?.let { "$it kcal" } ?: "—"
 
+    /** Power in watts, like the web's `Math.round(power) + ' W'`; "—" when absent. */
+    fun power(watts: Int?): String = watts?.let { "$it W" } ?: "—"
+
     /** Step total with locale digit grouping ("12,345"); "—" when the activity has none. */
     fun steps(steps: Int?): String = steps?.let { String.format(Locale.getDefault(), "%,d", it) } ?: "—"
 

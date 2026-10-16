@@ -1,5 +1,6 @@
 package com.fpclient.android.wear.recording
 
+import com.fpclient.android.wear.WearLog
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -23,12 +24,12 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import com.fpclient.android.wear.auth.WearAuthStore
+import com.fpclient.android.wear.tile.requestWorkoutTileUpdate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -90,10 +91,23 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private var heartRateRecoveryAttempts = 0
 
     private var locationActive = false
+
+    /**
+     * Wall-clock time the platform sensors were last registered. An on-change sensor (the step
+     * counter) replays its last value on registration with that value's original, pre-workout
+     * timestamp; sample times are never placed before this.
+     */
+    private var sensorsRegisteredAtEpochMs = 0L
     private var sensorsActive = false
     private var errorMessage: String? = null
     private var ticker: Job? = null
-    private var ambientMode = false
+
+    /**
+     * True while nobody is looking at the live workout: the screen is dimmed (ambient), the user
+     * left the workout screen, or the app is in the background. Live readouts are then throttled
+     * to one publish a minute.
+     */
+    private var lowPowerMode = false
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) = onGpsFix(location)
@@ -119,9 +133,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             WorkoutRecordingController.ACTION_START -> {
-                // Start is always a tap on an interactive screen; never inherit a stale ambient
+                // Start is always a tap on an interactive screen; never inherit a stale low-power
                 // flag, which would throttle the live readout (BPM included) to once a minute.
-                ambientMode = false
+                lowPowerMode = false
                 if (session == null || session?.status == WorkoutStatus.STOPPED) {
                     beginSession(intent.getStringExtra(WorkoutRecordingController.EXTRA_ACTIVITY_TYPE))
                 }
@@ -130,14 +144,21 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             WorkoutRecordingController.ACTION_PAUSE -> pauseSession()
             WorkoutRecordingController.ACTION_RESUME -> resumeSession()
             WorkoutRecordingController.ACTION_STOP -> stopSession()
-            WorkoutRecordingController.ACTION_AMBIENT -> {
-                ambientMode = intent.getBooleanExtra(WorkoutRecordingController.EXTRA_IS_AMBIENT, false)
+            WorkoutRecordingController.ACTION_LOW_POWER -> {
+                val lowPower = intent.getBooleanExtra(WorkoutRecordingController.EXTRA_LOW_POWER, false)
+                if (lowPower != lowPowerMode) WearLog.i(TAG, "lowPowerMode -> $lowPower")
+                lowPowerMode = lowPower
                 if (session?.status == WorkoutStatus.RECORDING) {
                     ticker?.cancel()
                     startTicker()
                 }
             }
-            else -> restoreAfterRestart()
+            else -> {
+                WearLog.i(TAG, "onStartCommand: restart (action=${intent?.action})")
+                // Restarted by the system: no workout screen is attached until one says so.
+                lowPowerMode = true
+                restoreAfterRestart()
+            }
         }
         return START_STICKY
     }
@@ -156,24 +177,39 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
         if (session?.status != WorkoutStatus.RECORDING) return
         when (event.sensor.type) {
-            Sensor.TYPE_HEART_RATE -> {
-                val v = event.values.firstOrNull()?.toInt()
-                Log.i(TAG, "onSensorChanged TYPE_HEART_RATE raw=$v accuracy=${event.accuracy}")
-                heartRateLastEventAtMs = SystemClock.elapsedRealtime()
-                // accuracy == SENSOR_STATUS_NO_CONTACT (2) or UNRELIABLE (0) with a 0 value is the
-                // watch being off the wrist — the PPG has nothing to measure. A 0 is not a valid BPM
-                // and publishHeartRate() discards it, so track the reason here for the UI.
-                heartRateNoContact = v == 0 || event.accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT
-                if (v != null && v != 0) heartRateNoContact = false
-                publishHeartRate(v)
-            }
-            Sensor.TYPE_STEP_COUNTER -> onStepCounter(event.values.firstOrNull())
-            Sensor.TYPE_STEP_DETECTOR -> onStepDetected()
+            Sensor.TYPE_HEART_RATE -> onHeartRateEvent(event)
+            Sensor.TYPE_STEP_COUNTER -> onStepCounter(event.values.firstOrNull(), sensorEventEpochMs(event))
+            Sensor.TYPE_STEP_DETECTOR -> onStepDetected(sensorEventEpochMs(event))
         }
     }
 
+    private fun onHeartRateEvent(event: SensorEvent) {
+        val v = event.values.firstOrNull()?.toInt()
+        // Every sample in debug builds (see WearLog); release builds log nothing per sample.
+        WearLog.d(TAG, "HR event raw=$v accuracy=${event.accuracy}")
+        heartRateLastEventAtMs = SystemClock.elapsedRealtime()
+        // accuracy == SENSOR_STATUS_NO_CONTACT (2) or UNRELIABLE (0) with a 0 value is the
+        // watch being off the wrist — the PPG has nothing to measure. A 0 is not a valid BPM
+        // and publishHeartRate() discards it, so track the reason here for the UI.
+        heartRateNoContact = v == 0 || event.accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT
+        if (v != null && v != 0) heartRateNoContact = false
+        publishHeartRate(v, sensorEventEpochMs(event))
+    }
+
+    /**
+     * Wall-clock time the sample was measured. A non-wake-up sensor (the step detector) buffers
+     * its samples while the SoC sleeps and delivers them late, so the delivery time would smear
+     * the track.
+     */
+    private fun sensorEventEpochMs(event: SensorEvent): Long = WorkoutMath.sensorEventEpochMs(
+        eventNanos = event.timestamp,
+        nowEpochMs = System.currentTimeMillis(),
+        nowElapsedNanos = SystemClock.elapsedRealtimeNanos(),
+        notBeforeEpochMs = sensorsRegisteredAtEpochMs,
+    )
+
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        Log.i(TAG, "onAccuracyChanged sensor=${sensor?.type} accuracy=$accuracy")
+        WearLog.i(TAG, "onAccuracyChanged sensor=${sensor?.type} accuracy=$accuracy")
         if (sensor?.type == Sensor.TYPE_HEART_RATE) {
             // SENSOR_STATUS_NO_CONTACT = 2: the watch is off the wrist.
             heartRateNoContact = accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT
@@ -181,6 +217,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     }
 
     private fun beginSession(activityTypeName: String?) {
+        WearLog.i(TAG, "beginSession type=$activityTypeName")
         val now = System.currentTimeMillis()
         errorMessage = null
         metrics = WorkoutMetricsAccumulator()
@@ -197,6 +234,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         )
         session = fresh
         sessionStore.save(fresh)
+        requestWorkoutTileUpdate(this)
         if (!appendBoundary(fresh.startedAtEpochMs, "START")) {
             stopSession()
             return
@@ -208,9 +246,11 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     private fun pauseSession() {
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
+        WearLog.i(TAG, "pauseSession")
         val now = System.currentTimeMillis()
         session = WorkoutSessionTransitions.pause(current, now) ?: return
         sessionStore.save(session!!)
+        requestWorkoutTileUpdate(this)
         if (!appendBoundary(current.startedAtEpochMs, "PAUSE")) {
             stopSession()
             return
@@ -224,9 +264,11 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     private fun resumeSession() {
         val current = session?.takeIf { it.status == WorkoutStatus.PAUSED } ?: return
+        WearLog.i(TAG, "resumeSession")
         val now = System.currentTimeMillis()
         session = WorkoutSessionTransitions.resume(current, now) ?: return
         sessionStore.save(session!!)
+        requestWorkoutTileUpdate(this)
         if (!appendBoundary(current.startedAtEpochMs, "RESUME")) {
             stopSession()
             return
@@ -243,9 +285,11 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             return
         }
         val stoppedAt = System.currentTimeMillis()
+        WearLog.i(TAG, "stopSession status=${current.status}")
         session = WorkoutSessionTransitions.stop(current, stoppedAt)
         val stoppedSession = session!!
         sessionStore.save(session!!)
+        requestWorkoutTileUpdate(this)
         runCatching {
             trackStore.append(current.startedAtEpochMs, WorkoutTrackEvent(System.currentTimeMillis(), boundary = "STOP"))
         }
@@ -293,15 +337,14 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     private suspend fun queueStoppedWorkout(stoppedSession: WorkoutSessionSnapshot, stoppedAt: Long): Boolean {
         if (syncStore.get(stoppedSession.startedAtEpochMs) != null) return true
         val events = trackStore.readEvents(stoppedSession.startedAtEpochMs)
-        val title = "${stoppedSession.activityType.label} workout"
         val exported = runCatching {
-            WorkoutExportWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
+            WorkoutExportWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt)
         }.getOrElse {
             publishError("Workout export could not be saved. Check watch storage.")
             return false
         }
         val exportedFit = runCatching {
-            WorkoutFitWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt, title)
+            WorkoutFitWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt)
         }.getOrNull()
         val auth = WearAuthStore(this).state.first()
         syncStore.upsert(
@@ -311,7 +354,6 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 sidecarFileName = exported.sidecarFile.name,
                 fitFileName = exportedFit?.name,
                 activityType = stoppedSession.activityType.name,
-                title = title,
                 ownerServerUrl = auth.serverUrl.takeIf { auth.isSignedIn }.orEmpty(),
                 ownerUsername = auth.username.takeIf { auth.isSignedIn }.orEmpty(),
                 createdAtEpochMs = stoppedAt,
@@ -337,6 +379,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Grant heart-rate, activity, or location permission to start a workout.")
             session = null
             sessionStore.clear()
+            requestWorkoutTileUpdate(this)
             stopSelf()
             return false
         }
@@ -352,6 +395,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Workout permissions changed. Grant access and try again.")
             session = null
             sessionStore.clear()
+            requestWorkoutTileUpdate(this)
             stopSelf()
             false
         } catch (e: Exception) {
@@ -360,6 +404,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             publishError("Could not enter workout foreground (${e.javaClass.simpleName}). Retry.")
             session = null
             sessionStore.clear()
+            requestWorkoutTileUpdate(this)
             stopSelf()
             false
         }
@@ -406,6 +451,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     }
 
     private fun onGpsFix(location: Location) {
+        WearLog.d(TAG, "GPS fix acc=${location.accuracy} alt=${location.altitude} age=${System.currentTimeMillis() - location.time}ms")
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
         if (!location.hasAccuracy() || !WorkoutMath.isAcceptableAccuracy(location.accuracy.toDouble())) return
         val now = if (location.time > 0L) location.time else System.currentTimeMillis()
@@ -436,9 +482,10 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         // A fresh registration re-baselines the counter: steps walked while paused (sensors off)
         // must not be credited on the first callback after resume.
         lastRawStepCounter = null
+        sensorsRegisteredAtEpochMs = System.currentTimeMillis()
         stepSensors.forEach { sensor ->
             val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-            Log.i(TAG, "startPlatformSensors: registerListener ok=$ok sensor=${sensor.name} type=${sensor.type}")
+            WearLog.i(TAG, "startPlatformSensors: registerListener ok=$ok sensor=${sensor.name} type=${sensor.type}")
         }
         sensorsActive = stepSensors.isNotEmpty()
         // Also register the platform heart-rate sensor so HR keeps recording if Health Services
@@ -460,7 +507,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
      */
     private fun ensureHeartRateSensor() {
         if (!hasHeartRatePermission()) {
-            Log.w(TAG, "ensureHeartRateSensor: no HR permission, skipping")
+            WearLog.w(TAG, "ensureHeartRateSensor: no HR permission, skipping")
             return
         }
         // One listener on one sensor. Registering every TYPE_HEART_RATE variant (wake-up and
@@ -469,12 +516,12 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE, true)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
         if (sensor == null) {
-            Log.w(TAG, "ensureHeartRateSensor: no TYPE_HEART_RATE sensor present")
+            WearLog.w(TAG, "ensureHeartRateSensor: no TYPE_HEART_RATE sensor present")
             return
         }
         for (s in sensorManager.getSensorList(Sensor.TYPE_HEART_RATE)) sensorManager.unregisterListener(this, s)
         val ok = sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST)
-        Log.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name} isWakeUp=${sensor.isWakeUpSensor}")
+        WearLog.i(TAG, "ensureHeartRateSensor: registerListener ok=$ok sensor=${sensor.name} isWakeUp=${sensor.isWakeUpSensor}")
         heartRateSensor = sensor
         sensorsActive = true
         heartRateSensorArmedAtMs = SystemClock.elapsedRealtime()
@@ -494,7 +541,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         stepSensors = emptyList()
     }
 
-    private fun onStepCounter(rawValue: Float?) {
+    private fun onStepCounter(rawValue: Float?, timeEpochMs: Long) {
         val raw = rawValue?.takeIf { it >= 0f } ?: return
         val previous = lastRawStepCounter
         lastRawStepCounter = raw
@@ -510,32 +557,32 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         appendEvent(
             current,
             WorkoutTrackEvent(
-                timeEpochMs = System.currentTimeMillis(),
+                timeEpochMs = timeEpochMs,
                 steps = newTotal,
                 rawStepCounter = raw,
             ),
         )
     }
 
-    private fun onStepDetected() {
+    private fun onStepDetected(timeEpochMs: Long) {
         val current = session ?: return
         appendEvent(
             current,
-            WorkoutTrackEvent(timeEpochMs = System.currentTimeMillis(), steps = metrics.steps + 1),
+            WorkoutTrackEvent(timeEpochMs = timeEpochMs, steps = metrics.steps + 1),
         )
     }
 
-    private fun publishHeartRate(value: Int?) {
+    private fun publishHeartRate(value: Int?, measuredAtEpochMs: Long) {
         val bpm = value?.takeIf { it in MIN_HEART_RATE_BPM..MAX_HEART_RATE_BPM } ?: return
         val current = session?.takeIf { it.status == WorkoutStatus.RECORDING } ?: return
         heartRateEverReceived = true
-        heartRateAtEpochMs = System.currentTimeMillis()
+        heartRateAtEpochMs = measuredAtEpochMs
         // A real reading means the listener works; let a later stall get the full re-arm budget.
         heartRateRecoveryAttempts = 0
         // First live reading clears the heart-rate blocker notice, so it does not linger over a
         // readout that is now working.
         if (errorMessage == HEART_RATE_PERMISSION_HINT) errorMessage = null
-        appendEvent(current, WorkoutTrackEvent(timeEpochMs = System.currentTimeMillis(), heartRateBpm = bpm))
+        appendEvent(current, WorkoutTrackEvent(timeEpochMs = measuredAtEpochMs, heartRateBpm = bpm))
     }
 
     private fun reportHeartRateBlockerIfNeeded() {
@@ -559,7 +606,9 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         runCatching {
             trackStore.append(current.startedAtEpochMs, event)
             metrics.add(event)
-            if (!ambientMode) publish()
+            // No publish per sample: HR, every step and every GPS fix each recomposed the whole
+            // workout screen on the main thread several times a second. The ticker publishes once
+            // a second while someone is watching, which is as often as the readout changes.
         }.onFailure {
             publishError("Workout data could not be saved. Stop the workout and check watch storage.")
             stopSession()
@@ -572,7 +621,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             while (isActive && session?.status == WorkoutStatus.RECORDING) {
                 publish()
                 watchdogHeartRate()
-                delay(if (ambientMode) AMBIENT_TICK_INTERVAL_MS else TICK_INTERVAL_MS)
+                delay(if (lowPowerMode) LOW_POWER_TICK_INTERVAL_MS else TICK_INTERVAL_MS)
             }
         }
     }
@@ -598,7 +647,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         )
         if (!rearm) return
         heartRateRecoveryAttempts++
-        Log.w(TAG, "HR watchdog firing: no HR callback for ${WorkoutHeartRateWatchdog.STALL_MS / 1000}s, attempt=$heartRateRecoveryAttempts — re-arming platform sensor")
+        WearLog.w(TAG, "HR watchdog firing: no HR callback for ${WorkoutHeartRateWatchdog.STALL_MS / 1000}s, attempt=$heartRateRecoveryAttempts — re-arming platform sensor")
         ensureHeartRateSensor()
     }
 
@@ -623,6 +672,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
     }
 
     private fun publishError(message: String) {
+        WearLog.w(TAG, "publishError: $message")
         errorMessage = message
         publish()
     }
@@ -770,7 +820,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         private const val LOCATION_INTERVAL_MS = 1_000L
         private const val LOCATION_MIN_DISTANCE_METERS = 1f
         private const val TICK_INTERVAL_MS = 1_000L
-        private const val AMBIENT_TICK_INTERVAL_MS = 60_000L
+        private const val LOW_POWER_TICK_INTERVAL_MS = 60_000L
         private const val MIN_HEART_RATE_BPM = 20
         private const val MAX_HEART_RATE_BPM = 250
 

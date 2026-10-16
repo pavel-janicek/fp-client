@@ -1,5 +1,6 @@
 package com.fpclient.android.wear.recording
 
+import com.fpclient.android.wear.WearLog
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -39,7 +40,7 @@ class WatchWorkoutSyncWorker(
                 auth.serverUrl.equals(workout.ownerServerUrl, ignoreCase = true) &&
                 auth.username.equals(workout.ownerUsername, ignoreCase = true)
 
-            if (!workout.directUploadAttempted && matchesCurrentAccount && hasValidatedInternet()) {
+            if (shouldUploadDirectly(workout, matchesCurrentAccount, hasValidatedInternet())) {
                 store.update(workout.sessionId) { it.copy(directUploadAttempted = true) }
                 workout = workout.copy(directUploadAttempted = true)
                 val gpx = File(applicationContext.filesDir, "workouts/${workout.gpxFileName}")
@@ -61,6 +62,15 @@ class WatchWorkoutSyncWorker(
             }
 
             if (!workout.relayRequested) {
+                // The Data Layer accepts a put with no phone around and delivers it on reconnect,
+                // so an offline watch used to "relay" right away — and when it later got internet
+                // first, the still-queued workout was uploaded directly *and* by the phone once
+                // the relayed item arrived (two identical activities). Relay only to a connected
+                // phone; with neither phone nor internet, wait and let whichever comes first win.
+                if (!isPhoneConnected()) {
+                    WearLog.i(TAG, "Workout ${workout.sessionId}: no internet and no phone, retrying later")
+                    return Result.retry()
+                }
                 if (!relayToPhone(workout)) return Result.retry()
                 store.update(workout.sessionId) { it.copy(relayRequested = true) }
             }
@@ -79,14 +89,14 @@ class WatchWorkoutSyncWorker(
         if (fit == null || !fit.isFile) return null
         val profile = BodyProfileSync.read(applicationContext)
         if (profile == null || !profile.optIn || !profile.isComplete) {
-            android.util.Log.i(TAG, "No calorie estimate: profile=${profile?.let { "optIn=${it.optIn} complete=${it.isComplete}" } ?: "never received from phone"}")
+            WearLog.i(TAG, "No calorie estimate: profile=${profile?.let { "optIn=${it.optIn} complete=${it.isComplete}" } ?: "never received from phone"}")
             return null
         }
         val amended = File(fit.parentFile, "amended-${fit.name}")
         val success = runCatching {
             CalorieFitAmender.amendFitFileWithCalories(fit, amended, profile)
         }.getOrDefault(false)
-        android.util.Log.i(TAG, "Calorie amendment of ${fit.name} success=$success")
+        WearLog.i(TAG, "Calorie amendment of ${fit.name} success=$success")
         if (!success) runCatching { amended.delete() }
         return amended.takeIf { success }
     }
@@ -123,6 +133,10 @@ class WatchWorkoutSyncWorker(
         }.getOrDefault(false)
     }
 
+    private suspend fun isPhoneConnected(): Boolean = runCatching {
+        Wearable.getNodeClient(applicationContext).connectedNodes.await().isNotEmpty()
+    }.getOrDefault(false)
+
     private fun hasValidatedInternet(): Boolean {
         val connectivity = applicationContext.getSystemService(ConnectivityManager::class.java)
         val network = connectivity.activeNetwork ?: return false
@@ -133,3 +147,15 @@ class WatchWorkoutSyncWorker(
 }
 
 private const val TAG = "WatchWorkoutSync"
+
+/**
+ * Direct upload is tried once, for the signed-in owner, with internet — and never after the
+ * workout was relayed: the phone owns it from then on, and uploading it here as well would
+ * create a duplicate once the phone processes the relayed copy. "Sync pending now" clears both
+ * flags for a deliberate retry.
+ */
+internal fun shouldUploadDirectly(
+    workout: PendingWatchWorkout,
+    matchesCurrentAccount: Boolean,
+    hasInternet: Boolean,
+): Boolean = !workout.directUploadAttempted && !workout.relayRequested && matchesCurrentAccount && hasInternet

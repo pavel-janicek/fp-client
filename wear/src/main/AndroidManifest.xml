@@ -28,6 +28,7 @@
          dataExtractionRules (Android 12+), which excludes every domain explicitly —
          see res/xml/data_extraction_rules.xml for what must never leave the watch. -->
     <application
+        android:name=".FitPubWearApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
@@ -74,9 +75,28 @@
             android:exported="false"
             android:foregroundServiceType="health|location" />
 
+        <!-- Quick-start tile ("Start workout"): see tile/FitPubTileService. -->
+        <service
+            android:name=".tile.FitPubTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_play"
+            android:label="@string/tile_label"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview" />
+        </service>
+
+        <!-- singleTop: a tile tap or the ongoing-workout chip must reach the running activity
+             through onNewIntent. In standard mode a launch into the existing task only brought it
+             to front, dropping the tile's action, or stacked another copy of the app on top. -->
         <activity
             android:name=".WearMainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:taskAffinity="">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

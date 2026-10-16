@@ -22,6 +22,22 @@ this release".
 - [ ] `PLAN.md` — header line "Current app version" + `versionCode`, and a ledger row for the release
 - [ ] `README.md` — no app version kept here on purpose (it tracks the *server* API version); update only if API compatibility changed
 - [ ] Release notes / GitHub release published for the new version
+- [ ] GitHub release assets — attach only what someone outside Google Play can install:
+  - **Phone APK: yes.** Sideloads on any phone (README → *Where to get it → APK*).
+  - **AABs (phone and watch): no.** An App Bundle is a Play upload format; nobody can install it
+    without `bundletool`. Keep it locally / in Play Console instead.
+  - **Watch APK: optional, and never without this note** — Wear OS has no "install unknown apps":
+    it only sideloads over ADB (developer options → wireless debugging → `adb install`), so it is
+    for developers. Phone and watch must be signed with the **same key** for the Data Layer to work,
+    or "Sign in with phone" silently fails ("No paired phone is reachable", see section 6). With
+    Play App Signing, Play builds carry Google's app signing key while GitHub builds carry ours, so
+    a GitHub watch APK works only together with the GitHub phone APK. Release-note wording:
+    *"Watch APK: for sideloading via ADB only, together with the phone APK from this page. Do not
+    combine it with the Google Play version of the phone app."*
+  - Check whether the two keys differ (once is enough unless the key changes): compare Play Console →
+    *Test and release → App integrity → App signing* → "App signing key certificate" SHA-256 with
+    `apksigner verify --print-certs app-release.apk`. If they differ, a GitHub APK and a Play install
+    also cannot update each other — users must stay with one source.
 
 ## 4. Play Store / fastlane metadata
 

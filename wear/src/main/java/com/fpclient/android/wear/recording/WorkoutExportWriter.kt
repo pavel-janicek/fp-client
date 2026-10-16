@@ -48,7 +48,7 @@ object WorkoutExportWriter {
         session: WorkoutSessionSnapshot,
         events: List<WorkoutTrackEvent>,
         stoppedAtEpochMs: Long,
-        title: String = "${session.activityType.label} workout",
+        title: String? = null,
     ): WorkoutExportFiles {
         directory.mkdirs()
         val sessionId = session.startedAtEpochMs
@@ -77,7 +77,7 @@ object WorkoutExportWriter {
     fun decodeSidecar(value: String): WorkoutSidecar? =
         runCatching { json.decodeFromString<WorkoutSidecar>(value) }.getOrNull()
 
-    private fun buildGpx(title: String, activityType: String, events: List<WorkoutTrackEvent>): String {
+    private fun buildGpx(title: String?, activityType: String, events: List<WorkoutTrackEvent>): String {
         val segments = mutableListOf<MutableList<WorkoutTrackEvent>>()
         var current = mutableListOf<WorkoutTrackEvent>()
         events.forEach { event ->
@@ -104,8 +104,11 @@ object WorkoutExportWriter {
             // server-side GPX parsers read <gpxtpx:hr> exactly as they would a Garmin/Strava export.
             append("xmlns=\"http://www.topografix.com/GPX/1/1\" ")
             append("xmlns:gpxtpx=\"http://www.garmin.com/xmlschemas/TrackPointExtension/v1\">\n")
-            append("  <metadata><name>").append(xmlEscape(title)).append("</name></metadata>\n")
-            append("  <trk><name>").append(xmlEscape(title)).append("</name><type>")
+            // No <name> without a user title: FitPub would adopt it as the activity title instead
+            // of generating "Morning Walk" from the start time, as it does for phone recordings.
+            val name = title?.takeIf { it.isNotBlank() }?.let { "<name>${xmlEscape(it)}</name>" }.orEmpty()
+            append("  <metadata>").append(name).append("</metadata>\n")
+            append("  <trk>").append(name).append("<type>")
                 .append(xmlEscape(activityType)).append("</type>\n")
             segments.forEach { segment ->
                 append("    <trkseg>\n")

@@ -40,6 +40,55 @@ class HeatmapMapperTest {
     }
 
     @Test
+    fun carriesTheGenerationStatusOfServersSince549() {
+        // A user with activities whose heatmap job has not run yet: no cells, status reported.
+        val payload = """
+            {"type":"FeatureCollection","features":[],"maxIntensity":0,
+             "generationStatus":"PENDING","hasHeatmap":false,"activityCount":3}
+        """.trimIndent()
+
+        val result = HeatmapMapper.toUi(json.decodeFromString<HeatmapFeatureCollectionDto>(payload))
+
+        assertEquals("PENDING", result.generationStatus)
+        assertEquals(false, result.hasHeatmap)
+        assertTrue(result.points.isEmpty())
+    }
+
+    @Test
+    fun anOlderServerWithoutStatusKeepsTheOldBehaviour() {
+        val payload = """{"type":"FeatureCollection","features":[],"maxIntensity":0,"activityCount":0}"""
+
+        val result = HeatmapMapper.toUi(json.decodeFromString<HeatmapFeatureCollectionDto>(payload))
+
+        assertNull(result.generationStatus)
+        assertNull(result.hasHeatmap)
+        assertNull(HeatmapMapper.statusMessage(result.generationStatus))
+    }
+
+    @Test
+    fun statusMessagesMatchTheWebHeatmapPage() {
+        // Word for word from displayGenerationStatus() in the server's static/js/heatmap.js.
+        assertEquals("Your heatmap is being generated.", HeatmapMapper.statusMessage("PROCESSING"))
+        assertEquals("Your heatmap is queued for automatic generation.", HeatmapMapper.statusMessage("PENDING"))
+        assertEquals("Your heatmap could not be updated.", HeatmapMapper.statusMessage("FAILED"))
+        assertEquals("Your heatmap is up to date.", HeatmapMapper.statusMessage("UP_TO_DATE"))
+        assertEquals(
+            "Your heatmap will be generated automatically after you upload activities with GPS tracks.",
+            HeatmapMapper.statusMessage("NO_HEATMAP"),
+        )
+    }
+
+    @Test
+    fun anUnknownFutureStatusShowsNothingRatherThanFailing() {
+        val payload = """{"type":"FeatureCollection","features":[],"generationStatus":"SOMETHING_NEW","hasHeatmap":true}"""
+
+        val result = HeatmapMapper.toUi(json.decodeFromString<HeatmapFeatureCollectionDto>(payload))
+
+        assertEquals("SOMETHING_NEW", result.generationStatus)
+        assertNull(HeatmapMapper.statusMessage(result.generationStatus))
+    }
+
+    @Test
     fun computesTheBoundingBoxTheMapZoomsTo() {
         val dto = HeatmapFeatureCollectionDto(
             features = listOf(

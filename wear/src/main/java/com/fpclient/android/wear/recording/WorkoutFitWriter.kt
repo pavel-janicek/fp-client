@@ -13,6 +13,7 @@ import com.garmin.fit.Sport
 import com.garmin.fit.SubSport
 import java.io.File as JavaFile
 import java.util.Date
+import kotlin.math.roundToInt
 
 object WorkoutFitWriter {
 
@@ -21,7 +22,7 @@ object WorkoutFitWriter {
         session: WorkoutSessionSnapshot,
         events: List<WorkoutTrackEvent>,
         stoppedAtEpochMs: Long,
-        title: String = "${session.activityType.label} workout",
+        title: String? = null,
     ): JavaFile {
         directory.mkdirs()
         val sessionId = session.startedAtEpochMs
@@ -34,6 +35,9 @@ object WorkoutFitWriter {
             type = File.ACTIVITY
             manufacturer = Manufacturer.DEVELOPMENT
             product = 1
+            // Names the recording app for anything reading the FIT source metadata (FitPub's
+            // FitParser already reads file_id product_name); the phone's GPX says "FP-Client".
+            productName = PRODUCT_NAME
             serialNumber = sessionId
             timeCreated = DateTime(Date(session.startedAtEpochMs))
         }
@@ -68,6 +72,15 @@ object WorkoutFitWriter {
             .mapNotNull { event -> event.heartRateBpm?.takeIf { it in 1..300 }?.let { event.timeEpochMs to it } }
             .sortedBy { it.first }
 
+        // Cadence is only meaningful from the wrist step counter on foot; a bike's pedal cadence
+        // has nothing to do with steps, so cycling leaves it out rather than writing nonsense.
+        val cadenceTimeline = if (session.activityType != WorkoutActivityType.BIKE) {
+            CadenceTimeline(events)
+        } else {
+            null
+        }
+        var maxCadence: Short? = null
+
         // Every event feeds the accumulator (pause boundaries reset the distance segment, step
         // events carry the running total); only the selected ones become records.
         val tempAcc = WorkoutMetricsAccumulator()
@@ -81,9 +94,12 @@ object WorkoutFitWriter {
             } else {
                 event.heartRateBpm?.takeIf { it in 1..300 }
             }
+            val cadence = cadenceTimeline?.stridesPerMinuteAt(event.timeEpochMs)
+            if (cadence != null && cadence > (maxCadence ?: 0)) maxCadence = cadence
             val record = RecordMesg().apply {
                 timestamp = DateTime(Date(event.timeEpochMs))
                 heartRate?.let { this.heartRate = it.toShort() }
+                cadence?.let { this.cadence = it }
                 if (event.latitude != null && event.longitude != null) {
                     positionLat = (event.latitude / 180.0 * 2147483648.0).toInt()
                     positionLong = (event.longitude / 180.0 * 2147483648.0).toInt()
@@ -102,6 +118,9 @@ object WorkoutFitWriter {
         // FIT has no step total, only strides (one per two steps); FitPub's FitParser reads
         // `session.totalStrides` and stores `totalSteps = strides * 2`.
         val totalStrides = WorkoutFitWriter.stridesFor(tempAcc.steps)
+        // FIT cadence is strides (one-leg RPM) per minute; FitParser doubles it to steps per
+        // minute for foot sports. Averaged over moving time so pauses do not drag it down.
+        val avgCadence = cadenceTimeline?.let { averageCadence(totalStrides, movingSec) }
 
         // 3. Lap Message
         val lapMesg = LapMesg().apply {
@@ -115,6 +134,8 @@ object WorkoutFitWriter {
             avgHr?.let { avgHeartRate = it }
             maxHr?.let { maxHeartRate = it }
             totalStrides?.let { this.totalStrides = it }
+            avgCadence?.let { this.avgCadence = it }
+            maxCadence?.let { this.maxCadence = it }
         }
         encoder.write(lapMesg)
 
@@ -132,7 +153,9 @@ object WorkoutFitWriter {
             avgHr?.let { avgHeartRate = it }
             maxHr?.let { maxHeartRate = it }
             totalStrides?.let { this.totalStrides = it }
-            sportProfileName = title
+            avgCadence?.let { this.avgCadence = it }
+            maxCadence?.let { this.maxCadence = it }
+            sportProfileName = title?.takeIf { it.isNotBlank() } ?: session.activityType.label
         }
         encoder.write(sessionMesg)
 
@@ -146,4 +169,51 @@ object WorkoutFitWriter {
 
     /** Strides for [steps] (rounded to the nearest stride), or null when no steps were counted. */
     internal fun stridesFor(steps: Int): Long? = steps.takeIf { it > 0 }?.let { (it + 1) / 2L }
+
+    /** Session average in strides per minute, or null without strides or moving time. */
+    internal fun averageCadence(totalStrides: Long?, movingSec: Float): Short? {
+        if (totalStrides == null || movingSec < MIN_CADENCE_WINDOW_SEC) return null
+        return (totalStrides * 60.0 / movingSec).roundToInt().takeIf { it in 1..MAX_CADENCE_SPM }?.toShort()
+    }
+
+    internal const val PRODUCT_NAME = "FP Wear"
+
+    internal const val CADENCE_WINDOW_MS = 20_000L
+    private const val MIN_CADENCE_WINDOW_SEC = 5f
+    /** FIT cadence is a uint8; anything above is sensor garbage, not a human stride rate. */
+    private const val MAX_CADENCE_SPM = 254
+
+    /**
+     * Instantaneous cadence from the cumulative step totals: strides per minute over the last
+     * [CADENCE_WINDOW_MS], never reaching back across a pause/resume boundary (the sensors are off
+     * while paused, so a window spanning one would read low).
+     */
+    internal class CadenceTimeline(events: List<WorkoutTrackEvent>) {
+        private val steps: List<Pair<Long, Int>>
+        private val boundaries: List<Long> = events.filter { it.boundary != null }.map { it.timeEpochMs }.sorted()
+
+        init {
+            var runningMax = 0
+            steps = events
+                .filter { it.steps != null }
+                .sortedBy { it.timeEpochMs }
+                .map { event ->
+                    runningMax = maxOf(runningMax, event.steps!!)
+                    event.timeEpochMs to runningMax
+                }
+        }
+
+        fun stridesPerMinuteAt(timeEpochMs: Long): Short? {
+            if (steps.isEmpty()) return null
+            val lastBoundary = boundaries.lastOrNull { it <= timeEpochMs }
+            val windowStart = maxOf(timeEpochMs - CADENCE_WINDOW_MS, lastBoundary ?: Long.MIN_VALUE, steps.first().first)
+            val windowMs = timeEpochMs - windowStart
+            if (windowMs < MIN_CADENCE_WINDOW_SEC * 1000) return null
+            val delta = stepsAt(timeEpochMs) - stepsAt(windowStart)
+            val stridesPerMinute = (delta / 2.0 * 60_000.0 / windowMs).roundToInt()
+            return stridesPerMinute.coerceIn(0, MAX_CADENCE_SPM).toShort()
+        }
+
+        private fun stepsAt(timeEpochMs: Long): Int = steps.lastOrNull { it.first <= timeEpochMs }?.second ?: 0
+    }
 }

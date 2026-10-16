@@ -1,5 +1,6 @@
 package com.fpclient.android.wear.auth
 
+import com.fpclient.android.wear.WearLog
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
@@ -15,7 +16,7 @@ class WatchWearAuthService : WearableListenerService() {
 
     override fun onMessageReceived(event: MessageEvent) {
         val path = event.path
-        android.util.Log.i("WatchWearAuthService", "onMessageReceived path=$path from=${event.sourceNodeId}")
+        WearLog.i("WatchWearAuthService", "onMessageReceived path=$path from=${event.sourceNodeId}")
         if (path == com.fpclient.android.wear.recording.WorkoutSyncProtocol.ACK_PATH) {
             event.data.toString(Charsets.UTF_8).toLongOrNull()?.let { sessionId ->
                 serviceScope.launch {
@@ -31,9 +32,9 @@ class WatchWearAuthService : WearableListenerService() {
                 runCatching {
                     val profile = com.fpclient.android.wear.body.BodyProfileProtocol.decode(data)
                     com.fpclient.android.wear.body.BodyProfileSync.apply(this@WatchWearAuthService, profile)
-                    android.util.Log.i("WatchWearAuthService", "Applied body profile: optIn=${profile.optIn} complete=${profile.isComplete}")
+                    WearLog.i("WatchWearAuthService", "Applied body profile: optIn=${profile.optIn} complete=${profile.isComplete}")
                 }.onFailure { e ->
-                    android.util.Log.w("WatchWearAuthService", "Failed to apply body profile", e)
+                    WearLog.w("WatchWearAuthService", "Failed to apply body profile", e)
                 }
             }
             return
@@ -50,9 +51,9 @@ class WatchWearAuthService : WearableListenerService() {
             runCatching {
                 val state = WearAuthProtocol.decode(event.data)
                 WearAuthStore(this@WatchWearAuthService).apply(state)
-                android.util.Log.i("WatchWearAuthService", "Applied auth state: username=${state.username} server=${state.serverUrl}")
+                WearLog.i("WatchWearAuthService", "Applied auth state: username=${state.username} server=${state.serverUrl}")
             }.onFailure { e ->
-                android.util.Log.w("WatchWearAuthService", "Failed to apply auth state from $path", e)
+                WearLog.w("WatchWearAuthService", "Failed to apply auth state from $path", e)
             }
         }
     }

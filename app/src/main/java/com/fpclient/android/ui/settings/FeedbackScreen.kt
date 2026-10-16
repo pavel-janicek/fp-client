@@ -39,11 +39,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fpclient.android.AppContainer
+import com.fpclient.android.data.dto.FeedbackMessage
 import com.fpclient.android.data.dto.FeedbackSubmissionRequest
 import com.fpclient.android.data.dto.FeedbackTopics
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.repository.FeedbackRepository
-import com.fpclient.android.util.TextLimits
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,8 +78,8 @@ class FeedbackViewModel(private val repository: FeedbackRepository) : ViewModel(
     }
 
     fun onMessageChange(value: String) {
-        // Capped to the server's limit so the request can never be rejected for length.
-        _ui.value = _ui.value.copy(message = value.take(TextLimits.FEEDBACK_MESSAGE))
+        // Capped so message + the appended client note can never be rejected for length.
+        _ui.value = _ui.value.copy(message = value.take(FeedbackMessage.MAX_USER_LENGTH))
     }
 
     fun onReplyAllowedChange(value: Boolean) {
@@ -108,7 +108,7 @@ class FeedbackViewModel(private val repository: FeedbackRepository) : ViewModel(
 
     private fun UiState.toRequest() = FeedbackSubmissionRequest(
         topic = topic,
-        message = message.trim(),
+        message = FeedbackMessage.withClientNote(message),
         replyAllowed = replyAllowed,
     )
 
@@ -154,7 +154,8 @@ fun FeedbackScreen(
             } else {
                 Text(
                     "The admins of this instance receive your name, username, topic and " +
-                        "message. Feedback stays on this instance.",
+                        "message. Feedback stays on this instance. A note that it was sent " +
+                        "from FP Client, with a link for app bug reports, is added at the end.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -175,7 +176,7 @@ fun FeedbackScreen(
                     minLines = 5,
                     modifier = Modifier.fillMaxWidth(),
                     supportingText = {
-                        Text("${ui.message.length} / ${TextLimits.FEEDBACK_MESSAGE}")
+                        Text("${ui.message.length} / ${FeedbackMessage.MAX_USER_LENGTH}")
                     },
                 )
                 ReplySwitch(ui, vm)

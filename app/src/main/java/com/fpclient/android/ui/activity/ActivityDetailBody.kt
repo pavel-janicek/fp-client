@@ -44,6 +44,11 @@ internal fun DetailBody(
         item {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(activity.title ?: Format.uppercaseFirst(activity.activityType), style = MaterialTheme.typography.titleLarge)
+                // The web's "Indoor" badge next to the title (trainer / Zwift / treadmill rides,
+                // detected server-side: FIT sport/sub-sport, source app, or no GPS).
+                if (activity.indoor == true) {
+                    IndoorBadge(modifier = Modifier.padding(top = 4.dp))
+                }
                 Spacer(Modifier.height(6.dp))
                 AuthorCard(
                     ui = ui,
@@ -91,7 +96,36 @@ internal fun DetailBody(
         activity.metrics?.totalSteps?.takeIf { it > 0 }?.let { steps ->
             item { StatRow(listOf("Steps" to Format.steps(steps))) }
         }
-        item { TrackMap(segments = viewModel.trackSegments(), hasTrack = ui.activity?.simplifiedTrack != null) }
+        // Power (watts) — what a trainer ride (e.g. Zwift) is all about. The web shows average power
+        // with the headline metrics and average + maximum power in the details; the app has a
+        // single level of tiles, so both sit in one row, shown only when the file carried power.
+        val metrics = activity.metrics
+        if (metrics?.averagePower != null || metrics?.maxPower != null) {
+            item {
+                StatRow(
+                    listOf(
+                        "Avg power" to Format.power(metrics.averagePower),
+                        "Max power" to Format.power(metrics.maxPower),
+                    ),
+                )
+            }
+        }
+        // Same three-way choice as the web: an indoor activity never shows a map — a virtual
+        // course (Zwift's Watopia, …) would otherwise be drawn as a real-world route — then the
+        // track map, else a "No route recorded" hint.
+        val hasTrack = activity.simplifiedTrack != null
+        when {
+            activity.indoor == true -> item { IndoorPlaceholder(activityType = activity.activityType) }
+            hasTrack -> item { TrackMap(segments = viewModel.trackSegments(), hasTrack = true) }
+            else -> item {
+                Text(
+                    "No route recorded",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        }
         item { ReactionRow(activityId = activityId, viewModel = viewModel, ui = ui) }
         item { BoostRow(activityId = activityId, viewModel = viewModel, ui = ui, onOpenProfile = onOpenProfile) }
         item {

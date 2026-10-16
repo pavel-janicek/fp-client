@@ -45,6 +45,17 @@ fun ActivityCard(
     val isRemote = !activity.isLocal
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp)) {
         Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(12.dp)) {
+            // Web parity (timeline.js): a BOOST event says who shared it above the author row.
+            boostAttribution(activity)?.let { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = ActivityTypes.icon(activity.activityType), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.width(10.dp))
@@ -157,4 +168,13 @@ fun ActivityCard(
             }
         }
     }
+}
+
+/** "🔁 Name boosted · 2h" for a `BOOST` timeline event, null for the original post. */
+internal fun boostAttribution(activity: TimelineActivityDto): String? {
+    if (activity.eventKind != "BOOST") return null
+    val booster = activity.booster ?: return null
+    val name = booster.displayName?.takeIf { it.isNotBlank() } ?: booster.username ?: return null
+    val ago = Format.relative(activity.eventAt)
+    return if (ago.isNotBlank()) "🔁 $name boosted · $ago" else "🔁 $name boosted"
 }

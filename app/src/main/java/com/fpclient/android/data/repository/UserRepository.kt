@@ -1,5 +1,6 @@
 package com.fpclient.android.data.repository
 
+import com.fpclient.android.data.dto.HeatmapViewport
 import android.content.Context
 import android.net.Uri
 import com.fpclient.android.data.dto.ActorDto
@@ -415,9 +416,20 @@ class UserRepository(
      * the server, which meant the heatmap request failed on *every* profile, the signed-in
      * user's included, and the card silently never appeared.
      */
-    suspend fun heatmap(): ApiResult<HeatmapResponse> {
+    /**
+     * The signed-in user's heatmap — all of it, or only [viewport] aggregated for its zoom (what
+     * the web page reloads after every pan/zoom). The endpoint is rate-limited per user (429 +
+     * `Retry-After`), which the caller treats as "keep what is shown".
+     */
+    suspend fun heatmap(viewport: HeatmapViewport? = null): ApiResult<HeatmapResponse> {
         return try {
-            val response = api.myHeatmap()
+            val response = api.myHeatmap(
+                minLon = viewport?.minLon,
+                minLat = viewport?.minLat,
+                maxLon = viewport?.maxLon,
+                maxLat = viewport?.maxLat,
+                zoom = viewport?.zoom,
+            )
             if (!response.isSuccessful) {
                 return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())
             }

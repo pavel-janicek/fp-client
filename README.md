@@ -66,6 +66,26 @@ Management*). The activities sit in further ZIP files inside it, under
 Garmin and Garmin Connect are trademarks of Garmin Ltd. or its subsidiaries. FP Client is not
 affiliated with, endorsed by, or sponsored by Garmin.
 
+## Riding Zwift? Uploading your rides
+
+FP Client does **not** connect to Zwift or your Zwift account (Zwift offers no public API), and
+nothing syncs automatically. Every Zwift ride is saved as a standard FIT file, though, and
+FitPub reads those directly:
+
+1. Get the ride's file — either on [zwift.com](https://www.zwift.com) (open the activity, the
+   gear icon → **Download Fit File**), or on the computer that ran Zwift, in
+   `Documents\Zwift\Activities\` (one `.fit` file per ride, named by date).
+2. Open or share the file to **FP Client**, or tap **+** (*New activity*) on the timeline, keep
+   **Upload file** selected, and choose it. If the Zwift app on your phone or tablet offers to
+   send an activity file, picking FP Client there works the same way.
+
+FitPub recognises Zwift rides as **indoor** activities: the app then shows an *Indoor* badge and
+your average and maximum **power** instead of a map — Zwift's courses are virtual, so their
+coordinates are not drawn as a real-world route.
+
+Zwift is a trademark of Zwift, Inc. FP Client is not affiliated with, endorsed by, or sponsored
+by Zwift.
+
 ## Where to get it
 
 ### Google Play - Production access

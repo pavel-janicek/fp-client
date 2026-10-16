@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import androidx.wear.compose.navigation.composable
@@ -12,8 +13,11 @@ import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.fpclient.android.wear.auth.WearAuthState
 import com.fpclient.android.wear.recording.WorkoutActivityType
+import com.fpclient.android.wear.recording.WorkoutActivityUsageStore
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutStatus
+import com.fpclient.android.wear.tile.WorkoutTileAction
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 
 /** Route table for the watch nav graph. */
@@ -60,12 +64,47 @@ fun WearAppNavGraph(
     onSyncPending: () -> Unit = {},
     onDiscardPending: () -> Unit = {},
     onResolvePending: () -> Unit = {},
-    onAmbientModeChanged: (Boolean) -> Unit = {},
+    onLowPowerModeChanged: (Boolean) -> Unit = {},
     onRequestSensorPermissions: () -> Unit = {},
+    tileAction: WorkoutTileAction? = null,
+    onTileActionHandled: () -> Unit = {},
     permissionRefreshKey: Int = 0,
     navController: NavHostController = rememberSwipeDismissableNavController(),
 ) {
+    // The destinations below are built into a nav graph that SwipeDismissableNavHost keeps for
+    // the lifetime of the back-stack entry, so a plain parameter captured here is frozen at the
+    // value it had when the screen was opened — the workout screen then showed a stale BPM ("--",
+    // or one old value until it went stale). Reading through State keeps every destination live.
+    val currentAuthState by rememberUpdatedState(authState)
+    val currentPhoneReachable by rememberUpdatedState(phoneReachable)
+    val currentAuthStatus by rememberUpdatedState(authStatus)
+    val currentWorkoutSnapshot by rememberUpdatedState(workoutSnapshot)
+    val currentWorkoutPermissionError by rememberUpdatedState(workoutPermissionError)
+    val currentPermissionRefreshKey by rememberUpdatedState(permissionRefreshKey)
     var selectedActivityType by remember { mutableStateOf(WorkoutActivityType.RUN) }
+    val context = LocalContext.current
+
+    // A tap on the quick-start tile: start straight away, or open the right screen. A workout
+    // already running always wins — the tile may have been rendered before it started.
+    LaunchedEffect(tileAction) {
+        val action = tileAction ?: return@LaunchedEffect
+        onTileActionHandled()
+        val running = currentWorkoutSnapshot.status == WorkoutStatus.RECORDING ||
+            currentWorkoutSnapshot.status == WorkoutStatus.PAUSED
+        when {
+            running || action == WorkoutTileAction.OpenWorkout -> navController.navigate(
+                if (running) WearRoutes.WORKOUT else WearRoutes.WORKOUT_SELECT,
+            ) { popUpTo(WearRoutes.HOME) }
+            action is WorkoutTileAction.Start -> {
+                WorkoutActivityUsageStore(context).recordUsage(action.type)
+                selectedActivityType = action.type
+                onStartWorkout(action.type)
+                navController.navigate(WearRoutes.WORKOUT) { popUpTo(WearRoutes.HOME) }
+            }
+            action == WorkoutTileAction.ChooseActivity ->
+                navController.navigate(WearRoutes.WORKOUT_SELECT) { popUpTo(WearRoutes.HOME) }
+        }
+    }
 
     SwipeDismissableNavHost(
         navController = navController,
@@ -73,14 +112,14 @@ fun WearAppNavGraph(
     ) {
         composable(WearRoutes.HOME) {
             HomeScreen(
-                authState = authState,
-                phoneReachable = phoneReachable,
-                authStatus = authStatus,
-                pendingSyncCount = workoutSnapshot.pendingSyncCount,
+                authState = currentAuthState,
+                phoneReachable = currentPhoneReachable,
+                authStatus = currentAuthStatus,
+                pendingSyncCount = currentWorkoutSnapshot.pendingSyncCount,
                 onRequestCredentials = onRequestCredentials,
                 onSignOut = onSignOut,
                 onOpenWorkout = {
-                    if (workoutSnapshot.status == WorkoutStatus.RECORDING || workoutSnapshot.status == WorkoutStatus.PAUSED) {
+                    if (currentWorkoutSnapshot.status == WorkoutStatus.RECORDING || currentWorkoutSnapshot.status == WorkoutStatus.PAUSED) {
                         navController.navigate(WearRoutes.WORKOUT)
                     } else {
                         navController.navigate(WearRoutes.WORKOUT_SELECT)
@@ -95,7 +134,7 @@ fun WearAppNavGraph(
                 onSyncPending = onSyncPending,
                 onDiscardPending = onDiscardPending,
                 onResolvePending = onResolvePending,
-                permissionRefreshKey = permissionRefreshKey,
+                permissionRefreshKey = currentPermissionRefreshKey,
             )
         }
         composable(WearRoutes.WORKOUT_SELECT) {
@@ -115,15 +154,15 @@ fun WearAppNavGraph(
             // Tracks the previous status and fires only on the RECORDING/PAUSED → STOPPED
             // transition, so process death + re-entry on a persisted STOPPED snapshot cannot
             // bounce-loop back to Home.
-            val finishedSessionId = workoutSnapshot.session
+            val finishedSessionId = currentWorkoutSnapshot.session
                 ?.takeIf { it.status == WorkoutStatus.STOPPED }
                 ?.startedAtEpochMs
-            var previousStatus by remember(workoutSnapshot.session?.startedAtEpochMs) {
+            var previousStatus by remember(currentWorkoutSnapshot.session?.startedAtEpochMs) {
                 mutableStateOf<WorkoutStatus?>(null)
             }
             LaunchedEffect(finishedSessionId) {
                 val previous = previousStatus
-                previousStatus = workoutSnapshot.status
+                previousStatus = currentWorkoutSnapshot.status
                 if (!shouldAutoReturnOnStop(previous, finishedSessionId != null)) return@LaunchedEffect
                 delay(STOPPED_AUTO_CLOSE_DELAY_MS)
                 if (navController.currentDestination?.route == WearRoutes.WORKOUT) {
@@ -132,8 +171,8 @@ fun WearAppNavGraph(
             }
             WorkoutControlScreen(
                 activityType = selectedActivityType,
-                snapshot = workoutSnapshot,
-                permissionError = workoutPermissionError,
+                snapshot = currentWorkoutSnapshot,
+                permissionError = currentWorkoutPermissionError,
                 onStart = onStartWorkout,
                 onPause = onPauseWorkout,
                 onResume = onResumeWorkout,
@@ -143,7 +182,7 @@ fun WearAppNavGraph(
                 },
                 onSyncPending = onSyncPending,
                 onDiscardPending = onDiscardPending,
-                onAmbientModeChanged = onAmbientModeChanged,
+                onLowPowerModeChanged = onLowPowerModeChanged,
             )
         }
     }

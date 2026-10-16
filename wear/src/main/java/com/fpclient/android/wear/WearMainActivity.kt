@@ -1,5 +1,6 @@
 package com.fpclient.android.wear
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -12,11 +13,13 @@ import androidx.compose.runtime.setValue
 import com.fpclient.android.wear.auth.CredentialRequestResult
 import com.fpclient.android.wear.auth.WatchWearAuthRelay
 import com.fpclient.android.wear.auth.WearAuthStore
+import com.fpclient.android.wear.recording.HeartRatePrewarm
 import com.fpclient.android.wear.recording.WorkoutRecordingBus
 import com.fpclient.android.wear.recording.WorkoutRecordingController
 import com.fpclient.android.wear.recording.WorkoutRecordingSnapshot
 import com.fpclient.android.wear.recording.WorkoutActivityType
 import com.fpclient.android.wear.recording.WorkoutSyncScheduler
+import com.fpclient.android.wear.tile.WorkoutTileAction
 import com.fpclient.android.wear.ui.FitPubWearTheme
 import com.fpclient.android.wear.ui.WearAppNavGraph
 import kotlinx.coroutines.launch
@@ -31,6 +34,7 @@ class WearMainActivity : ComponentActivity() {
 
     private lateinit var authStore: WearAuthStore
     private lateinit var authRelay: WatchWearAuthRelay
+    private lateinit var heartRatePrewarm: HeartRatePrewarm
     private var phoneReachable by mutableStateOf<Boolean?>(null)
     /** Transient handshake status shown on Home until the phone answers (9b diagnostics). */
     private var authStatus by mutableStateOf<String?>(null)
@@ -38,9 +42,13 @@ class WearMainActivity : ComponentActivity() {
     private var workoutPermissionError by mutableStateOf<String?>(null)
     private var pendingWorkoutType = WorkoutActivityType.RUN
 
+    /** A tap on the quick-start tile, waiting for the nav graph to act on it. */
+    private var tileAction by mutableStateOf<WorkoutTileAction?>(null)
+
     private val workoutPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
+        heartRatePrewarm.start()
         startWorkoutIfAllowed()
     }
 
@@ -51,12 +59,16 @@ class WearMainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         permissionsVersion++
+        heartRatePrewarm.start()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         authStore = WearAuthStore(this)
         authRelay = WatchWearAuthRelay(this, authStore)
+        heartRatePrewarm = HeartRatePrewarm(this)
+        // Only a fresh launch carries the tap; a recreated activity must not start a second workout.
+        if (savedInstanceState == null) tileAction = WorkoutTileAction.from(intent)
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val syncStore = com.fpclient.android.wear.recording.WatchWorkoutSyncStore(applicationContext)
             WorkoutRecordingBus.publishPendingCount(syncStore.all().size)
@@ -96,16 +108,35 @@ class WearMainActivity : ComponentActivity() {
                         com.fpclient.android.wear.recording.WatchWorkoutSyncStore(this).resetRelayFlags()
                         com.fpclient.android.wear.recording.WorkoutSyncScheduler.enqueue(this)
                     },
-                    onAmbientModeChanged = { isAmbient ->
+                    tileAction = tileAction,
+                    onTileActionHandled = { tileAction = null },
+                    onLowPowerModeChanged = { lowPower ->
                         if (workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.RECORDING ||
                             workoutSnapshot.status == com.fpclient.android.wear.recording.WorkoutStatus.PAUSED
                         ) {
-                            WorkoutRecordingController.setAmbientMode(this, isAmbient)
+                            WorkoutRecordingController.setLowPowerMode(this, lowPower)
                         }
                     },
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        WorkoutTileAction.from(intent)?.let { tileAction = it }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        WearLog.i(TAG, "onStart")
+        heartRatePrewarm.start()
+    }
+
+    override fun onStop() {
+        WearLog.i(TAG, "onStop")
+        heartRatePrewarm.stopLater()
+        super.onStop()
     }
 
     private fun requestCredentials() {
@@ -149,6 +180,7 @@ class WearMainActivity : ComponentActivity() {
     }
 
     private fun startWorkoutIfAllowed() {
+        WearLog.i(TAG, "startWorkoutIfAllowed type=$pendingWorkoutType")
         if (!WorkoutRecordingController.canStart(this)) {
             workoutPermissionError = "Grant a health or location permission to start recording."
             return
@@ -157,3 +189,5 @@ class WearMainActivity : ComponentActivity() {
         workoutPermissionError = null
     }
 }
+
+private const val TAG = "WearMainActivity"

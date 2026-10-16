@@ -1,0 +1,7 @@
+3.3.0 (release 3.3.0):
+- New Wear OS app: record workouts on your watch with GPS, live heart rate, steps and cadence, signed in through your phone.
+- Watch tile starts a workout in one tap; optional calories.
+- Watch workouts get names like "Morning Walk" and report elevation gain.
+- Upload Garmin Connect "Export Original" ZIP files.
+- Profiles show their header image; heatmap looks like the web's.
+- Indoor activities (Zwift, trainer) show an "Indoor" badge and power.

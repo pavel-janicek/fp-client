@@ -1,7 +1,7 @@
 package com.fpclient.android.wear.auth
 
+import com.fpclient.android.wear.WearLog
 import android.content.Context
-import android.util.Log
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +28,7 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
                 .await()
                 .nodes
         }.getOrElse { e ->
-            Log.w(TAG, "getCapability(${WearAuthProtocol.CAPABILITY}) failed", e)
+            WearLog.w(TAG, "getCapability(${WearAuthProtocol.CAPABILITY}) failed", e)
             emptySet()
         }
 
@@ -39,7 +39,7 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
                 .toSet()
         }.getOrDefault(emptySet())
 
-        Log.i(
+        WearLog.i(
             TAG,
             "requestCredentials: ${nodes.size} reachable/connected node(s): " +
                 nodes.joinToString { "${it.id} displayName=${it.displayName} nearby=${it.isNearby}" },
@@ -53,11 +53,11 @@ class WatchWearAuthRelay(context: Context, private val authStore: WearAuthStore)
                 val requestId = Wearable.getMessageClient(appContext)
                     .sendMessage(node.id, WearAuthProtocol.REQUEST_PATH, byteArrayOf())
                     .await()
-                Log.i(TAG, "request sent to ${node.id}, msgId=$requestId")
+                WearLog.i(TAG, "request sent to ${node.id}, msgId=$requestId")
                 sent = true
             }.onFailure { e ->
                 lastError = e.message
-                Log.w(TAG, "sendMessage to ${node.id} failed", e)
+                WearLog.w(TAG, "sendMessage to ${node.id} failed", e)
             }
         }
         if (sent) CredentialRequestResult.SentAwaitingReply

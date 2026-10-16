@@ -28,8 +28,8 @@ android {
         targetSdk = 36
         // Unique versionCode distinct from :app (Google Play Console requires globally unique
         // versionCodes across all uploaded artifacts in a release listing).
-        versionCode = 56
-        versionName = "3.2.0"
+        versionCode = 58
+        versionName = "3.3.0"
     }
 
     signingConfigs {
@@ -113,6 +113,11 @@ dependencies {
     implementation("androidx.wear:wear-ongoing:1.1.0")
     implementation("androidx.health:health-services-client:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
+    // Quick-start tile ("Start workout" in the watch's tile carousel / Mi Fitness tile manager).
+    implementation("androidx.wear.tiles:tiles:1.5.0")
+    implementation("androidx.wear.protolayout:protolayout:1.3.0")
+    implementation("androidx.wear.protolayout:protolayout-material:1.3.0")
+    implementation("androidx.wear.protolayout:protolayout-expression:1.3.0")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.garmin:fit:21.218.0")

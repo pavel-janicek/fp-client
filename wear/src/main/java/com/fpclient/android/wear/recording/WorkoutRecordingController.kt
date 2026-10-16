@@ -11,9 +11,9 @@ object WorkoutRecordingController {
     internal const val ACTION_PAUSE = "com.fpclient.android.wear.recording.PAUSE"
     internal const val ACTION_RESUME = "com.fpclient.android.wear.recording.RESUME"
     internal const val ACTION_STOP = "com.fpclient.android.wear.recording.STOP"
-    internal const val ACTION_AMBIENT = "com.fpclient.android.wear.recording.AMBIENT"
+    internal const val ACTION_LOW_POWER = "com.fpclient.android.wear.recording.LOW_POWER"
     internal const val EXTRA_ACTIVITY_TYPE = "workout_activity_type"
-    internal const val EXTRA_IS_AMBIENT = "workout_is_ambient"
+    internal const val EXTRA_LOW_POWER = "workout_low_power"
 
     /**
      * The body-sensors permission this build must ask for, keyed on the **device OS version** —
@@ -79,11 +79,15 @@ object WorkoutRecordingController {
     fun resume(context: Context) = send(context, ACTION_RESUME)
     fun stop(context: Context) = send(context, ACTION_STOP)
 
-    fun setAmbientMode(context: Context, isAmbient: Boolean) {
+    /**
+     * Tells the service whether anyone is watching the live workout. Low power (screen dimmed,
+     * workout screen left, app in the background) throttles the live readout to once a minute.
+     */
+    fun setLowPowerMode(context: Context, lowPower: Boolean) {
         context.startService(
             Intent(context, WorkoutRecordingService::class.java)
-                .setAction(ACTION_AMBIENT)
-                .putExtra(EXTRA_IS_AMBIENT, isAmbient),
+                .setAction(ACTION_LOW_POWER)
+                .putExtra(EXTRA_LOW_POWER, lowPower),
         )
     }
 

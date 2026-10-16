@@ -170,6 +170,15 @@ data class PageEnvelopeActivitySummaryDto(
     val page: PageMetaDto = PageMetaDto(),
 )
 
+/** The account behind a timeline `BOOST` event. */
+@Serializable
+data class TimelineBoosterDto(
+    val username: String? = null,
+    val displayName: String? = null,
+    val actorUri: String? = null,
+    val isLocal: Boolean = false,
+)
+
 /** Timeline activity card. */
 @Serializable
 data class TimelineActivityDto(
@@ -210,7 +219,23 @@ data class TimelineActivityDto(
     val indoor: Boolean? = null,
     val context: ActivityContextDto? = null,
     val metrics: TimelineMetricsDto? = null,
+    /**
+     * The timeline is a list of *events*, not activities: one activity shows up once as its
+     * `ORIGINAL` post and again per `BOOST`, each with its own [eventId] while [id] stays the
+     * activity's. Absent on servers older than boosts.
+     */
+    val eventId: String? = null,
+    /** `ORIGINAL` or `BOOST`. */
+    val eventKind: String? = null,
+    /** When the event happened — the boost time for a `BOOST`. */
+    val eventAt: String? = null,
+    /** Who boosted it, on a `BOOST` event. */
+    val booster: TimelineBoosterDto? = null,
 ) {
+    /** Unique per timeline row (the web keys its cards the same way); [id] repeats across boosts. */
+    val timelineKey: String
+        get() = eventId ?: id
+
     /** Full `@username@host` handle so remote authors keep their home instance. */
     val fullHandle: String?
         get() = com.fpclient.android.util.ActorHandle.full(username, actorUri)
