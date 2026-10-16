@@ -3,6 +3,7 @@ import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -38,6 +39,7 @@ import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.ScalingLazyColumn
+import androidx.wear.compose.material.rememberScalingLazyListState
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.fpclient.android.wear.recording.WorkoutActivityType
@@ -117,11 +119,17 @@ fun WorkoutControlScreen(
             modifier = modifier.background(Color.Black),
             timeText = { TimeText() },
         ) {
+            // Top-anchored instead of the default auto-centering, which parks item #1 (the HR
+            // readout) in the middle of the round screen and pushes distance, pace and steps
+            // below the fold (makni.cz e4ac4998). The top padding clears the TimeText.
             ScalingLazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
                     .padding(horizontal = 8.dp),
+                state = rememberScalingLazyListState(initialCenterItemIndex = 0),
+                autoCentering = null,
+                contentPadding = PaddingValues(top = 24.dp, bottom = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 item {
