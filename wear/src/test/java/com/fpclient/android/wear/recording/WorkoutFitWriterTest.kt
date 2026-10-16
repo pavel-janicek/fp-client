@@ -1,6 +1,8 @@
 package com.fpclient.android.wear.recording
 
 import com.garmin.fit.Decode
+import com.garmin.fit.FileIdMesg
+import com.garmin.fit.FileIdMesgListener
 import com.garmin.fit.MesgBroadcaster
 import com.garmin.fit.RecordMesg
 import com.garmin.fit.RecordMesgListener
@@ -39,10 +41,14 @@ class WorkoutFitWriterTest {
         val broadcaster = MesgBroadcaster(decode)
         broadcaster.addListener(RecordMesgListener { mesg -> records.add(mesg) })
         broadcaster.addListener(SessionMesgListener { mesg -> decodedSession = mesg })
+        var fileId: FileIdMesg? = null
+        broadcaster.addListener(FileIdMesgListener { mesg -> fileId = mesg })
 
         FileInputStream(fitFile).use { input ->
             decode.read(input, broadcaster)
         }
+
+        assertEquals("FP Wear", fileId?.productName)
 
         // One record per GPS fix; the HR-only event at 2_000 is not a record of its own (a
         // position-less record would split FitPub's elevation segments) but still counts toward

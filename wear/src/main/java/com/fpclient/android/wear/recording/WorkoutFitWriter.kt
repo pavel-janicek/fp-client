@@ -35,6 +35,9 @@ object WorkoutFitWriter {
             type = File.ACTIVITY
             manufacturer = Manufacturer.DEVELOPMENT
             product = 1
+            // Names the recording app for anything reading the FIT source metadata (FitPub's
+            // FitParser already reads file_id product_name); the phone's GPX says "FP-Client".
+            productName = PRODUCT_NAME
             serialNumber = sessionId
             timeCreated = DateTime(Date(session.startedAtEpochMs))
         }
@@ -172,6 +175,8 @@ object WorkoutFitWriter {
         if (totalStrides == null || movingSec < MIN_CADENCE_WINDOW_SEC) return null
         return (totalStrides * 60.0 / movingSec).roundToInt().takeIf { it in 1..MAX_CADENCE_SPM }?.toShort()
     }
+
+    internal const val PRODUCT_NAME = "FP Wear"
 
     internal const val CADENCE_WINDOW_MS = 20_000L
     private const val MIN_CADENCE_WINDOW_SEC = 5f
