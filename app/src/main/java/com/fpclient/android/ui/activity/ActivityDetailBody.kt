@@ -132,6 +132,8 @@ internal fun DetailBody(
             CommentComposer(
                 activityId = activityId,
                 viewModel = viewModel,
+                // The home instance cannot attach comments to a federated activity.
+                commentOnOrigin = ui.origin,
                 onFocused = {
                     // Keep the composer visible above the soft keyboard.
                     scope.launch {

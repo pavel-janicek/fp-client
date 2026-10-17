@@ -183,6 +183,8 @@ fun TimelineScreen(
     guestMode: Boolean = false,
     modifier: Modifier = Modifier,
     onOpenActivity: (String) -> Unit,
+    /** Federated item: home mirror id + origin `activityUri`, shown in the in-app detail. */
+    onOpenRemoteActivity: (String, String) -> Unit = { id, _ -> onOpenActivity(id) },
     onOpenProfile: (String) -> Unit,
     onOpenCreate: () -> Unit,
     onOpenRecord: () -> Unit = {},
@@ -325,18 +327,22 @@ fun TimelineScreen(
                                     serverUrl = serverUrl,
                                     unitSystem = unitSystem,
                                     onClick = {
-                                        // Web parity (timeline.js): federated activities have only a
-                                        // metadata mirror locally — GET /api/web/activities/{id} 404s —
-                                        // so remote cards open activityUri (the origin server's page)
-                                        // in a Custom Tab instead of the in-app detail. If the handoff
-                                        // fails (no browser installed) the in-app detail with its
-                                        // "not accessible yet" screen is the fallback.
+                                        // Federated activities have only a metadata mirror locally
+                                        // (GET /api/web/activities/{id} 404s), but their origin
+                                        // instance serves the same detail publicly — open them in
+                                        // the in-app detail fed from there. activityUris that are
+                                        // not a FitPub activity keep the web's behaviour (Custom
+                                        // Tab); with no usable URI or no browser, the in-app detail
+                                        // and its "not accessible" screen are the fallback.
                                         val origin = com.fpclient.android.util.RemoteActivity.originUrl(
                                             isLocal = activity.isLocal,
                                             activityUri = activity.activityUri,
                                         )
-                                        if (origin == null || !context.openOnOrigin(origin)) {
-                                            onOpenActivity(activity.id)
+                                        when {
+                                            origin == null -> onOpenActivity(activity.id)
+                                            com.fpclient.android.util.RemoteActivity.origin(origin) != null ->
+                                                onOpenRemoteActivity(activity.id, origin)
+                                            !context.openOnOrigin(origin) -> onOpenActivity(activity.id)
                                         }
                                     },
                                     onAuthorClick = { handle -> onOpenProfile(handle) },

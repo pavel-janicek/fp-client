@@ -53,6 +53,8 @@ fun MainScaffold(
     container: AppContainer,
     appViewModel: AppViewModel,
     onOpenActivity: (String) -> Unit,
+    /** Federated timeline item: mirror id + the origin's `activityUri`. */
+    onOpenRemoteActivity: (String, String) -> Unit = { id, _ -> onOpenActivity(id) },
     onOpenProfile: (String) -> Unit,
     onOpenCreate: () -> Unit,
     onOpenRecord: () -> Unit = {},
@@ -152,6 +154,7 @@ fun MainScaffold(
                 guestMode = sessionState.guest,
                 modifier = modifier,
                 onOpenActivity = onOpenActivity,
+                onOpenRemoteActivity = onOpenRemoteActivity,
                 onOpenProfile = onOpenProfile,
                 onOpenCreate = onOpenCreate,
                 onOpenRecord = onOpenRecord,

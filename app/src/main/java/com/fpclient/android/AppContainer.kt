@@ -45,6 +45,15 @@ class AppContainer(context: Context) {
     val timelineRepository: TimelineRepository by lazy { TimelineRepository(apiClient.api) }
     val activityRepository: ActivityRepository by lazy { ActivityRepository(apiClient.api) }
     val userRepository: UserRepository by lazy { UserRepository(apiClient.api) }
+
+    /**
+     * Read-only access to a federated activity on its origin instance (see
+     * [com.fpclient.android.util.RemoteActivity.origin]). Anonymous: only the detail, likes,
+     * comments and boosts reads are meaningful; reactions and boosts still go through
+     * [activityRepository] with the home instance's mirror id.
+     */
+    fun originActivityRepository(serverUrl: String): ActivityRepository =
+        ActivityRepository(apiClient.originApi(serverUrl))
     val analyticsRepository: AnalyticsRepository by lazy { AnalyticsRepository(apiClient.api) }
     val notificationRepository: NotificationRepository by lazy { NotificationRepository(apiClient.api) }
 

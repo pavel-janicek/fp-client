@@ -58,6 +58,7 @@ import com.fpclient.android.ui.components.LoadingIndicator
 import com.fpclient.android.ui.components.StatRow
 import com.fpclient.android.util.Format
 import com.fpclient.android.util.TextLimits
+import com.fpclient.android.util.openOnOrigin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,6 +71,8 @@ import org.osmdroid.views.overlay.Polyline
 @Composable
 fun ActivityDetailScreen(
     activityId: String,
+    /** A federated activity's `activityUri`; [activityId] is then the home instance's mirror id. */
+    originUri: String? = null,
     container: AppContainer,
     appViewModel: AppViewModel,
     onBack: () -> Unit,
@@ -79,7 +82,7 @@ fun ActivityDetailScreen(
     val vm: ActivityDetailViewModel = viewModel(factory = ActivityDetailViewModel.factory(container, appViewModel))
     val ui by vm.ui.collectAsState()
     val unitSystem by appViewModel.unitSystem.collectAsState()
-    LaunchedEffect(activityId) { vm.load(activityId) }
+    LaunchedEffect(activityId, originUri) { vm.open(activityId, originUri) }
 
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -139,11 +142,14 @@ fun ActivityDetailScreen(
                         }) {
                             Icon(Icons.Filled.Share, contentDescription = "Share activity")
                         }
-                        IconButton(
-                            onClick = { saveRouteLauncher.launch("fitpub-route-$activityId.gpx") },
-                            enabled = !downloading,
-                        ) {
-                            Icon(Icons.Filled.Download, contentDescription = "Download route as GPX")
+                        // Route files require an account on the instance that owns the activity.
+                        if (!ui.isRemote) {
+                            IconButton(
+                                onClick = { saveRouteLauncher.launch("fitpub-route-$activityId.gpx") },
+                                enabled = !downloading,
+                            ) {
+                                Icon(Icons.Filled.Download, contentDescription = "Download route as GPX")
+                            }
                         }
                     }
                     if (ui.isOwnActivity && ui.activity?.isTrimmable == true) {
@@ -169,6 +175,21 @@ fun ActivityDetailScreen(
     ) { padding ->
         when {
             ui.loading -> LoadingIndicator(Modifier.padding(padding))
+            ui.error != null && ui.activity == null && ui.origin != null -> {
+                // The origin serves only public activities anonymously (followers-only ones need
+                // a signed server-to-server request), or it is unreachable: hand over to its web
+                // page, where the user may be signed in.
+                val origin = ui.origin!!
+                ErrorState(
+                    message = "This activity can't be shown here\n\n" +
+                        "It lives on ${origin.host}, which didn't share its details " +
+                        "(it may be visible to followers only, or the server is unreachable).",
+                    onRetry = { if (!context.openOnOrigin(origin.pageUrl)) vm.load(activityId) },
+                    buttonLabel = "Open on ${origin.host}",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(padding),
+                )
+            }
             ui.error != null -> {
                 // Federated (remote) activities return 404 — no FitPub route can resolve
                 // an activity id owned by another instance. Show a neutral

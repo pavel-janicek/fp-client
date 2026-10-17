@@ -43,6 +43,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.fpclient.android.data.dto.ReactionPalette
 import com.fpclient.android.util.Format
 import com.fpclient.android.util.TextLimits
+import com.fpclient.android.util.openOnOrigin
 
 @Composable
 fun ReactionRow(activityId: String, viewModel: ActivityDetailViewModel, ui: ActivityDetailViewModel.UiState) {
@@ -66,34 +67,51 @@ fun ReactionRow(activityId: String, viewModel: ActivityDetailViewModel, ui: Acti
 fun CommentComposer(
     activityId: String,
     viewModel: ActivityDetailViewModel,
+    /** Set for a federated activity: comments are read-only here and written on the origin. */
+    commentOnOrigin: com.fpclient.android.util.RemoteActivity.Origin? = null,
     onFocused: () -> Unit = {},
 ) {
     var commentText by rememberSaveable { mutableStateOf("") }
     val comments = viewModel.ui.collectAsState().value.comments
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.padding(16.dp)) {
         Text("Comments (${comments.size})", style = MaterialTheme.typography.titleSmall)
-        OutlinedTextField(
-            value = commentText,
-            onValueChange = { commentText = it.take(TextLimits.COMMENT) },
-            label = { Text("Add a comment") },
-            singleLine = true,
-            trailingIcon = {
-                IconButton(
-                    onClick = {
-                        if (commentText.isNotBlank()) {
-                            viewModel.addComment(activityId, commentText.trim())
-                            commentText = ""
-                        }
-                    },
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .onFocusChanged { if (it.isFocused) onFocused() },
-        )
+        if (commentOnOrigin != null) {
+            Text(
+                "This activity is from ${commentOnOrigin.host}. Comments can be added on that server.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            androidx.compose.material3.TextButton(
+                onClick = { context.openOnOrigin(commentOnOrigin.pageUrl) },
+            ) {
+                Text("Open on ${commentOnOrigin.host}")
+            }
+        } else {
+            OutlinedTextField(
+                value = commentText,
+                onValueChange = { commentText = it.take(TextLimits.COMMENT) },
+                label = { Text("Add a comment") },
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            if (commentText.isNotBlank()) {
+                                viewModel.addComment(activityId, commentText.trim())
+                                commentText = ""
+                            }
+                        },
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .onFocusChanged { if (it.isFocused) onFocused() },
+            )
+        }
         Spacer(Modifier.height(8.dp))
         comments.forEach { c ->
             Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {

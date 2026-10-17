@@ -319,6 +319,7 @@ private fun FitPubNavGraph(
                 container = container,
                 appViewModel = appViewModel,
                 onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
+                onOpenRemoteActivity = { id, origin -> navController.navigate(Routes.activityDetail(id, origin)) },
                 onOpenProfile = { username -> navController.navigate(Routes.profile(username)) },
                 onOpenCreate = { navController.navigate(Routes.create()) },
                 onOpenRecord = { navController.navigate(Routes.RECORD) },
@@ -340,11 +341,19 @@ private fun FitPubNavGraph(
         }
         composable(
             route = Routes.ACTIVITY_DETAIL,
-            arguments = listOf(navArgument("activityId") { }),
+            arguments = listOf(
+                navArgument("activityId") { },
+                navArgument("origin") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
         ) { entry ->
             val activityId = entry.arguments?.getString("activityId").orEmpty()
             com.fpclient.android.ui.activity.ActivityDetailScreen(
                 activityId = activityId,
+                originUri = entry.arguments?.getString("origin"),
                 container = container,
                 appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
