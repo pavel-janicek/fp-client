@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.doOnLayout
 import com.fpclient.android.data.dto.HeatmapBoundsDto
 import com.fpclient.android.data.dto.HeatmapPointDto
 import org.osmdroid.util.BoundingBox
@@ -63,7 +64,8 @@ fun HeatmapCard(
     maxIntensity: Int? = null,
     loadViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)? = null,
 ) {
-    val valid = points.filter { it.latitude != null && it.longitude != null }
+    // Once per point list: the result keys the map's effects, which compare it by content.
+    val valid = remember(points) { points.filter { it.latitude != null && it.longitude != null } }
     // Like the web heatmap page: the generation status is always shown, the map only once a
     // heatmap exists. Without a known status (older server) the card keeps its old rule —
     // shown only when there are points to draw.
@@ -243,14 +245,26 @@ private fun HeatmapCanvas(
                 } else {
                     BoundingBox.fromGeoPoints(points.map { GeoPoint(it.latitude!!, it.longitude!!) })
                 }
+                // Only once the map has its size: a post can run before the first layout (the
+                // list composes the card ahead of placing it, e.g. when scrolling back up), and
+                // osmdroid turns the then-negative room (0 − 2 × border) into a NaN zoom on
+                // which `Projection.getCloserPixel` loops forever — the Me tab ANR of 3.3.0.
                 map.post {
-                    // Leaflet's fitBounds (what the web uses) snaps to a whole zoom level
-                    // (zoomSnap 1), which is what leaves room around the data; osmdroid fits a
-                    // fractional zoom edge to edge. So: fit with a border the size of a blob
-                    // (radius + blur at the widest), then round the zoom down like Leaflet.
-                    val border = (FIT_BORDER_DP * map.resources.displayMetrics.density).toInt()
-                    map.zoomToBoundingBox(box, false, border)
-                    map.controller.setZoom(floor(map.zoomLevelDouble))
+                    map.doOnLayout {
+                        // Leaflet's fitBounds (what the web uses) snaps to a whole zoom level
+                        // (zoomSnap 1), which is what leaves room around the data; osmdroid fits
+                        // a fractional zoom edge to edge. So: fit with a border the size of a
+                        // blob (radius + blur at the widest), then round the zoom down like
+                        // Leaflet.
+                        val border = HeatmapFraming.border(
+                            box,
+                            map.width,
+                            map.height,
+                            (FIT_BORDER_DP * map.resources.displayMetrics.density).toInt(),
+                        ) ?: return@doOnLayout
+                        map.zoomToBoundingBox(box, false, border)
+                        map.controller.setZoom(floor(map.zoomLevelDouble))
+                    }
                 }
                 fitted = true
             }
@@ -262,6 +276,23 @@ private fun HeatmapCanvas(
         // within the bounds only, then looked cut off along the map's real edge.
         modifier = modifier.clipToBounds(),
     )
+}
+
+/** Guards for `MapView.zoomToBoundingBox`, which hangs the main thread on a NaN zoom. */
+internal object HeatmapFraming {
+
+    /**
+     * The border to fit [box] into a [width] × [height] map with: [desired], shrunk so that at
+     * least one pixel is left for the data on both axes. Null when there is nothing safe to fit —
+     * a map without a size yet, or a box with non-finite coordinates — since either makes
+     * osmdroid's `getBoundingBoxZoom` return NaN.
+     */
+    fun border(box: BoundingBox, width: Int, height: Int, desired: Int): Int? {
+        if (width <= 0 || height <= 0) return null
+        val coordinates = listOf(box.latNorth, box.latSouth, box.lonEast, box.lonWest)
+        if (coordinates.any { !it.isFinite() }) return null
+        return minOf(desired, (width - 1) / 2, (height - 1) / 2).coerceAtLeast(0)
+    }
 }
 
 /** Room kept around the data when framing it: the widest blob, radius 25 + blur 10 (dp). */

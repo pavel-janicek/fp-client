@@ -99,13 +99,16 @@ internal fun DetailBody(
         // Power (watts) — what a trainer ride (e.g. Zwift) is all about. The web shows average power
         // with the headline metrics and average + maximum power in the details; the app has a
         // single level of tiles, so both sit in one row, shown only when the file carried power.
-        val metrics = activity.metrics
-        if (metrics?.averagePower != null || metrics?.maxPower != null) {
+        // A zero is "no power meter", not a reading: servers report 0 W for rides without one
+        // (fitpub.social, e.g. a gravel ride from a phone), so it counts as absent like steps.
+        val averagePower = activity.metrics?.averagePower?.takeIf { it > 0 }
+        val maxPower = activity.metrics?.maxPower?.takeIf { it > 0 }
+        if (averagePower != null || maxPower != null) {
             item {
                 StatRow(
                     listOf(
-                        "Avg power" to Format.power(metrics.averagePower),
-                        "Max power" to Format.power(metrics.maxPower),
+                        "Avg power" to Format.power(averagePower),
+                        "Max power" to Format.power(maxPower),
                     ),
                 )
             }
@@ -132,6 +135,8 @@ internal fun DetailBody(
             CommentComposer(
                 activityId = activityId,
                 viewModel = viewModel,
+                // The home instance cannot attach comments to a federated activity.
+                commentOnOrigin = ui.origin,
                 onFocused = {
                     // Keep the composer visible above the soft keyboard.
                     scope.launch {

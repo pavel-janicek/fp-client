@@ -124,6 +124,51 @@ internal object HeatLayer {
     private fun positiveRemainder(value: Double, divisor: Double): Double =
         (value % divisor).let { if (it < 0) it + divisor else it }
 
+    /** What the map shows, as far as the rendered layer depends on it. */
+    data class View(
+        val zoom: Double,
+        val scrollX: Long,
+        val scrollY: Long,
+        val width: Int,
+        val height: Int,
+        val dataVersion: Int,
+    )
+
+    /** How to draw a frame of the layer — see [frameFor]. */
+    enum class Frame {
+        /** Render the layer for the current view (main-thread work linear in the points). */
+        RENDER,
+
+        /** Draw the last rendered layer, shifted by the scroll since it was rendered. */
+        SHIFT,
+
+        /** Draw nothing: the last layer does not fit this zoom or size. */
+        HIDE,
+    }
+
+    /**
+     * Leaflet.heat redraws on `moveend` only and lets the canvas travel with the map while it
+     * moves. Rendering on every frame instead (projecting and binning every cell) stalled the
+     * Me tab while the map was dragged, and a drag is what a swipe over the card turns into.
+     * So: render the first frame, a settled view ([settled]) and fresh data at an unchanged
+     * view; during a pan shift the last layer; during a zoom or resize hide it until it settles.
+     * The caller schedules the settled render whenever the result is not [Frame.RENDER] for a
+     * view that differs from [rendered].
+     */
+    fun frameFor(rendered: View?, current: View, settled: Boolean): Frame {
+        if (rendered == null || settled) return Frame.RENDER
+        if (rendered == current) return Frame.SHIFT
+        val sameGeometry = rendered.zoom == current.zoom &&
+            rendered.width == current.width && rendered.height == current.height
+        val sameScroll = rendered.scrollX == current.scrollX && rendered.scrollY == current.scrollY
+        return when {
+            !sameGeometry -> Frame.HIDE
+            sameScroll -> Frame.RENDER // only the data changed: a one-off, e.g. a viewport reload
+            rendered.dataVersion == current.dataVersion -> Frame.SHIFT
+            else -> Frame.HIDE
+        }
+    }
+
     /** simpleheat's `globalAlpha` for a cell: `max(value / MAX, MIN_OPACITY)`, at most 1. */
     fun cellAlpha(value: Double): Double = min(1.0, max(value / MAX, MIN_OPACITY))
 

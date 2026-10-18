@@ -236,10 +236,42 @@ class ApiClient(
         createApi(client.newBuilder().followRedirects(false).build())
     }
 
-    private fun createApi(httpClient: OkHttpClient): FitPubApi {
+    /**
+     * Anonymous client for reading federated activities from their origin instance. It is
+     * deliberately separate from [client]: the session interceptor would rewrite the host to
+     * the configured server and attach the JWT cookie, and the session token must never be
+     * sent to another instance. No cookie jar, no CSRF — GET only, public data only.
+     */
+    private val originClient: OkHttpClient = run {
+        val logging = HttpLoggingInterceptor().apply {
+            level = if (isDebug) HttpLoggingInterceptor.Level.BASIC
+            else HttpLoggingInterceptor.Level.NONE
+        }
+        OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("Accept", "application/json")
+                        .header("User-Agent", "FP-Client/${BuildConfig.VERSION_NAME}")
+                        .build(),
+                )
+            }
+            .addInterceptor(logging)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private val originApis = java.util.concurrent.ConcurrentHashMap<String, FitPubApi>()
+
+    /** The API of another FitPub instance ([serverUrl] without trailing slash), unauthenticated. */
+    fun originApi(serverUrl: String): FitPubApi =
+        originApis.getOrPut(serverUrl) { createApi(originClient, "$serverUrl/") }
+
+    private fun createApi(httpClient: OkHttpClient, baseUrl: String = "https://fitpub.invalid/"): FitPubApi {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl("https://fitpub.invalid/")
+            .baseUrl(baseUrl)
             .client(httpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()

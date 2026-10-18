@@ -46,6 +46,7 @@ import com.fpclient.android.data.dto.ReactionPalette
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.util.ActorHandle
 import com.fpclient.android.util.Format
+import com.fpclient.android.util.RemoteActivity
 import com.fpclient.android.util.ShareLinks
 import com.fpclient.android.util.TrackParser
 import com.fpclient.android.util.TrimPreview
@@ -61,6 +62,8 @@ import kotlinx.coroutines.withContext
 class ActivityDetailViewModel(
     private val activities: com.fpclient.android.data.repository.ActivityRepository,
     private val users: com.fpclient.android.data.repository.UserRepository,
+    /** Anonymous reads from a federated activity's origin instance, by its server URL. */
+    private val originActivities: (String) -> com.fpclient.android.data.repository.ActivityRepository,
     private val appViewModel: com.fpclient.android.ui.AppViewModel,
     /** Bumped after a trim so list screens (timeline, profile, records) re-fetch instead of
      * showing the activity's old distance. */
@@ -85,7 +88,15 @@ class ActivityDetailViewModel(
         val isOwnActivity: Boolean = false,
         /** Base URL of the current instance, used to resolve the author's avatar. */
         val serverUrl: String = "",
-    )
+        /**
+         * Set for a federated activity: the detail, comments, likes and boosts come from this
+         * origin instance, while reactions and boosts are sent to the home instance under the
+         * mirror id the screen was opened with.
+         */
+        val origin: RemoteActivity.Origin? = null,
+    ) {
+        val isRemote: Boolean get() = origin != null
+    }
 
     private val _ui = MutableStateFlow(UiState(serverUrl = appViewModel.uiState.value.serverUrl))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -148,7 +159,20 @@ class ActivityDetailViewModel(
         }
     }
 
+    /**
+     * Entry point from the screen. [originUri] is a federated activity's `activityUri`; when it
+     * names a FitPub activity the detail is read from that origin instance.
+     */
+    fun open(activityId: String, originUri: String?) {
+        _ui.value = _ui.value.copy(origin = RemoteActivity.origin(originUri))
+        load(activityId)
+    }
+
     fun load(activityId: String) {
+        _ui.value.origin?.let { origin ->
+            loadRemote(activityId, origin)
+            return
+        }
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true, error = null)
             when (val r = activities.detail(activityId)) {
@@ -164,8 +188,77 @@ class ActivityDetailViewModel(
         }
     }
 
+    /**
+     * The federated activity read from its origin. The origin answers anonymously, so the
+     * viewer-specific fields (own reaction, boosted, boost eligibility) are filled in from the
+     * home instance. A failure (followers-only activity, origin down) leaves the error state,
+     * where the screen offers the origin's web page instead.
+     */
+    private fun loadRemote(mirrorId: String, origin: RemoteActivity.Origin) {
+        viewModelScope.launch {
+            _ui.value = _ui.value.copy(loading = true, error = null)
+            val remote = originActivities(origin.serverUrl)
+            when (val r = remote.detail(origin.activityId)) {
+                is ApiResult.Success -> {
+                    val comments = (remote.comments(origin.activityId, page = 0, size = 50) as? ApiResult.Success)
+                        ?.data?.content.orEmpty()
+                    val likes = (remote.likes(origin.activityId) as? ApiResult.Success)?.data.orEmpty()
+                    val boosts = (remote.boosts(origin.activityId) as? ApiResult.Success)?.data.orEmpty()
+                    _ui.value = _ui.value.copy(
+                        loading = false,
+                        boostBusy = false,
+                        activity = withViewerState(mirrorId, r.data, boosts),
+                        comments = comments,
+                        likes = likes,
+                        boosts = boosts,
+                    )
+                    loadFollowStatus()
+                }
+                is ApiResult.Error -> _ui.value = _ui.value.copy(loading = false, error = r.message, errorStatusCode = r.statusCode)
+            }
+        }
+    }
+
+    /** The viewer's boost of a federated activity, once toggled here (federation lags behind). */
+    private var remoteBoosted: Boolean? = null
+
+    private suspend fun withViewerState(
+        mirrorId: String,
+        activity: com.fpclient.android.data.dto.ActivityDto,
+        boosts: List<BoostDto>,
+    ): com.fpclient.android.data.dto.ActivityDto {
+        val app = appViewModel.uiState.value
+        if (!app.loggedIn) {
+            return activity.copy(currentUserReaction = null, boostedByCurrentUser = false, boostEligible = false)
+        }
+        fun isMe(actorUri: String?) = RemoteActivity.isActor(actorUri, app.serverUrl, app.username)
+        // The home instance lists its own users' reactions to the mirror.
+        val myReaction = (activities.likes(mirrorId) as? ApiResult.Success)?.data
+            ?.firstOrNull { isMe(it.actorUri) }
+            ?.let { it.emoji ?: it.reaction }
+        return activity.copy(
+            currentUserReaction = myReaction,
+            boostedByCurrentUser = remoteBoosted ?: boosts.any { isMe(it.actorUri) },
+            // The home instance's policy for remote targets: public ones are boostable (only
+            // public activities are readable here anyway).
+            boostEligible = activity.visibility == "PUBLIC",
+        )
+    }
+
+    /**
+     * The activity owner as a follow target: a plain username when the author is on this
+     * instance, `@user@host` otherwise. A detail read from an origin carries that instance's
+     * local username (e.g. `paveljanicek` on makni.cz), so it goes through the full handle and
+     * is never mistaken for the same name here.
+     */
+    private fun ownerTarget(): String? {
+        val activity = _ui.value.activity ?: return null
+        val owner = if (_ui.value.isRemote) activity.fullHandle ?: activity.resolvedUsername else activity.resolvedUsername
+        return ActorHandle.normalizeToUsername(owner, appViewModel.uiState.value.serverUrl)
+    }
+
     private suspend fun loadFollowStatus() {
-        val owner = _ui.value.activity?.resolvedUsername
+        val owner = ownerTarget()
         val own = owner.isNullOrBlank() || owner == appViewModel.uiState.value.username
         _ui.value = _ui.value.copy(isOwnActivity = own, serverUrl = appViewModel.uiState.value.serverUrl)
         if (own) {
@@ -179,17 +272,13 @@ class ActivityDetailViewModel(
     }
 
     fun toggleFollow() {
-        val owner = _ui.value.activity?.resolvedUsername ?: return
+        // The server classifies any `user@host` path segment as a federated handle and routes
+        // it into WebFinger discovery ("user not found"), so same-instance handles are
+        // collapsed to the plain local username ([ownerTarget]).
+        val target = ownerTarget() ?: return
         val status = _ui.value.followStatus
         viewModelScope.launch {
             _ui.value = _ui.value.copy(followBusy = true)
-            // The server classifies any `user@host` path segment as a federated handle
-            // and routes it into WebFinger discovery ("user not found"), so collapse
-            // same-instance handles to the plain local username first.
-            val target = ActorHandle.normalizeToUsername(owner, appViewModel.uiState.value.serverUrl) ?: run {
-                _ui.value = _ui.value.copy(followBusy = false)
-                return@launch
-            }
             // An accepted follow AND a pending request are both removed via the unfollow
             // endpoint; no cached status (fresh visitor) defaults to follow.
             val shouldUnfollow = status != null && (status.isAccepted || status.isPending)
@@ -240,7 +329,17 @@ class ActivityDetailViewModel(
             _ui.value = _ui.value.copy(boostBusy = true)
             val result = if (boosting) activities.boost(activityId) else activities.unboost(activityId)
             when (result) {
-                is ApiResult.Success -> load(activityId)
+                // The origin learns about the boost by federation, so re-reading it now would
+                // undo the toggle on screen; keep the outcome locally instead.
+                is ApiResult.Success -> if (_ui.value.isRemote) {
+                    remoteBoosted = boosting
+                    _ui.value = _ui.value.copy(
+                        boostBusy = false,
+                        activity = _ui.value.activity?.copy(boostedByCurrentUser = boosting),
+                    )
+                } else {
+                    load(activityId)
+                }
                 is ApiResult.Error -> _ui.value = _ui.value.copy(boostBusy = false, error = result.message)
             }
         }
@@ -250,12 +349,25 @@ class ActivityDetailViewModel(
         viewModelScope.launch {
             val current = _ui.value.activity
             val mine = current?.currentUserReaction
-            if (mine == emoji) {
+            val result = if (mine == emoji) {
                 activities.unreact(activityId)
             } else {
                 activities.react(activityId, emoji)
             }
-            load(activityId)
+            if (!_ui.value.isRemote) {
+                load(activityId)
+            } else if (result is ApiResult.Success) {
+                // Same as boosts: the origin's counts catch up only after federation.
+                val now = if (mine == emoji) null else emoji
+                _ui.value = _ui.value.copy(
+                    activity = _ui.value.activity?.let {
+                        it.copy(
+                            currentUserReaction = now,
+                            reactionCounts = RemoteActivity.withReaction(it.reactionCounts, mine, now),
+                        )
+                    },
+                )
+            }
         }
     }
 
@@ -430,6 +542,7 @@ class ActivityDetailViewModel(
 
     /** Web URL of the activity on the instance (`{server}/activities/{id}`), for sharing. */
     fun publicActivityUrl(): String? {
+        _ui.value.origin?.let { return it.pageUrl }
         val activity = _ui.value.activity ?: return null
         val id = activity.id ?: return null
         return ShareLinks.publicActivityUrl(_ui.value.serverUrl, id)
@@ -444,7 +557,12 @@ class ActivityDetailViewModel(
         val id = activity.id ?: return null
         val name = activity.title?.takeIf { it.isNotBlank() }
             ?: Format.uppercaseFirst(activity.activityType)
-        return ShareLinks.activityShareText(name, _ui.value.serverUrl, id)
+        val origin = _ui.value.origin
+        return if (origin != null) {
+            ShareLinks.activityShareText(name, origin.serverUrl, origin.activityId)
+        } else {
+            ShareLinks.activityShareText(name, _ui.value.serverUrl, id)
+        }
     }
 
     /**
@@ -467,6 +585,7 @@ class ActivityDetailViewModel(
                 ActivityDetailViewModel(
                     container.activityRepository,
                     container.userRepository,
+                    container::originActivityRepository,
                     appViewModel,
                     container.activitiesVersion,
                 )
