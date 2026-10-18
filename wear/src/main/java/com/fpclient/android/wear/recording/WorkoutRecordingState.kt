@@ -73,6 +73,16 @@ data class WorkoutSessionSnapshot(
 
     fun movingMsAt(nowEpochMs: Long): Long = accumulatedMovingMs +
         (resumedAtEpochMs?.let { (nowEpochMs - it).coerceAtLeast(0L) } ?: 0L)
+
+    /**
+     * True when this workout is still marked ongoing but began before the watch last booted. A
+     * reboot kills the service without a STOP, and nothing restarts it — a START_STICKY service is
+     * not brought back across a reboot — so the stored session would claim RECORDING forever (the
+     * tile said so) and the next Start would resume it, hours later, instead of beginning anew.
+     */
+    fun isInterruptedByReboot(nowElapsedRealtimeMs: Long, nowEpochMs: Long): Boolean =
+        (status == WorkoutStatus.RECORDING || status == WorkoutStatus.PAUSED) &&
+            startedAtEpochMs < nowEpochMs - nowElapsedRealtimeMs
 }
 
 @Serializable
