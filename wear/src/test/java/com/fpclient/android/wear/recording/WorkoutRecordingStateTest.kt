@@ -36,6 +36,33 @@ class WorkoutRecordingStateTest {
     }
 
     @Test
+    fun onlyAnOngoingWorkoutStartedBeforeTheLastBootCountsAsInterruptedByReboot() {
+        // Booted at wall-clock 100_000: now 160_000 with 60_000 ms of uptime.
+        val now = 160_000L
+        val uptime = 60_000L
+        val beforeBoot = WorkoutSessionTransitions.start(40_000L, WorkoutActivityType.WALK)
+        val afterBoot = WorkoutSessionTransitions.start(120_000L, WorkoutActivityType.WALK)
+
+        assertTrue(beforeBoot.isInterruptedByReboot(uptime, now))
+        assertTrue(WorkoutSessionTransitions.pause(beforeBoot, 50_000L)!!.isInterruptedByReboot(uptime, now))
+        assertFalse(WorkoutSessionTransitions.stop(beforeBoot, 50_000L).isInterruptedByReboot(uptime, now))
+        assertFalse(afterBoot.isInterruptedByReboot(uptime, now))
+    }
+
+    @Test
+    fun trackCutOffByARebootReadsUpToTheLastCompleteLine() {
+        // What the Xiaomi Watch 2 left after a reboot mid-walk: a half-written line, then zeros.
+        val store = WorkoutTrackStore(Files.createTempDirectory("track").toFile())
+        store.fileFor(1L).writeText(
+            "{\"timeEpochMs\":1,\"boundary\":\"START\"}\n" +
+                "{\"timeEpochMs\":2,\"heartRateBpm\":92}\n" +
+                "{\"timeEpochMs\":179" + "\u0000".repeat(512),
+        )
+
+        assertEquals(listOf(1L, 2L), store.readEvents(1L).map { it.timeEpochMs })
+    }
+
+    @Test
     fun sessionClockExcludesPausedTimeFromMovingDuration() {
         val session = WorkoutSessionSnapshot(WorkoutStatus.PAUSED, 1_000L, 5_000L, null)
 

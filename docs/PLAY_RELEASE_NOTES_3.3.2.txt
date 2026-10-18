@@ -1,0 +1,4 @@
+<en-US>
+3.3.2 (release 3.3.2):
+- Watch: a workout interrupted by the watch restarting is now saved and uploaded, instead of staying stuck as "recording".
+</en-US>

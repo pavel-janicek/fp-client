@@ -136,6 +136,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 // Start is always a tap on an interactive screen; never inherit a stale low-power
                 // flag, which would throttle the live readout (BPM included) to once a minute.
                 lowPowerMode = false
+                session?.takeIf(::isInterruptedByReboot)?.let(::finishInterruptedSession)
                 if (session == null || session?.status == WorkoutStatus.STOPPED) {
                     beginSession(intent.getStringExtra(WorkoutRecordingController.EXTRA_ACTIVITY_TYPE))
                 }
@@ -321,6 +322,10 @@ class WorkoutRecordingService : Service(), SensorEventListener {
             stopSelf()
             return
         }
+        if (isInterruptedByReboot(current)) {
+            finishInterruptedSession(current)
+            return
+        }
         metrics = WorkoutMetricsAccumulator()
         trackStore.readEvents(current.startedAtEpochMs).forEach(metrics::add)
         publish()
@@ -331,6 +336,36 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 stopSelf()
             }
             else -> stopSelf()
+        }
+    }
+
+    private fun isInterruptedByReboot(current: WorkoutSessionSnapshot): Boolean =
+        current.isInterruptedByReboot(SystemClock.elapsedRealtime(), System.currentTimeMillis())
+
+    /**
+     * Saves a workout cut off by a reboot as if it had been stopped at its last recorded sample,
+     * so the walk is uploaded instead of left behind as a RECORDING session nobody runs. The track
+     * may end in zeros (the reboot lost writes not yet on disk); [WorkoutTrackStore.readEvents]
+     * skips that tail as an undecodable line.
+     */
+    private fun finishInterruptedSession(interrupted: WorkoutSessionSnapshot) {
+        val events = trackStore.readEvents(interrupted.startedAtEpochMs)
+        val endedAt = events.maxOfOrNull { it.timeEpochMs } ?: interrupted.startedAtEpochMs
+        WearLog.w(TAG, "finishInterruptedSession: workout ${interrupted.startedAtEpochMs} cut off by a reboot, ending it at $endedAt")
+        runCatching {
+            trackStore.append(interrupted.startedAtEpochMs, WorkoutTrackEvent(endedAt, boundary = "STOP"))
+        }
+        val stopped = WorkoutSessionTransitions.stop(interrupted, endedAt)
+        session = stopped
+        sessionStore.save(stopped)
+        requestWorkoutTileUpdate(this)
+        serviceScope.launch {
+            queueStoppedWorkout(stopped, endedAt)
+            // A Start that arrived meanwhile has begun a new workout on this service; keep it.
+            if (session?.status == WorkoutStatus.STOPPED) {
+                publish()
+                stopSelf()
+            }
         }
     }
 

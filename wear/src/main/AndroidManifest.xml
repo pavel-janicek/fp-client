@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Finishes and uploads a workout that a reboot cut off (WorkoutRebootReceiver). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Marks this as a watch app rather than a phone-app variant; Play and the package manager
          use it to keep the APK off phones. -->
@@ -74,6 +76,15 @@
             android:name=".recording.WorkoutRecordingService"
             android:exported="false"
             android:foregroundServiceType="health|location" />
+
+        <receiver
+            android:name=".recording.WorkoutRebootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Quick-start tile ("Start workout"): see tile/FitPubTileService. -->
         <service

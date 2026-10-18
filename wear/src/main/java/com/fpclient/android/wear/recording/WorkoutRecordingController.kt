@@ -79,6 +79,11 @@ object WorkoutRecordingController {
     fun resume(context: Context) = send(context, ACTION_RESUME)
     fun stop(context: Context) = send(context, ACTION_STOP)
 
+    /** Starts the service without an action, which finishes a workout a reboot cut off. */
+    fun recoverAfterReboot(context: Context) {
+        context.startService(Intent(context, WorkoutRecordingService::class.java))
+    }
+
     /**
      * Tells the service whether anyone is watching the live workout. Low power (screen dimmed,
      * workout screen left, app in the background) throttles the live readout to once a minute.
