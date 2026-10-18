@@ -420,15 +420,19 @@ class UserRepository(
      * The signed-in user's heatmap — all of it, or only [viewport] aggregated for its zoom (what
      * the web page reloads after every pan/zoom). The endpoint is rate-limited per user (429 +
      * `Retry-After`), which the caller treats as "keep what is shown".
+     *
+     * [zoom] picks the server's grid (≤ 8: 0.01°, ≤ 12: 0.001°, else 0.0001°) and also applies
+     * to the whole-history request. Without it the server falls back to its *finest* grid, i.e.
+     * one cell per ~11 m of every track ever recorded.
      */
-    suspend fun heatmap(viewport: HeatmapViewport? = null): ApiResult<HeatmapResponse> {
+    suspend fun heatmap(viewport: HeatmapViewport? = null, zoom: Double? = viewport?.zoom): ApiResult<HeatmapResponse> {
         return try {
             val response = api.myHeatmap(
                 minLon = viewport?.minLon,
                 minLat = viewport?.minLat,
                 maxLon = viewport?.maxLon,
                 maxLat = viewport?.maxLat,
-                zoom = viewport?.zoom,
+                zoom = zoom,
             )
             if (!response.isSuccessful) {
                 return ApiResult.Error(ErrorMessages.extract(response.errorBody()?.string()), response.code())

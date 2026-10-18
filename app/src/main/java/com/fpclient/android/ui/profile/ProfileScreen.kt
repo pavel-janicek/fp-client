@@ -152,6 +152,7 @@ class ProfileViewModel(
     /** Loads a local user's full profile (activities, heatmap, follow status). */
     private fun loadLocalProfile(username: String) {
         viewModelScope.launch {
+            val previous = _ui.value
             _ui.value = _ui.value.copy(
                 loading = true, error = null, isPrivateProfile = false, isRemoteProfile = false,
                 username = username.ifBlank { null },
@@ -219,8 +220,17 @@ class ProfileViewModel(
             // stays absent (`HeatmapCard` draws nothing without points).
             val isOwnProfile = target.isNullOrBlank() ||
                 target.equals(appViewModel.uiState.value.username, ignoreCase = true)
-            if (isOwnProfile) {
-                when (val h = users.heatmap()) {
+            // The screen reloads on every ON_RESUME (e.g. back from an activity detail); the
+            // heatmap only changes with the activities, so it is kept while their count is.
+            val heatmapCurrent = previous.heatmap != null &&
+                previous.user?.username == user.username &&
+                previous.user?.activityCount == user.activityCount
+            if (isOwnProfile && !heatmapCurrent) {
+                // The overview of the whole history uses the server's coarsest grid, as the web
+                // page's first load does; the map then asks for finer cells of what it shows.
+                // Without a zoom the server sends its finest grid for every track ever
+                // recorded — hundreds of thousands of cells, which froze the Me tab (3.3.0).
+                when (val h = users.heatmap(zoom = HEATMAP_OVERVIEW_ZOOM)) {
                     is ApiResult.Success -> _ui.value = _ui.value.copy(heatmap = h.data)
                     else -> Unit
                 }
@@ -270,6 +280,9 @@ class ProfileViewModel(
     }
 
     companion object {
+        /** A zoom the server maps to its coarsest heatmap grid (0.01°, ~1 km). */
+        private const val HEATMAP_OVERVIEW_ZOOM = 8.0
+
         fun factory(container: AppContainer, appViewModel: AppViewModel): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {

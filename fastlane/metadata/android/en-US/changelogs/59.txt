@@ -1,3 +1,4 @@
 3.3.1 (release 3.3.1):
 - Activities from other FitPub servers open right in the app with map, stats and comments, instead of in the browser.
 - React to and boost them from the activity detail.
+- Fixed the Me tab freezing while scrolling past the activity heatmap.

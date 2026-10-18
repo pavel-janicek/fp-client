@@ -124,4 +124,31 @@ class HeatLayerTest {
         assertEquals((0x40 shl 24) or 0x40, pixels[1])
         assertEquals((0xFF shl 24) or 0xFF, pixels[2])
     }
+
+    private val view = HeatLayer.View(zoom = 11.0, scrollX = 1000, scrollY = 2000, width = 1080, height = 600, dataVersion = 1)
+
+    @Test
+    fun frameFor_rendersTheFirstFrameAndASettledView() {
+        assertEquals(HeatLayer.Frame.RENDER, HeatLayer.frameFor(null, view, settled = false))
+        assertEquals(HeatLayer.Frame.RENDER, HeatLayer.frameFor(view, view.copy(scrollX = 1500), settled = true))
+    }
+
+    @Test
+    fun frameFor_shiftsTheLastLayerWhileTheMapPans() {
+        // A pan (and every frame of a fling) must not re-project every cell on the main thread.
+        assertEquals(HeatLayer.Frame.SHIFT, HeatLayer.frameFor(view, view.copy(scrollX = 1040, scrollY = 1990), settled = false))
+        assertEquals(HeatLayer.Frame.SHIFT, HeatLayer.frameFor(view, view, settled = false))
+    }
+
+    @Test
+    fun frameFor_hidesTheLayerWhileZoomingOrResizing() {
+        assertEquals(HeatLayer.Frame.HIDE, HeatLayer.frameFor(view, view.copy(zoom = 11.4), settled = false))
+        assertEquals(HeatLayer.Frame.HIDE, HeatLayer.frameFor(view, view.copy(height = 2000), settled = false))
+        assertEquals(HeatLayer.Frame.HIDE, HeatLayer.frameFor(view, view.copy(scrollX = 1040, dataVersion = 2), settled = false))
+    }
+
+    @Test
+    fun frameFor_rendersFreshDataForAnUnchangedView() {
+        assertEquals(HeatLayer.Frame.RENDER, HeatLayer.frameFor(view, view.copy(dataVersion = 2), settled = false))
+    }
 }

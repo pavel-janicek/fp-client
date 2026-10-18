@@ -63,7 +63,8 @@ fun HeatmapCard(
     maxIntensity: Int? = null,
     loadViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)? = null,
 ) {
-    val valid = points.filter { it.latitude != null && it.longitude != null }
+    // Once per point list: the result keys the map's effects, which compare it by content.
+    val valid = remember(points) { points.filter { it.latitude != null && it.longitude != null } }
     // Like the web heatmap page: the generation status is always shown, the map only once a
     // heatmap exists. Without a known status (older server) the card keeps its old rule —
     // shown only when there are points to draw.

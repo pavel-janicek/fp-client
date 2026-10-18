@@ -27,7 +27,8 @@ import kotlin.math.roundToInt
  * the same ground as in a browser.
  *
  * The layer is rendered off-screen at [SCALE] (the blobs are blurred anyway, and recolouring is
- * per pixel) and only when the zoom, the scroll position, the size or the data changed.
+ * per pixel), and only once the map has settled ([HeatLayer.frameFor]): while it moves, the last
+ * layer is shifted along with it.
  */
 internal class HeatmapOverlay(private val density: Float) : Overlay() {
 
@@ -43,7 +44,13 @@ internal class HeatmapOverlay(private val density: Float) : Overlay() {
     private var pixels = IntArray(0)
     private var brush: Bitmap? = null
     private var brushKey: Pair<Float, Float>? = null
-    private var renderedKey: List<Any>? = null
+    private var rendered: HeatLayer.View? = null
+    private var settled = false
+    private var settleOn: MapView? = null
+    private val settle = Runnable {
+        settled = true
+        settleOn?.invalidate()
+    }
 
     private val geo = GeoPoint(0.0, 0.0)
     private val screen = Point()
@@ -71,15 +78,36 @@ internal class HeatmapOverlay(private val density: Float) : Overlay() {
         val height = mapView.height
         if (width == 0 || height == 0) return
         val zoom = mapView.zoomLevelDouble
-        val key = listOf(zoom, mapView.mapScrollX, mapView.mapScrollY, width, height, dataVersion)
-        if (key != renderedKey) {
-            render(mapView, zoom, width, height)
-            renderedKey = key
+        val view = HeatLayer.View(zoom, mapView.mapScrollX, mapView.mapScrollY, width, height, dataVersion)
+        val last = rendered
+        when (HeatLayer.frameFor(last, view, settled)) {
+            HeatLayer.Frame.RENDER -> {
+                mapView.removeCallbacks(settle)
+                settled = false
+                render(mapView, zoom, width, height)
+                rendered = view
+                drawLayer(canvas, 0, 0, width, height)
+            }
+            HeatLayer.Frame.SHIFT -> {
+                if (view != last) scheduleSettle(mapView)
+                drawLayer(canvas, (last!!.scrollX - view.scrollX).toInt(), (last.scrollY - view.scrollY).toInt(), width, height)
+            }
+            HeatLayer.Frame.HIDE -> scheduleSettle(mapView)
         }
+    }
+
+    private fun drawLayer(canvas: Canvas, dx: Int, dy: Int, width: Int, height: Int) {
         heat?.let {
-            target.set(0, 0, width, height)
+            target.set(dx, dy, dx + width, dy + height)
             canvas.drawBitmap(it, null, target, outPaint)
         }
+    }
+
+    /** Renders once the map has not moved for [SETTLE_MS] (each frame of a move pushes it back). */
+    private fun scheduleSettle(mapView: MapView) {
+        settleOn = mapView
+        mapView.removeCallbacks(settle)
+        mapView.postDelayed(settle, SETTLE_MS)
     }
 
     private fun render(mapView: MapView, zoom: Double, width: Int, height: Int) {
@@ -149,6 +177,8 @@ internal class HeatmapOverlay(private val density: Float) : Overlay() {
     }
 
     override fun onDetach(mapView: MapView?) {
+        mapView?.removeCallbacks(settle)
+        settleOn = null
         heat?.recycle()
         heat = null
         brush?.recycle()
@@ -159,5 +189,8 @@ internal class HeatmapOverlay(private val density: Float) : Overlay() {
     private companion object {
         /** Off-screen resolution relative to the map. */
         const val SCALE = 0.5f
+
+        /** Quiet time after the last move before the layer is rendered again. */
+        const val SETTLE_MS = 120L
     }
 }
