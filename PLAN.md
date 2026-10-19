@@ -958,6 +958,18 @@ API**.
 A Connect IQ app (Monkey C) runs on the Garmin watch itself, is open to individual developers,
 and talks to an Android app through Garmin's Connect IQ Mobile SDK — the same shape as `:wear`.
 
+**Note 2026-10-19 — Connect IQ needs no Garmin approval to build or run.** The SDK (installed via
+the SDK Manager from developer.garmin.com → Connect IQ → SDK, plus the Monkey C VS Code extension),
+the simulator and the Connect IQ Mobile SDK are free downloads behind a plain Garmin account and a
+licence click-through; the developer signing key is generated locally. A built `.prg` side-loads
+onto your own watch over USB (`/GARMIN/APPS`) with no review. Garmin approval enters only at
+**publishing to the Connect IQ Store** (free developer account, per-app store review — the
+Garmin-side counterpart of the Wear OS review on Play), which 10e needs for other users; side-loaded
+apps also lack Garmin Connect app settings. This is unrelated to the Garmin Connect Developer
+Program in the table above (server-to-server cloud API, legal entities only). Still open for 10b:
+whether Mobile SDK messaging through the Garmin Connect phone app works with a side-loaded watch
+app or only with a Store-installed one.
+
 **Decision 2026-10-14 — repo layout: same repository, top-level `garmin/`.**
 - `garmin/` is a plain Connect IQ project (`manifest.xml`, `monkey.jungle`, `source/`,
   `resources/`), **not** a Gradle module — `settings.gradle.kts` keeps including only `:app` and
