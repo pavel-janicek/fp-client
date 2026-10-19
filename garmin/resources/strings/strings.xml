@@ -8,9 +8,9 @@
     <string id="Resume">Resume</string>
     <string id="Save">Save</string>
     <string id="Discard">Discard</string>
-    <string id="GpsSearching">GPS…</string>
+    <string id="GpsSearching">GPS searching…</string>
     <string id="GpsReady">GPS ready</string>
-    <string id="HintStart">START</string>
+    <string id="HintStart">START: begin</string>
     <string id="HintPause">START: pause</string>
     <string id="HintResume">START: resume · BACK: menu</string>
 </strings>
