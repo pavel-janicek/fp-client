@@ -1069,6 +1069,21 @@ has been prototyped yet):**
   Verify: whether a Connect IQ-recorded session gets Training Effect and the other Garmin metrics
   in Garmin Connect (the docs do not say), and the memory / storage limits on the maintainer's
   watch — a one-hour GPS workout is 3,600+ one-second samples.
+
+  **Status 2026-10-19: 🟡 implemented, simulator-tested, not verified on a real watch** (a tester
+  with Garmin watches is lined up; procedure in `docs/GARMIN.md` → "Field test"). Activity list
+  (RUN/WALK/HIKE/BIKE/OTHER, same keys as Wear OS) → workout screen (moving time, distance, heart
+  rate, GPS state) → START start/pause/resume, pause menu Resume/Save/Discard, BACK never silently
+  ends a workout. Native `ActivityRecording` session (decision above) plus 1 Hz samples
+  `[s, latE6, lonE6, altDm, hr, steps]` in ~4 KB Storage chunks. Limits read from the device
+  profiles: watch app 768 KB, **background 64 KB** (hence queue entries carry only the summary,
+  samples live in separate keys), app storage 10 MB on all six targets (1 h ≈ 100 KB — the
+  storage worry above is settled). Save queues the summary {sport, duration, distance}; the phone
+  parses it and notifies "Run · 5.23 km · 31:20 from …"; contract tests extended on both sides.
+  Verified in the simulator: all six targets build at type-check level 3, 5 watch + 7 phone
+  Garmin unit tests pass, full flow open → start → pause → save → queued → back to the list. Not
+  verifiable there: real GPS/heart rate, the native activity reaching Garmin Connect, Training
+  Effect — all for the field test. In 10c the ack also deletes the samples; 10d changes that.
 - **10d — Transfer & upload.** Chunked, resumable transfer of the recorded samples to the phone
   (Connect IQ messages are size-limited); the phone builds the FIT with the existing Garmin FIT SDK
   dependency, applies `CalorieFitAmender` and stride totals, and uploads through the existing

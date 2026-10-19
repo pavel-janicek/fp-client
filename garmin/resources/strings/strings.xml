@@ -1,7 +1,15 @@
 <strings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
     <string id="AppName">FP Wear</string>
+    <string id="SyncNow">Sync now</string>
     <string id="StatusAllSent">All sent to phone</string>
     <string id="StatusPending">Waiting for phone: $1$</string>
-    <!-- 10b prototype only; replaced by the recording UI in 10c. -->
-    <string id="HintSendTest">START: send test</string>
+    <string id="Paused">PAUSED</string>
+    <string id="Resume">Resume</string>
+    <string id="Save">Save</string>
+    <string id="Discard">Discard</string>
+    <string id="GpsSearching">GPS…</string>
+    <string id="GpsReady">GPS ready</string>
+    <string id="HintStart">START</string>
+    <string id="HintPause">START: pause</string>
+    <string id="HintResume">START: resume · BACK: menu</string>
 </strings>

@@ -7,6 +7,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.fpclient.android.R
 import com.fpclient.android.notifications.PushNotifications
+import java.util.Locale
 
 /**
  * "Workout received from your Garmin" — in 10b the visible proof that background delivery works
@@ -23,7 +24,7 @@ internal object GarminNotifications {
                 description = "Workouts received from the FP Wear app on a Garmin watch"
             },
         )
-        val text = "${entry.label.ifBlank { "Workout" }} from ${entry.deviceName}"
+        val text = summaryText(entry)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Garmin workout received")
@@ -34,5 +35,19 @@ internal object GarminNotifications {
         } catch (_: SecurityException) {
             // The permission was revoked between the check above and the notify() call.
         }
+    }
+
+    /** "Run · 5.23 km · 31:20 from fēnix 8" — whatever the watch reported, nothing invented. */
+    internal fun summaryText(entry: GarminInboxEntry): String {
+        val parts = mutableListOf(entry.label.ifBlank { "Workout" })
+        entry.distanceMeters?.takeIf { it > 0 }?.let { parts += String.format(Locale.ROOT, "%.2f km", it / 1000.0) }
+        entry.durationSeconds?.let { seconds ->
+            val h = seconds / 3600
+            val m = seconds % 3600 / 60
+            val s = seconds % 60
+            parts += if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s) else String.format(Locale.ROOT, "%02d:%02d", m, s)
+        }
+        val from = entry.deviceName.takeIf { it.isNotBlank() }?.let { " from $it" }.orEmpty()
+        return parts.joinToString(" · ") + from
     }
 }

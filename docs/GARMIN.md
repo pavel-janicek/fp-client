@@ -5,10 +5,12 @@ watch and hands it to FP Client on the phone, which builds the FIT and uploads i
 Wear OS workout. The goal, the chosen approach and the real-watch release gate are recorded in
 PLAN.md → Iteration 10; this file covers what is needed to build and run it.
 
-**Status:** 10a (scaffolding) is done. 10b (phone link) is implemented on both sides and
-simulator-tested as far as a simulator can go; it is **not verified on a real watch** — the
-release gate in PLAN.md → Iteration 10 still applies. The watch sends a *test* workout (START);
-recording arrives with 10c.
+**Status:** 10a (scaffolding) is done. 10b (phone link) and 10c (recording) are implemented and
+simulator-tested as far as a simulator can go; neither is **verified on a real watch** — the
+release gate in PLAN.md → Iteration 10 still applies, and a tester with Garmin watches is lined
+up (see "Field test" below). A saved workout reaches the phone as a summary (sport, moving time,
+distance); its samples stay on the watch until 10d transfers them, and nothing is uploaded to
+FitPub yet.
 
 ## Project map
 
@@ -21,9 +23,14 @@ garmin/
   source/PendingWorkouts.mc    queue persisted in Application.Storage, 5-min retry timer
   source/PhoneLink.mc          transmit queue / handle ack + pull (foreground and background)
   source/BackgroundService.mc  ServiceDelegate: phone messages and retries while the app is closed
-  source/HomeView.mc           home screen: name, queue state (positions derived from the dc)
-  source/HomeDelegate.mc       START queues and sends a test workout (10b prototype)
-  source/ProtocolTest.mc       (:test) unit tests pinning the wire strings
+  source/HomeMenu.mc           start screen: activity list + "Sync now" row with the queue state
+  source/Activities.mc         RUN/WALK/HIKE/BIKE/OTHER: keys shared with Wear OS, native sports
+  source/WorkoutController.mc  one workout: native ActivityRecording session + GPS/HR/steps samples
+  source/WorkoutView.mc        workout screen: state, moving time, distance, heart rate (dc-relative)
+  source/WorkoutDelegate.mc    START start/pause/resume; BACK while running opens the pause menu
+  source/PauseMenu.mc          Resume / Save / Discard
+  source/SampleBuffer.mc       per-second samples, written to Storage in ~4 KB chunks
+  source/ProtocolTest.mc       (:test) unit tests: wire strings, message shape, time format
   resources/strings/           strings (English only — translations stay with Iteration 7)
   resources/drawables/         launcher icon (SVG, scaled per device by the compiler)
   tools/Dockerfile             Ubuntu 22.04 runtime libraries for the SDK Manager and simulator
@@ -83,6 +90,51 @@ The launcher-icon "will be scaled" warning is expected: one SVG serves every ico
 **Side-load to a real watch:** build for that device id, connect the watch over USB and copy the
 `.prg` to `GARMIN/APPS/`. Side-loaded apps get no Garmin Connect app settings, and whether the
 phone link (Mobile SDK) works with them is an open 10b question.
+
+**Logs from a real watch:** a side-loaded app's `System.println` output (the `FP: …` lines) is
+written to `GARMIN/APPS/LOGS/<PRG NAME>.TXT` — but only if that file already exists, so create an
+empty one (e.g. `GARMIN/APPS/LOGS/FITPUB.TXT` for `fitpub.prg`) before testing. Crashes land in
+`GARMIN/APPS/LOGS/CIQ_LOG.YML`.
+
+## Recording (10c)
+
+Garmin-style flow: pick an activity → the workout screen shows GPS state → **START** starts →
+**START** pauses and opens Resume / Save / Discard (BACK while running does the same, so a stray
+press never ends a workout) → **Save** stores it, queues the summary and sends it to the phone.
+
+- **Native activity:** `ActivityRecording.createSession` with the matching sport; the watch saves
+  a normal Garmin activity that syncs to Garmin Connect (decision 2026-10-19 in PLAN.md). Moving
+  time and distance on screen come from that session (`Activity.getActivityInfo`), so they match
+  Garmin Connect.
+- **Samples for FitPub:** once per second while recording, `[seconds, latE6, lonE6, altitudeDm,
+  heartRate, steps]` (integers — 32-bit Floats would cost GPS precision; null when unknown).
+  Steps are the delta of the daily step counter. Written to Storage in 120-sample chunks
+  (~4 KB, limit 32 KB per value) under `c<id>_<n>`, never kept whole in memory: the background
+  service that loads the queue has only **64 KB** (watch app: 768 KB). Every target has
+  **10 MB** app storage (`appStorageCapacity` in the device profiles); one hour ≈ 100 KB. A failed
+  write stops sampling but not the native activity.
+- **Queue entry = summary only** {id, created, label, sport, duration, distance} plus the chunk
+  count. In 10c the phone's ack also deletes the chunks (the phone keeps the summary only);
+  10d turns this into a chunked transfer whose ack covers the samples.
+
+## Field test (real watch)
+
+What a tester needs, and what each step proves:
+
+1. **Watch:** `fitpub-<device>.prg` built for their exact model (`manifest.xml` products, add the
+   model if missing), copied to `GARMIN/APPS/`, plus the empty log file above.
+2. **Phone:** Garmin Connect paired with the watch, and an FP Client **built from this branch**
+   (WIRELESS, i.e. without `-PgarminTethered`) and signed with the same key as the build already
+   on their phone — or uninstall that one first. Notifications allowed.
+3. Record a short walk, Save. Expected: the activity appears in Garmin Connect; FP Client posts
+   "Garmin workout received — Walk · 0.85 km · 10:12 from …"; the watch's "Sync now" row returns
+   to "All sent to phone". → proves recording and watch → phone (impossible in the simulator).
+4. **Gate test:** force-stop FP Client (Settings → Apps → Force stop), record and save another
+   one. Expected: the notification still arrives (Garmin Connect woke FP Client, then its `pull`
+   fetched the workout) — possibly only after the watch's 5-minute retry or the phone's 15-minute
+   pull. → this is the 10b release-gate question.
+5. Send back: the watch log file, `CIQ_LOG.YML` if present, and `adb logcat -s GarminLink` if
+   they can.
 
 **Unit tests** (Monkey C `(:test)` functions, compiled only with `-t`; the simulator must run):
 

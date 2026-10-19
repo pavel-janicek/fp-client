@@ -12,6 +12,9 @@ data class GarminInboxEntry(
     val createdEpochSeconds: Long,
     val deviceName: String,
     val receivedAtEpochMs: Long,
+    val sport: String? = null,
+    val durationSeconds: Long? = null,
+    val distanceMeters: Long? = null,
 )
 
 /**

@@ -124,6 +124,9 @@ object GarminLink {
                     createdEpochSeconds = workout.createdEpochSeconds,
                     deviceName = device.friendlyName.orEmpty(),
                     receivedAtEpochMs = System.currentTimeMillis(),
+                    sport = workout.sport,
+                    durationSeconds = workout.durationSeconds,
+                    distanceMeters = workout.distanceMeters,
                 )
                 val isNew = inbox.record(entry)
                 Log.i(TAG, "workout ${workout.id} ${if (isNew) "stored" else "already known"}, ack")

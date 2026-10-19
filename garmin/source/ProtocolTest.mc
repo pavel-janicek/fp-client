@@ -12,6 +12,9 @@ function protocolWireStringsMatchPhone(logger as Logger) as Boolean {
     Test.assertEqual("id", Protocol.KEY_ID);
     Test.assertEqual("created", Protocol.KEY_CREATED);
     Test.assertEqual("label", Protocol.KEY_LABEL);
+    Test.assertEqual("sport", Protocol.KEY_SPORT);
+    Test.assertEqual("duration", Protocol.KEY_DURATION);
+    Test.assertEqual("distance", Protocol.KEY_DISTANCE);
     Test.assertEqual("workout", Protocol.TYPE_WORKOUT);
     Test.assertEqual("ack", Protocol.TYPE_ACK);
     Test.assertEqual("pull", Protocol.TYPE_PULL);
@@ -20,12 +23,18 @@ function protocolWireStringsMatchPhone(logger as Logger) as Boolean {
 
 (:test)
 function workoutMessageCarriesTypeVersionAndFields(logger as Logger) as Boolean {
-    var message = Protocol.workoutMessage({ "id" => "42-7", "created" => 1700000000, "label" => "Run" });
+    var message = Protocol.workoutMessage({ "id" => "42-7", "created" => 1700000000, "label" => "Run",
+        "sport" => "RUN", "duration" => 1880, "distance" => 5230, "chunks" => 16 });
     Test.assertEqual("workout", message["t"]);
     Test.assertEqual(1, message["v"]);
     Test.assertEqual("42-7", message["id"]);
     Test.assertEqual(1700000000, message["created"]);
     Test.assertEqual("Run", message["label"]);
+    Test.assertEqual("RUN", message["sport"]);
+    Test.assertEqual(1880, message["duration"]);
+    Test.assertEqual(5230, message["distance"]);
+    // Watch-only bookkeeping stays on the watch.
+    Test.assert(!message.hasKey("chunks"));
     return true;
 }
 
@@ -35,5 +44,21 @@ function typeOfRejectsNonFitPubMessages(logger as Logger) as Boolean {
     Test.assert(Protocol.typeOf("ack") == null);
     Test.assert(Protocol.typeOf({ "t" => 3 }) == null);
     Test.assert(Protocol.typeOf(null) == null);
+    return true;
+}
+
+(:test)
+function workoutTimeFormatsWithAndWithoutHours(logger as Logger) as Boolean {
+    Test.assertEqual("00:07", WorkoutView.formatTime(7));
+    Test.assertEqual("31:20", WorkoutView.formatTime(1880));
+    Test.assertEqual("1:02:03", WorkoutView.formatTime(3723));
+    return true;
+}
+
+(:test)
+function activityTablesStayAligned(logger as Logger) as Boolean {
+    Test.assertEqual(Activities.KEYS.size(), Activities.LABELS.size());
+    Test.assertEqual(Activities.KEYS.size(), Activities.SPORTS.size());
+    Test.assertEqual("RUN", Activities.KEYS[0]);
     return true;
 }

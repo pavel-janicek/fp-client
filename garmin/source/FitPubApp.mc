@@ -5,6 +5,9 @@ import Toybox.Lang;
 import Toybox.System;
 import Toybox.WatchUi;
 
+//! The start screen, so phone messages and background runs can refresh its sync row.
+var gHomeMenu as HomeMenu?;
+
 //! Entry point (manifest `entry`). Also the background process's app object, hence (:background);
 //! the foreground-only parts (views, the live message callback) stay outside that annotation.
 (:background)
@@ -31,18 +34,27 @@ class FitPubApp extends Application.AppBase {
         Background.registerForPhoneAppMessageEvent();
         // While the app is open, messages arrive here instead.
         Communications.registerForPhoneAppMessages(method(:onPhoneMessage));
-        return [new HomeView(), new HomeDelegate()];
+        var home = new HomeMenu();
+        $.gHomeMenu = home;
+        return [home, new HomeMenuDelegate()];
     }
 
     (:typecheck(disableBackgroundCheck))
     function onPhoneMessage(msg as Communications.PhoneAppMessage) as Void {
         PhoneLink.handle(msg.data, null);
-        WatchUi.requestUpdate();
+        refreshHome();
     }
 
     //! A background run finished while the app is open: the queue may have changed.
     (:typecheck(disableBackgroundCheck))
     function onBackgroundData(data as Application.PersistableType) as Void {
-        WatchUi.requestUpdate();
+        refreshHome();
+    }
+
+    (:typecheck(disableBackgroundCheck))
+    private function refreshHome() as Void {
+        if ($.gHomeMenu != null) {
+            $.gHomeMenu.refresh();
+        }
     }
 }

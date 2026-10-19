@@ -5,7 +5,7 @@
     Targets are the devices whose profiles are installed via the SDK Manager (see docs/GARMIN.md);
     minApiLevel 5.0.0 keeps the app on current Connect IQ watches. Permissions arrive with the
     steps that need them: 10b Communications + Background (phone link, background service);
-    10c Positioning / Sensor / Fit.
+    10c Fit (native activity), Positioning (GPS), Sensor (heart rate).
 -->
 <iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
     <iq:application id="acb5d45a68f54311b0223006a814250f" type="watch-app" name="@Strings.AppName"
@@ -23,6 +23,9 @@
         <iq:permissions>
             <iq:uses-permission id="Background"/>
             <iq:uses-permission id="Communications"/>
+            <iq:uses-permission id="Fit"/>
+            <iq:uses-permission id="Positioning"/>
+            <iq:uses-permission id="Sensor"/>
         </iq:permissions>
 
         <iq:languages>

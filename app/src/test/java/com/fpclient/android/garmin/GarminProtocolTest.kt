@@ -19,6 +19,9 @@ class GarminProtocolTest {
         assertEquals("id", GarminProtocol.KEY_ID)
         assertEquals("created", GarminProtocol.KEY_CREATED)
         assertEquals("label", GarminProtocol.KEY_LABEL)
+        assertEquals("sport", GarminProtocol.KEY_SPORT)
+        assertEquals("duration", GarminProtocol.KEY_DURATION)
+        assertEquals("distance", GarminProtocol.KEY_DISTANCE)
         assertEquals("workout", GarminProtocol.TYPE_WORKOUT)
         assertEquals("ack", GarminProtocol.TYPE_ACK)
         assertEquals("pull", GarminProtocol.TYPE_PULL)
@@ -35,6 +38,26 @@ class GarminProtocolTest {
         // The SDK turns a Monkey C Dictionary into a HashMap and a Number into an Integer.
         val message = hashMapOf<Any, Any>("t" to "workout", "v" to 1, "id" to "42-7", "created" to 1_700_000_000, "label" to "Run")
         assertEquals(GarminProtocol.Workout("42-7", 1_700_000_000L, "Run"), GarminProtocol.parseWorkout(message))
+    }
+
+    @Test
+    fun parsesWorkoutSummary() {
+        val message = hashMapOf<Any, Any>(
+            "t" to "workout", "v" to 1, "id" to "1700000000-7", "created" to 1_700_000_000, "label" to "Run",
+            "sport" to "RUN", "duration" to 1880, "distance" to 5230,
+        )
+        assertEquals(
+            GarminProtocol.Workout("1700000000-7", 1_700_000_000L, "Run", "RUN", 1880L, 5230L),
+            GarminProtocol.parseWorkout(message),
+        )
+    }
+
+    @Test
+    fun summaryTextShowsOnlyWhatTheWatchReported() {
+        val entry = GarminInboxEntry("1", "Run", 0, "fēnix 8", 0, "RUN", 3723, 5230)
+        assertEquals("Run · 5.23 km · 1:02:03 from fēnix 8", GarminNotifications.summaryText(entry))
+        assertEquals("Walk · 31:20", GarminNotifications.summaryText(GarminInboxEntry("2", "Walk", 0, "", 0, durationSeconds = 1880, distanceMeters = 0)))
+        assertEquals("Workout", GarminNotifications.summaryText(GarminInboxEntry("3", "", 0, "", 0)))
     }
 
     @Test
