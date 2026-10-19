@@ -101,16 +101,15 @@ by Zwift.
 
 ### F-Droid
 
-Release 1.3.5 has been deemed "good enough" by the F-Droid people; the
-[merge request](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/47394) is ready
-to be tested. You can [help reviewing it](https://gitlab.com/fdroid/wiki/-/wikis/Internal/Reviewing-new-apps).
+FP Client is no longer pursuing F-Droid inclusion: the Wear OS and Garmin watch support depend on
+proprietary libraries (Google Play services, Garmin's Connect IQ companion SDK), which F-Droid's
+main repository does not accept. Use Google Play or the APK from the Releases page.
 
 ## Contributing
 
 ### Testing
 
 - Join the Play beta above and use the app daily — real-world usage is the best test.
-- Help review the F-Droid merge request (link above).
 - Or build it yourself: `./gradlew installDebug` (needs JDK 17 and Android SDK platform 36).
 
 ### Submitting issues
@@ -122,8 +121,8 @@ source of truth for known problems.
 2. Make sure you are running the latest release — open the app, go to
    **Settings** and tap **Check for updates** in the *Updates* card (or open
    **Settings → About this app → Updates**). If a newer version is available,
-   update via your app store (Google Play or F-Droid — the app shows direct
-   links) and confirm your problem still exists before filing an issue.
+   update via Google Play or the Releases page (the app shows direct links)
+   and confirm your problem still exists before filing an issue.
    The version you are on is shown in **Settings → About this app**;
    please include it in your report.
 3. Still broken? Try Settings → Applications → FP Client → *Delete data*, then retry,
@@ -138,3 +137,11 @@ source of truth for known problems.
 FP Client is developed with the help of an AI coding agent
 ([Cline](https://github.com/cline/cline), powered by the ox-alpha model); code reviews,
 testing on device, and product decisions are done by a human.
+
+## License
+
+FP Client — the phone app, the Wear OS app and the Garmin watch app — is licensed under the
+[Apache License 2.0](LICENSE) since version 4.0. Releases up to 3.x were published under the GNU
+AGPL-3.0, and copies of those releases remain available under that licence. The Garmin watch
+support uses Garmin's proprietary Connect IQ SDK and companion library, which are covered by
+Garmin's own licence agreement, not by this repository's licence.

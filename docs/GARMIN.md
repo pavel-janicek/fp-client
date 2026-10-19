@@ -254,14 +254,12 @@ under one agreement (§ IX.e: "references … to the SDK include the Companion S
 - **Proprietary, not open source.** § I.a: a "limited, non-exclusive, personal, revocable …
   non-sublicensable" licence; § I.b forbids redistributing the Program Materials or deriving
   their source. Shipping the companion AAR inside an app is the intended use (Garmin publishes it
-  on Maven Central for that), but it is a **closed-source component in an AGPL-3.0 app**.
-  - *AGPL:* to keep FP Client's licence coherent, the copyright holder can grant an AGPL §7
-    "additional permission" to combine with the Garmin companion library (a linking exception).
-    **Decision for the maintainer**, not taken here.
-  - *F-Droid:* a proprietary dependency is not accepted in F-Droid's main repository. Note that
-    `:app` already depends on `play-services-wearable` (Wear OS, Iteration 9), which F-Droid
-    treats the same way — so this is not new, but it adds to it. Options: a `foss` flavor without
-    Wear OS and Garmin for F-Droid, or leaving F-Droid. **Decision for the maintainer.**
+  on Maven Central for that).
+  - **Decided 2026-10-19:** FP Client leaves F-Droid (whose main repository refuses proprietary
+    dependencies — `play-services-wearable` already was one) and moves from AGPL-3.0 to
+    **Apache-2.0** from 4.0 on, so combining it with Garmin's and Google's closed libraries is
+    unproblematic. Releases up to 3.x stay available under AGPL-3.0. The sole author holds all
+    copyright (git history), so no contributor consent was needed.
 - **Distribution:** the agreement describes distribution through the Connect IQ Store (§ II.b)
   but does not forbid side-loading for testing; nothing requires the app's own source to be
   closed. Do not commit SDK files or the developer key (`.gitignore` covers both).

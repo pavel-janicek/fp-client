@@ -1112,8 +1112,9 @@ has been prototyped yet):**
   "Garmin watch" card (Garmin Connect state, paired watches, FP Wear installed or not via
   `getApplicationInfo`, pending workouts with the newest error, Sync now), a Garmin banner above
   every tab, the watch's sync row telling how long ago the phone last answered, the licence read
-  (proprietary companion SDK in an AGPL app: AGPL §7 exception and F-Droid flavor are open
-  maintainer decisions — `docs/GARMIN.md` → "Licence and distribution"), a privacy-policy section
+  (proprietary companion SDK — `docs/GARMIN.md` → "Licence and distribution"), a privacy-policy section
   draft (the agreement requires a policy and location opt-in) and a Store listing draft with a
-  working `.iq` export (138 KB). *Part 2 — after the field test:* battery and memory on real
+  working `.iq` export (138 KB). **Decision 2026-10-19 (maintainer):** F-Droid is abandoned and
+  the project moves from AGPL-3.0 to Apache-2.0 from 4.0 on (sole copyright holder; 3.x releases
+  stay AGPL) — this settles both open licence questions. *Part 2 — after the field test:* battery and memory on real
   hardware, screenshots, Store submission, FP Client 4.0 release.
