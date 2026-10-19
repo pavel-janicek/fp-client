@@ -1017,9 +1017,13 @@ on real hardware, 10c/10d are redesigned before release, not patched afterwards.
 
 **Sub-steps (one prompt each; verify Garmin's current SDK docs at the start of 10a — nothing below
 has been prototyped yet):**
-- **10a — Scaffolding.** `garmin/` Connect IQ project (target device list incl. the maintainer's
-  watch), `.gitignore` entries, CI path filters, `docs/GARMIN.md` (toolchain setup, simulator,
-  side-loading to a real watch). Verify: an empty app builds and runs in the simulator.
+- **10a — Scaffolding.** ✅ done 2026-10-19. `garmin/` Connect IQ project (target device list —
+  no maintainer's watch exists, so six installed profiles spanning 240–454 px MIP/AMOLED, see
+  `docs/GARMIN.md`), `.gitignore` entries, CI path filters, `docs/GARMIN.md` (toolchain setup,
+  simulator, side-loading to a real watch). Verified: builds for all six targets with SDK 9.2.0 and
+  runs in the simulator (fēnix 8 47 mm, fēnix 7S). On Ubuntu 24.04+ the SDK Manager and simulator
+  need old WebKit/libsoup libraries, so they run in a small Ubuntu 22.04 container
+  (`garmin/tools/`).
 - **10b — Phone ↔ Garmin link, starting with a background-delivery prototype.** Automatic upload
   is the goal, so the riskiest question is answered first, before any recording UI: **does a
   message reach FP Client when its process is not running?** The Mobile SDK talks through the

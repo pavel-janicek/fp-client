@@ -24,5 +24,13 @@ local.properties
 app/release/
 wear/release/
 
+# Connect IQ (garmin/): build output, side-load/Store packages, developer signing key
+garmin/bin/
+*.prg
+*.prg.debug.xml
+*.iq
+*.der
+*.pem
+
 # OS
 .DS_Store

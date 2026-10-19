@@ -1,0 +1,6 @@
+<!-- Same pulse mark as the :wear launcher foreground (ic_launcher_foreground.xml), on the
+     FitPub green. The compiler scales it to each device's launcher icon size. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+    <circle cx="54" cy="54" r="54" fill="#2E7D32"/>
+    <path fill="#FFFFFF" d="M30,66 L40,66 L46,46 L58,74 L64,58 L70,66 L78,66 L78,58 L74,58 L70,50 L66,58 L52,28 L44,58 L38,58 L30,58 Z"/>
+</svg>
