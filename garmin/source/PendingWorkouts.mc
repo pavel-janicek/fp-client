@@ -13,8 +13,6 @@ import Toybox.Time;
 (:background)
 module PendingWorkouts {
     const STORAGE_KEY = "pending";
-    //! Bookkeeping key in each entry: how many sample chunks SampleBuffer stored for it.
-    const KEY_CHUNKS = "chunks";
     //! Retry interval while anything is queued; 5 minutes is the platform minimum.
     const RETRY_SECONDS = 5 * 60;
     //! Oldest entries are dropped beyond this, so a phone that never answers cannot exhaust storage.
@@ -39,8 +37,7 @@ module PendingWorkouts {
         save(entries);
     }
 
-    //! Drops the workout with [id] and its stored samples (10c: the phone takes the summary only;
-    //! with 10d the ack will cover the samples too).
+    //! Drops the workout with [id] and its stored samples — the phone's ack means it holds them all.
     function remove(id as Object?) as Void {
         var kept = [] as Array<Protocol.Workout>;
         var entries = all();
@@ -56,7 +53,7 @@ module PendingWorkouts {
     }
 
     function deleteChunks(workout as Protocol.Workout) as Void {
-        var chunks = workout[KEY_CHUNKS];
+        var chunks = workout[Protocol.KEY_CHUNKS];
         if (chunks instanceof Number) {
             for (var i = 0; i < chunks; i++) {
                 Storage.deleteValue(chunkKey(workout[Protocol.KEY_ID] as String, i));

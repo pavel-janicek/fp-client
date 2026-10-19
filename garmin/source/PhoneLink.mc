@@ -1,3 +1,4 @@
+import Toybox.Application;
 import Toybox.Communications;
 import Toybox.Lang;
 import Toybox.System;
@@ -25,6 +26,20 @@ module PhoneLink {
         }
     }
 
+    //! Transmits one stored sample chunk; [onDone] as in sendPending. A chunk that no longer exists
+    //! (its workout was acked or dropped) is skipped.
+    function sendChunk(id as String, index as Number, onDone as Method?) as Void {
+        var data = Storage.getValue(PendingWorkouts.chunkKey(id, index));
+        if (!(data instanceof Array)) {
+            if (onDone != null) {
+                onDone.invoke();
+            }
+            return;
+        }
+        var message = Protocol.chunkMessage(id, index, data as Array) as Dictionary<Communications.TransmitKeyType, Communications.TransmitType>;
+        Communications.transmit(message, null, new TransmitListener(new TransmitTracker(1, onDone)));
+    }
+
     //! Applies one phone message. [onDone] as in sendPending.
     function handle(data as Object?, onDone as Method?) as Void {
         var type = Protocol.typeOf(data);
@@ -36,6 +51,15 @@ module PhoneLink {
             }
         } else if (Protocol.TYPE_PULL.equals(type)) {
             sendPending(onDone);
+        } else if (Protocol.TYPE_NEED.equals(type)) {
+            var request = data as Dictionary<String, Object?>;
+            var id = request[Protocol.KEY_ID];
+            var index = request[Protocol.KEY_INDEX];
+            if (id instanceof String && index instanceof Number) {
+                sendChunk(id, index, onDone);
+            } else if (onDone != null) {
+                onDone.invoke();
+            }
         } else {
             if (onDone != null) {
                 onDone.invoke();
@@ -83,5 +107,31 @@ class TransmitListener extends Communications.ConnectionListener {
         // Stays queued; the 5-minute retry or the phone's next `pull` sends it again.
         System.println("FP: transmit failed");
         _tracker.finished();
+    }
+}
+
+//! Pushes one workout's chunks after Save, strictly one transmit at a time (a burst can overflow
+//! the transmit queue). A failed chunk is not retried here — the phone requests it with `need`.
+class ChunkPusher {
+    private var _id as String;
+    private var _count as Number;
+    private var _next as Number = 0;
+
+    function initialize(id as String, count as Number) {
+        _id = id;
+        _count = count;
+    }
+
+    function start() as Void {
+        sendNext();
+    }
+
+    function sendNext() as Void {
+        if (_next >= _count) {
+            return;
+        }
+        var index = _next;
+        _next++;
+        PhoneLink.sendChunk(_id, index, method(:sendNext));
     }
 }

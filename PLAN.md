@@ -1088,6 +1088,22 @@ has been prototyped yet):**
   (Connect IQ messages are size-limited); the phone builds the FIT with the existing Garmin FIT SDK
   dependency, applies `CalorieFitAmender` and stride totals, and uploads through the existing
   pipeline with a pending/retry inbox like `WearWorkoutInboxStore`.
+
+  **Status 2026-10-19: 🟡 implemented, unit-tested, not verified on a real watch.** Protocol v1
+  gains `chunk` {id, index, data} and `need` {id, index}; the summary carries the chunk count;
+  `ack` now means "summary and every chunk stored on the phone". The watch pushes chunks one at a
+  time after Save (`ChunkPusher`); the phone stores them idempotently and requests gaps one by one
+  (15 s after the last arrival, on SDK start, every 15 min), the watch's 64 KB background service
+  answering each `need` with a single chunk (chunks shrunk to 60 samples ≈ 2 KB for that). The
+  phone builds the FIT (`GarminFitWriter`, same record shape as the Wear OS writer, duplicated per
+  docs/WEAR.md decision 1; distance skips pause gaps; moving time and total distance from the
+  watch's native session) and `GarminUploadWorker` uploads it like a Wear OS workout (calories,
+  PUBLIC, type fix-up, retry/park, tombstones against double uploads). Verified: 6 watch tests,
+  all 464 phone unit tests (Garmin: protocol, chunk parsing, completeness, FIT built and decoded
+  back with the FIT SDK — records, pause gap, strides, cycling without cadence, indoor), lint,
+  R8 release; the watch builds for all six targets at type-check level 3. Not verifiable without
+  a watch: the transfer itself (the simulator cannot transmit, CIQQA-4579) and message-size limits
+  on real hardware. Garmin workouts are not yet shown in the phone's pending-upload banner (10e).
 - **10e — Hardening & release.** Battery and memory limits on the watch, Connect IQ Store listing,
   FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs. Blocked by the real-watch gate above: the
   full record → background delivery → FitPub upload loop must have passed on a physical Garmin.

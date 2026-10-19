@@ -5,12 +5,11 @@ watch and hands it to FP Client on the phone, which builds the FIT and uploads i
 Wear OS workout. The goal, the chosen approach and the real-watch release gate are recorded in
 PLAN.md → Iteration 10; this file covers what is needed to build and run it.
 
-**Status:** 10a (scaffolding) is done. 10b (phone link) and 10c (recording) are implemented and
-simulator-tested as far as a simulator can go; neither is **verified on a real watch** — the
-release gate in PLAN.md → Iteration 10 still applies, and a tester with Garmin watches is lined
-up (see "Field test" below). A saved workout reaches the phone as a summary (sport, moving time,
-distance); its samples stay on the watch until 10d transfers them, and nothing is uploaded to
-FitPub yet.
+**Status:** 10a (scaffolding) is done. 10b (phone link), 10c (recording) and 10d (sample transfer,
+FIT build and upload) are implemented and tested as far as a simulator and unit tests can go;
+none is **verified on a real watch** — the release gate in PLAN.md → Iteration 10 still applies
+(see "Field test" below). End to end: record on the watch → Save → summary and samples to the
+phone → FIT built on the phone → uploaded to FitPub, public by default like Wear OS workouts.
 
 ## Project map
 
@@ -108,14 +107,36 @@ press never ends a workout) → **Save** stores it, queues the summary and sends
   Garmin Connect.
 - **Samples for FitPub:** once per second while recording, `[seconds, latE6, lonE6, altitudeDm,
   heartRate, steps]` (integers — 32-bit Floats would cost GPS precision; null when unknown).
-  Steps are the delta of the daily step counter. Written to Storage in 120-sample chunks
-  (~4 KB, limit 32 KB per value) under `c<id>_<n>`, never kept whole in memory: the background
+  Steps are the delta of the daily step counter. Written to Storage in 60-sample chunks
+  (~2 KB, limit 32 KB per value) under `c<id>_<n>`, never kept whole in memory: the background
   service that loads the queue has only **64 KB** (watch app: 768 KB). Every target has
   **10 MB** app storage (`appStorageCapacity` in the device profiles); one hour ≈ 100 KB. A failed
   write stops sampling but not the native activity.
-- **Queue entry = summary only** {id, created, label, sport, duration, distance} plus the chunk
-  count. In 10c the phone's ack also deletes the chunks (the phone keeps the summary only);
-  10d turns this into a chunked transfer whose ack covers the samples.
+- **Queue entry = summary only** {id, created, label, sport, duration, distance, chunks}; the
+  phone's ack — sent once it holds every chunk — deletes the entry and its chunks.
+
+## Transfer and upload (10d)
+
+- **Push after Save** (the app is open, so it is quick): the summaries, then this workout's chunks
+  one transmit at a time (`ChunkPusher`; a burst could overflow the transmit queue).
+- **Pull what is missing:** the phone stores every chunk as it arrives (`garmin-inbox/<id>/`,
+  idempotent). 15 s after the last summary/chunk, at every SDK start and in the 15-minute worker,
+  it requests the first missing chunk with `need`, and the next as soon as that one arrives. The
+  watch answers each `need` with one chunk — also from the 64 KB background service, which only
+  ever loads that one chunk.
+- **Ack = complete:** the phone acks only when it holds the summary and every chunk; the watch
+  then frees its storage. A summary resent after a lost ack is recognised (the uploaded entry
+  stays as a tombstone) and acked again, never uploaded twice.
+- **FIT on the phone** (`GarminFitWriter`): the record shape of the Wear OS writer — one record
+  per GPS fix carrying heart rate and cadence (or one per HR/steps sample without GPS),
+  cumulative distance that skips pause gaps (> 10 s between samples), `totalStrides` from steps
+  (no cadence for cycling); moving time and total distance from the watch's native session, so
+  FitPub shows the numbers Garmin Connect shows.
+- **Upload** (`GarminUploadWorker`, one-time on completion + 15-minute retry): calories through
+  `CalorieFitAmender` when opted in, `PUBLIC` like Wear OS, the activity type corrected to the
+  watch's sport if the server guessed another; 401/offline/5xx retried, a permanent rejection
+  parked with the server's message. The phone notification turns from "received" into "shared
+  to FitPub".
 
 ## Field test (real watch)
 
@@ -126,9 +147,11 @@ What a tester needs, and what each step proves:
 2. **Phone:** Garmin Connect paired with the watch, and an FP Client **built from this branch**
    (WIRELESS, i.e. without `-PgarminTethered`) and signed with the same key as the build already
    on their phone — or uninstall that one first. Notifications allowed.
-3. Record a short walk, Save. Expected: the activity appears in Garmin Connect; FP Client posts
-   "Garmin workout received — Walk · 0.85 km · 10:12 from …"; the watch's "Sync now" row returns
-   to "All sent to phone". → proves recording and watch → phone (impossible in the simulator).
+3. Record a short walk (a few minutes, so there are several chunks), Save. Expected: the
+   activity appears in Garmin Connect; FP Client posts "Garmin workout received — Walk · 0.85 km
+   · 10:12 from …", then "shared to FitPub"; the walk is on FitPub with its route, heart rate and
+   steps; the watch's "Sync now" row returns to "All sent to phone". → proves recording, the
+   chunk transfer and the upload (watch → phone is impossible in the simulator).
 4. **Gate test:** force-stop FP Client (Settings → Apps → Force stop), record and save another
    one. Expected: the notification still arrives (Garmin Connect woke FP Client, then its `pull`
    fetched the workout) — possibly only after the watch's 5-minute retry or the phone's 15-minute
@@ -152,9 +175,11 @@ phone, which talks Bluetooth to the watch. Messages are Monkey C dictionaries, c
 
 | Message | Direction | Meaning |
 |---|---|---|
-| `workout` {id, created, label} | watch → phone | resent until acked (10b: a test workout) |
-| `ack` {id} | phone → watch | stored on the phone; the watch drops it from its queue |
-| `pull` | phone → watch | resend everything still queued |
+| `workout` {id, created, label, sport, duration, distance, chunks} | watch → phone | summary, resent until acked |
+| `chunk` {id, index, data} | watch → phone | one sample chunk: pushed after Save, or answering `need` |
+| `need` {id, index} | phone → watch | send this chunk |
+| `ack` {id} | phone → watch | the phone holds summary + every chunk; the watch drops the workout |
+| `pull` | phone → watch | resend every queued summary |
 
 **Why it is built this way** (found by reading the SDK, not documented by Garmin):
 

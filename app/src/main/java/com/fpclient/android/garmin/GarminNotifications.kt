@@ -10,14 +10,20 @@ import com.fpclient.android.notifications.PushNotifications
 import java.util.Locale
 
 /**
- * "Workout received from your Garmin" — in 10b the visible proof that background delivery works
- * on a real watch. A channel of its own, so it can be muted without muting FitPub activity.
+ * Garmin workout progress: "received" when the summary arrives (the visible proof that delivery
+ * works on a real watch), replaced by "shared to FitPub" after the upload. A channel of its own,
+ * so it can be muted without muting FitPub activity.
  */
 internal object GarminNotifications {
     private const val CHANNEL_ID = "fitpub_garmin"
     private const val NOTIFICATION_ID = 5301
 
-    fun postReceived(context: Context, entry: GarminInboxEntry) {
+    fun postReceived(context: Context, entry: GarminInboxEntry) = post(context, "Garmin workout received", entry)
+
+    /** Replaces the "received" notification once the workout is on FitPub. */
+    fun postUploaded(context: Context, entry: GarminInboxEntry) = post(context, "Garmin workout shared to FitPub", entry)
+
+    private fun post(context: Context, title: String, entry: GarminInboxEntry) {
         if (!PushNotifications.canPost(context)) return
         context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Garmin watch", NotificationManager.IMPORTANCE_LOW).apply {
@@ -27,7 +33,7 @@ internal object GarminNotifications {
         val text = summaryText(entry)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Garmin workout received")
+            .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
         try {

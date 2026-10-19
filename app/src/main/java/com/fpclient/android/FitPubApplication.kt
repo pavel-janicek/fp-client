@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.fpclient.android.garmin.GarminLink
 import com.fpclient.android.garmin.GarminPullWorker
+import com.fpclient.android.garmin.GarminUploadWorker
 import com.fpclient.android.notifications.InstantDeliveryService
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
@@ -54,6 +55,7 @@ class FitPubApplication : Application() {
         // can pull that message again (see GarminLink). Neither does anything without Garmin Connect.
         GarminLink.start(this)
         GarminPullWorker.schedule(this)
+        GarminUploadWorker.schedulePeriodic(this)
 
         // Configure osmdroid tile cache in app storage.
         @Suppress("DEPRECATION")

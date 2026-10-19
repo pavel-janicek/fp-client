@@ -10,6 +10,7 @@ import com.fpclient.android.FitPubApplication
 import com.garmin.android.connectiq.ConnectIQ
 import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,10 @@ import kotlinx.coroutines.launch
  *   delivered. So every time the SDK becomes ready we send `pull`, and the watch resends whatever
  *   it still holds; nothing leaves the watch's queue without our explicit `ack`.
  * - **Periodic pull:** [GarminPullWorker] repeats the pull every 15 minutes.
+ * - **Samples (10d):** the watch pushes its sample chunks right after the summary; whatever is
+ *   missing after a quiet [FETCH_DELAY_MS] (or at the next SDK start / periodic run) is requested
+ *   one chunk at a time with `need`, the next as soon as the previous arrives. `ack` goes only
+ *   once the summary and every chunk are stored; then [GarminUploadWorker] takes over.
  *
  * SDK setup runs on the main thread, where the SDK also delivers its callbacks. Sends go to one
  * background thread: in TETHERED mode `sendMessage` writes the adb socket synchronously, which the
@@ -36,6 +41,8 @@ import kotlinx.coroutines.launch
 object GarminLink {
     private const val TAG = "GarminLink"
     private const val GARMIN_CONNECT_PACKAGE = "com.garmin.android.apps.connectmobile"
+    /** Quiet time after a summary or chunk before asking for what is still missing. */
+    private const val FETCH_DELAY_MS = 15_000L
 
     private enum class State { IDLE, STARTING, READY, UNAVAILABLE }
 
@@ -43,6 +50,8 @@ object GarminLink {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "garmin-send") }
+    /** Chunk index last requested per workout id, so its arrival triggers the next request. */
+    private val requested = ConcurrentHashMap<String, Int>()
 
     @Volatile private var state = State.IDLE
     private var connectIQ: ConnectIQ? = null
@@ -107,6 +116,7 @@ object GarminLink {
             }
         }
         pullAll()
+        fetchAllMissing()
     }
 
     private fun onMessages(device: IQDevice, app: IQApp, messages: List<Any?>?, status: ConnectIQ.IQMessageStatus) {
@@ -114,28 +124,93 @@ object GarminLink {
             Log.w(TAG, "Message from ${device.friendlyName} not usable: $status")
             return
         }
-        Log.i(TAG, "${messages?.size ?: 0} message(s) from ${device.friendlyName}")
-        val inbox = FitPubApplication.container(appContext).garminInboxStore
-        for (workout in messages.orEmpty().mapNotNull(GarminProtocol::parseWorkout)) {
-            scope.launch {
-                val entry = GarminInboxEntry(
-                    id = workout.id,
-                    label = workout.label,
-                    createdEpochSeconds = workout.createdEpochSeconds,
-                    deviceName = device.friendlyName.orEmpty(),
-                    receivedAtEpochMs = System.currentTimeMillis(),
-                    sport = workout.sport,
-                    durationSeconds = workout.durationSeconds,
-                    distanceMeters = workout.distanceMeters,
-                )
-                val isNew = inbox.record(entry)
-                Log.i(TAG, "workout ${workout.id} ${if (isNew) "stored" else "already known"}, ack")
-                if (isNew) GarminNotifications.postReceived(appContext, entry)
-                // Ack duplicates too: the watch resends until an ack gets through.
-                connectIQ?.let { send(it, device, GarminProtocol.ack(workout.id)) }
-            }
+        for (message in messages.orEmpty()) {
+            GarminProtocol.parseWorkout(message)?.let { workout -> scope.launch { onWorkout(device, workout) } }
+            GarminProtocol.parseChunk(message)?.let { chunk -> scope.launch { onChunk(device, chunk) } }
         }
     }
+
+    private fun onWorkout(device: IQDevice, workout: GarminProtocol.Workout) {
+        val inbox = FitPubApplication.container(appContext).garminInboxStore
+        val isNew = inbox.recordSummary(
+            GarminInboxEntry(
+                id = workout.id,
+                label = workout.label,
+                createdEpochSeconds = workout.createdEpochSeconds,
+                deviceName = device.friendlyName.orEmpty(),
+                receivedAtEpochMs = System.currentTimeMillis(),
+                sport = workout.sport,
+                durationSeconds = workout.durationSeconds,
+                distanceMeters = workout.distanceMeters,
+                deviceId = device.deviceIdentifier,
+                expectedChunks = workout.chunks,
+            ),
+        )
+        val entry = inbox.get(workout.id) ?: return
+        Log.i(TAG, "workout ${workout.id} ${if (isNew) "new" else "known"}, ${entry.receivedChunks.size}/${entry.expectedChunks} chunks")
+        if (isNew) GarminNotifications.postReceived(appContext, entry)
+        if (entry.isComplete || entry.uploadedActivityId != null) {
+            // Also for a resent summary: the watch resends until an ack gets through.
+            complete(device, entry)
+        } else {
+            // The watch pushes the chunks right behind the summary; ask only for what is still
+            // missing once that burst had time to arrive.
+            scheduleFetch(entry.id, FETCH_DELAY_MS)
+        }
+    }
+
+    private fun onChunk(device: IQDevice, chunk: GarminProtocol.Chunk) {
+        val inbox = FitPubApplication.container(appContext).garminInboxStore
+        val entry = inbox.storeChunk(chunk.id, chunk.index, chunk.values) ?: return
+        if (entry.isComplete) {
+            complete(device, entry)
+        } else if (requested[chunk.id] == chunk.index) {
+            // Answer to our `need`: ask for the next gap straight away.
+            fetchMissing(entry)
+        } else {
+            scheduleFetch(entry.id, FETCH_DELAY_MS)
+        }
+    }
+
+    /** Everything is on the phone: release the watch and upload. */
+    private fun complete(device: IQDevice, entry: GarminInboxEntry) {
+        requested.remove(entry.id)
+        connectIQ?.let { send(it, device, GarminProtocol.ack(entry.id)) }
+        if (entry.isPendingUpload) GarminUploadWorker.enqueue(appContext)
+    }
+
+    /** Requests the first missing chunk of every incomplete workout. No-op until the SDK is ready. */
+    fun fetchAllMissing() {
+        if (state != State.READY) return
+        scope.launch {
+            FitPubApplication.container(appContext).garminInboxStore.all()
+                .filter { !it.isComplete && it.uploadedActivityId == null }
+                .forEach(::fetchMissing)
+        }
+    }
+
+    private fun fetchMissing(entry: GarminInboxEntry) {
+        val index = entry.missingChunks.firstOrNull() ?: return
+        val deviceId = entry.deviceId ?: return
+        val sdk = connectIQ ?: return
+        requested[entry.id] = index
+        send(sdk, IQDevice(deviceId, entry.deviceName), GarminProtocol.need(entry.id, index))
+    }
+
+    private fun scheduleFetch(id: String, delayMs: Long) {
+        mainHandler.removeCallbacksAndMessages(fetchToken(id))
+        mainHandler.postAtTime(
+            {
+                FitPubApplication.container(appContext).garminInboxStore.get(id)
+                    ?.takeIf { !it.isComplete && it.uploadedActivityId == null }
+                    ?.let { scope.launch { fetchMissing(it) } }
+            },
+            fetchToken(id),
+            android.os.SystemClock.uptimeMillis() + delayMs,
+        )
+    }
+
+    private fun fetchToken(id: String): Any = "garmin-fetch-$id".intern()
 
     private fun send(sdk: ConnectIQ, device: IQDevice, message: Map<String, Any>) {
         sendExecutor.execute {

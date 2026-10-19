@@ -23,6 +23,7 @@ class GarminPullWorker(appContext: Context, params: WorkerParameters) : Coroutin
         delay(STARTUP_GRACE_MS)
         if (!GarminLink.isReady) return Result.success()
         GarminLink.pullAll()
+        GarminLink.fetchAllMissing()
         delay(ANSWER_WINDOW_MS)
         return Result.success()
     }

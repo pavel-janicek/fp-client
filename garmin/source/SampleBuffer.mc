@@ -14,8 +14,9 @@ import Toybox.System;
 //! still reaches the phone.
 class SampleBuffer {
     static const SAMPLE_FIELDS = 6;
-    //! ~4 KB per chunk serialized, far under Storage's 32 KB per-value limit.
-    static const SAMPLES_PER_CHUNK = 120;
+    //! ~2 KB per chunk serialized: far under Storage's 32 KB per-value limit, and one chunk is one
+    //! phone message, small enough for the Mobile SDK and for the 64 KB background service.
+    static const SAMPLES_PER_CHUNK = 60;
 
     private var _id as String;
     private var _current as Array<Number or Null> = [] as Array<Number or Null>;

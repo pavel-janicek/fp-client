@@ -96,10 +96,12 @@ class WorkoutController {
             Protocol.KEY_SPORT => Activities.KEYS[typeIndex],
             Protocol.KEY_DURATION => duration,
             Protocol.KEY_DISTANCE => distance,
-            PendingWorkouts.KEY_CHUNKS => chunks
+            Protocol.KEY_CHUNKS => chunks
         } as Protocol.Workout);
         close();
-        PhoneLink.sendPending(null);
+        // Summaries first, then this workout's samples one chunk at a time while the app is
+        // open; whatever does not get through, the phone asks for with `need`.
+        PhoneLink.sendPending(new ChunkPusher(_id, chunks).method(:start));
     }
 
     function discard() as Void {

@@ -5,9 +5,12 @@ import Toybox.Lang;
 //! both sides (`ProtocolTest.mc` here, `GarminProtocolTest` in `:app`), so keep them in sync.
 //!
 //! Every message is a Dictionary with a type and a protocol version:
-//! - watch → phone `workout` {id, created, label, sport, duration, distance}: a finished
-//!   workout's summary, resent until the phone acks it (the samples follow with 10d);
-//! - phone → watch `ack` {id}: the phone has stored the workout, drop it from the queue;
+//! - watch → phone `workout` {id, created, label, sport, duration, distance, chunks}: a finished
+//!   workout's summary, resent until the phone acks it;
+//! - watch → phone `chunk` {id, index, data}: one stored sample chunk (SampleBuffer). Pushed in
+//!   order right after Save, and on demand for every `need`;
+//! - phone → watch `need` {id, index}: send that chunk (the phone missed it);
+//! - phone → watch `ack` {id}: the phone holds the summary and every chunk — drop it all;
 //! - phone → watch `pull`: resend everything still queued (the phone sends it when it starts,
 //!   because a message that woke a cold phone process can be lost before its SDK is ready).
 (:background)
@@ -26,13 +29,18 @@ module Protocol {
     const KEY_DURATION = "duration";
     //! Distance in whole metres.
     const KEY_DISTANCE = "distance";
+    //! Number of sample chunks the workout has (0 when none could be stored).
+    const KEY_CHUNKS = "chunks";
+    const KEY_INDEX = "index";
+    const KEY_DATA = "data";
 
     const TYPE_WORKOUT = "workout";
     const TYPE_ACK = "ack";
     const TYPE_PULL = "pull";
+    const TYPE_CHUNK = "chunk";
+    const TYPE_NEED = "need";
 
-    //! A queued workout as stored and sent. Also carries watch-only bookkeeping (the number of
-    //! stored sample chunks, see SampleBuffer) that workoutMessage leaves out.
+    //! A queued workout as stored and sent.
     typedef Workout as Dictionary<String, String or Number>;
 
     function workoutMessage(workout as Workout) as Workout {
@@ -44,8 +52,19 @@ module Protocol {
             KEY_LABEL => workout[KEY_LABEL],
             KEY_SPORT => workout[KEY_SPORT],
             KEY_DURATION => workout[KEY_DURATION],
-            KEY_DISTANCE => workout[KEY_DISTANCE]
+            KEY_DISTANCE => workout[KEY_DISTANCE],
+            KEY_CHUNKS => workout[KEY_CHUNKS]
         } as Workout;
+    }
+
+    function chunkMessage(id as String, index as Number, data as Array) as Dictionary<String, String or Number or Array> {
+        return {
+            KEY_TYPE => TYPE_CHUNK,
+            KEY_VERSION => VERSION,
+            KEY_ID => id,
+            KEY_INDEX => index,
+            KEY_DATA => data
+        } as Dictionary<String, String or Number or Array>;
     }
 
     //! The message type, or null for anything that is not a v1 FitPub message.

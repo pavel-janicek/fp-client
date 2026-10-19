@@ -15,6 +15,11 @@ function protocolWireStringsMatchPhone(logger as Logger) as Boolean {
     Test.assertEqual("sport", Protocol.KEY_SPORT);
     Test.assertEqual("duration", Protocol.KEY_DURATION);
     Test.assertEqual("distance", Protocol.KEY_DISTANCE);
+    Test.assertEqual("chunks", Protocol.KEY_CHUNKS);
+    Test.assertEqual("index", Protocol.KEY_INDEX);
+    Test.assertEqual("data", Protocol.KEY_DATA);
+    Test.assertEqual("chunk", Protocol.TYPE_CHUNK);
+    Test.assertEqual("need", Protocol.TYPE_NEED);
     Test.assertEqual("workout", Protocol.TYPE_WORKOUT);
     Test.assertEqual("ack", Protocol.TYPE_ACK);
     Test.assertEqual("pull", Protocol.TYPE_PULL);
@@ -33,8 +38,18 @@ function workoutMessageCarriesTypeVersionAndFields(logger as Logger) as Boolean 
     Test.assertEqual("RUN", message["sport"]);
     Test.assertEqual(1880, message["duration"]);
     Test.assertEqual(5230, message["distance"]);
-    // Watch-only bookkeeping stays on the watch.
-    Test.assert(!message.hasKey("chunks"));
+    Test.assertEqual(16, message["chunks"]);
+    return true;
+}
+
+(:test)
+function chunkMessageCarriesIndexAndFlatSamples(logger as Logger) as Boolean {
+    var message = Protocol.chunkMessage("42-7", 3, [0, 50123456, 14123456, 2345, 140, 12]);
+    Test.assertEqual("chunk", message["t"]);
+    Test.assertEqual(1, message["v"]);
+    Test.assertEqual("42-7", message["id"]);
+    Test.assertEqual(3, message["index"]);
+    Test.assertEqual(6, (message["data"] as Array).size());
     return true;
 }
 
