@@ -18,7 +18,8 @@ import com.fpclient.android.garmin.GarminInboxStore
 import com.fpclient.android.garmin.GarminLink
 
 /**
- * "Garmin watch" card (Iteration 10e): whether the link can work at all (Garmin Connect present,
+ * "Garmin watch" card (Iteration 10e), shown only once FP Wear was found or a Garmin workout is
+ * in flight (see [GarminLink.active]); "experimental" until FP Wear has been tested on a real watch: whether the link can work at all (Garmin Connect present,
  * SDK up), the paired watches with their connection and whether FP Wear is installed, the
  * workouts still on their way to FitPub with the newest error, and "Sync now". Meant to answer
  * "why did my workout not arrive?" without adb.
@@ -33,7 +34,7 @@ internal fun GarminWatchCard(inbox: GarminInboxStore) {
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text("Garmin watch", style = MaterialTheme.typography.titleSmall)
+            Text("Garmin watch (experimental)", style = MaterialTheme.typography.titleSmall)
             Text(
                 statusText(status),
                 style = MaterialTheme.typography.bodySmall,

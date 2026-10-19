@@ -12,8 +12,8 @@ import kotlinx.coroutines.delay
 /**
  * The pull half of the Garmin link (see [GarminLink]): every 15 minutes, ask the watch to resend
  * anything it still queues, then keep the process alive briefly so the answers land while the
- * SDK is ready. Scheduled only while Garmin Connect is installed; [schedule] runs at every app
- * start, so installing or removing it later is picked up then.
+ * SDK is ready. Scheduled only while Garmin Connect is installed and the link is active (FP Wear
+ * found, see [GarminLink]); [schedule] runs at every app start and whenever the link switches.
  */
 class GarminPullWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
 
@@ -34,7 +34,7 @@ class GarminPullWorker(appContext: Context, params: WorkerParameters) : Coroutin
         private const val ANSWER_WINDOW_MS = 20_000L
 
         fun schedule(context: Context) {
-            if (!GarminLink.isAvailable(context)) {
+            if (!GarminLink.isAvailable(context) || !GarminLink.isActive(context)) {
                 WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK)
                 return
             }

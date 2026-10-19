@@ -36,6 +36,14 @@ import kotlinx.coroutines.launch
  *   one chunk at a time with `need`, the next as soon as the previous arrives. `ack` goes only
  *   once the summary and every chunk are stored; then [GarminUploadWorker] takes over.
  *
+ * **Dormant until FP Wear shows up.** Most phones with Garmin Connect will never run FP Wear, so
+ * they must not pay for it: the SDK still starts with the process (that registers FP Client with
+ * Garmin Connect, so a first watch message can wake it), but pulls, chunk requests and the two
+ * 15-minute workers only run once the link is *active* — FP Wear answered `getApplicationInfo`
+ * as installed, or a FP Wear message arrived. The probe asks the watches at most once a day while
+ * dormant. It goes dormant again when every paired watch reports FP Wear gone and nothing is
+ * pending.
+ *
  * SDK setup runs on the main thread, where the SDK also delivers its callbacks. Sends go to one
  * background thread: in TETHERED mode `sendMessage` writes the adb socket synchronously, which the
  * main thread may not do (NetworkOnMainThreadException); one thread keeps them in order.
@@ -45,6 +53,10 @@ object GarminLink {
     private const val GARMIN_CONNECT_PACKAGE = "com.garmin.android.apps.connectmobile"
     /** Quiet time after a summary or chunk before asking for what is still missing. */
     private const val FETCH_DELAY_MS = 15_000L
+    private const val PREFERENCES_NAME = "fitpub_garmin_link"
+    private const val KEY_ACTIVE = "active"
+    private const val KEY_LAST_PROBE = "last_probe_ms"
+    private const val DORMANT_PROBE_INTERVAL_MS = 24 * 60 * 60 * 1000L
 
     private enum class State { IDLE, STARTING, READY, UNAVAILABLE }
 
@@ -78,9 +90,17 @@ object GarminLink {
     private val mutableStatus = MutableStateFlow(Status())
     val status: StateFlow<Status> = mutableStatus
 
+    private val mutableActive = MutableStateFlow(false)
+    /** FP Wear is in use with this phone; see the class comment. Drives the Settings card too. */
+    val active: StateFlow<Boolean> = mutableActive
+
+    /** [active] read straight from storage, for callers that run before [start] (worker scheduling). */
+    fun isActive(context: Context): Boolean = preferences(context).getBoolean(KEY_ACTIVE, false)
+
     /** Idempotent; safe from any thread. Does nothing on phones without Garmin Connect. */
     fun start(context: Context) {
         appContext = context.applicationContext
+        mutableActive.value = isActive(appContext)
         mainHandler.post {
             if (state != State.IDLE) return@post
             if (!isAvailable(appContext)) {
@@ -93,28 +113,41 @@ object GarminLink {
             // (debug builds with -PgarminTethered=true, see docs/GARMIN.md); WIRELESS goes
             // through the Garmin Connect app to a real watch.
             val type = if (BuildConfig.GARMIN_TETHERED) ConnectIQ.IQConnectType.TETHERED else ConnectIQ.IQConnectType.WIRELESS
-            val sdk = ConnectIQ.getInstance(appContext, type)
-            connectIQ = sdk
-            sdk.initialize(appContext, false, object : ConnectIQ.ConnectIQListener {
-                override fun onSdkReady() = onReady(sdk)
-
-                override fun onInitializeError(status: ConnectIQ.IQSdkErrorStatus) {
-                    Log.w(TAG, "Connect IQ unavailable: $status")
-                    state = State.UNAVAILABLE
-                    mutableStatus.value = Status(Availability.ERROR, error = status.name)
-                }
-
-                override fun onSdkShutDown() {
-                    state = State.IDLE
-                }
-            })
+            // This runs from Application.onCreate for everyone with Garmin Connect installed: an
+            // SDK that throws instead of reporting an error must cost the link, not the app.
+            runCatching {
+                val sdk = ConnectIQ.getInstance(appContext, type)
+                connectIQ = sdk
+                initialize(sdk)
+            }.onFailure {
+                Log.w(TAG, "Connect IQ failed to start", it)
+                state = State.UNAVAILABLE
+                connectIQ = null
+                mutableStatus.value = Status(Availability.ERROR, error = it.javaClass.simpleName)
+            }
         }
     }
 
-    /** Asks every known watch to resend its queued workouts. No-op until the SDK is ready. */
+    private fun initialize(sdk: ConnectIQ) {
+        sdk.initialize(appContext, false, object : ConnectIQ.ConnectIQListener {
+            override fun onSdkReady() = onReady(sdk)
+
+            override fun onInitializeError(status: ConnectIQ.IQSdkErrorStatus) {
+                Log.w(TAG, "Connect IQ unavailable: $status")
+                state = State.UNAVAILABLE
+                mutableStatus.value = Status(Availability.ERROR, error = status.name)
+            }
+
+            override fun onSdkShutDown() {
+                state = State.IDLE
+            }
+        })
+    }
+
+    /** Asks every known watch to resend its queued workouts. No-op until ready, and while dormant. */
     fun pullAll() {
         mainHandler.post {
-            val sdk = connectIQ?.takeIf { state == State.READY } ?: return@post
+            val sdk = connectIQ?.takeIf { state == State.READY && mutableActive.value } ?: return@post
             for (device in knownDevices(sdk)) {
                 Log.i(TAG, "pull → ${device.friendlyName}")
                 send(sdk, device, GarminProtocol.pull())
@@ -137,7 +170,12 @@ object GarminLink {
         }
         pullAll()
         fetchAllMissing()
-        refreshStatus()
+        val prefs = preferences(appContext)
+        val now = System.currentTimeMillis()
+        if (mutableActive.value || now - prefs.getLong(KEY_LAST_PROBE, 0) > DORMANT_PROBE_INTERVAL_MS) {
+            prefs.edit().putLong(KEY_LAST_PROBE, now).apply()
+            refreshStatus()
+        }
     }
 
     /**
@@ -166,8 +204,28 @@ object GarminLink {
 
     private fun setInstalled(deviceId: Long, installed: Boolean) {
         val current = mutableStatus.value
-        mutableStatus.value = current.copy(devices = current.devices.map { if (it.id == deviceId) it.copy(appInstalled = installed) else it })
+        val updated = current.copy(devices = current.devices.map { if (it.id == deviceId) it.copy(appInstalled = installed) else it })
+        mutableStatus.value = updated
+        if (installed) {
+            setActive(true)
+        } else if (updated.devices.isNotEmpty() && updated.devices.all { it.appInstalled == false } &&
+            FitPubApplication.container(appContext).garminInboxStore.pendingCount.value == 0
+        ) {
+            setActive(false)
+        }
     }
+
+    /** Switches the link between dormant and active, (un)scheduling the 15-minute workers. */
+    private fun setActive(value: Boolean) {
+        if (mutableActive.value == value && isActive(appContext) == value) return
+        Log.i(TAG, if (value) "FP Wear found: link active" else "FP Wear gone: link dormant")
+        preferences(appContext).edit().putBoolean(KEY_ACTIVE, value).commit()
+        mutableActive.value = value
+        GarminPullWorker.schedule(appContext)
+        GarminUploadWorker.schedulePeriodic(appContext)
+    }
+
+    private fun preferences(context: Context) = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     /** "Sync now" in Settings: ask the watches, fetch what is missing, upload what is complete. */
     fun syncNow(context: Context) {
@@ -183,6 +241,7 @@ object GarminLink {
             Log.w(TAG, "Message from ${device.friendlyName} not usable: $status")
             return
         }
+        if (messages.orEmpty().any { GarminProtocol.parseWorkout(it) != null || GarminProtocol.parseChunk(it) != null }) setActive(true)
         for (message in messages.orEmpty()) {
             GarminProtocol.parseWorkout(message)?.let { workout -> scope.launch { onWorkout(device, workout) } }
             GarminProtocol.parseChunk(message)?.let { chunk -> scope.launch { onChunk(device, chunk) } }
@@ -240,7 +299,7 @@ object GarminLink {
 
     /** Requests the first missing chunk of every incomplete workout. No-op until the SDK is ready. */
     fun fetchAllMissing() {
-        if (state != State.READY) return
+        if (state != State.READY || !mutableActive.value) return
         scope.launch {
             FitPubApplication.container(appContext).garminInboxStore.all()
                 .filter { !it.isComplete && it.uploadedActivityId == null }

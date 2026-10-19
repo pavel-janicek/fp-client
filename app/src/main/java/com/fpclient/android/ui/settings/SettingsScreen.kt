@@ -213,7 +213,13 @@ fun SettingsScreen(
                     ) { Text("Manage watch workouts ($watchPendingCount)") }
                 }
             }
-            GarminWatchCard(container.garminInboxStore)
+            // Garmin (Iteration 10e): only for phones where FP Wear was found or a Garmin workout
+            // is still in flight — everyone else never hears of an app they cannot get yet.
+            val garminActive by com.fpclient.android.garmin.GarminLink.active.collectAsState()
+            val garminPending by container.garminInboxStore.pendingCount.collectAsState()
+            if (garminActive || garminPending > 0) {
+                GarminWatchCard(container.garminInboxStore)
+            }
             UpdateCheckCard()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {

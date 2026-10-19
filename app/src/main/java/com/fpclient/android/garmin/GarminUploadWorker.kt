@@ -116,7 +116,7 @@ class GarminUploadWorker(appContext: Context, params: WorkerParameters) : Corout
 
         /** Retries parked uploads (offline, signed out, server errors) every 15 minutes. */
         fun schedulePeriodic(context: Context) {
-            if (!GarminLink.isAvailable(context)) {
+            if (!GarminLink.isAvailable(context) || !GarminLink.isActive(context)) {
                 WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK)
                 return
             }

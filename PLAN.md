@@ -1010,10 +1010,21 @@ mode cover 10a, 10c and 10d — UI, message protocol, chunked transfer, FIT buil
 the simulator cannot answer, because it bypasses the Garmin Connect phone app: the 10b
 background-delivery question (does a message reach a FP Client whose process is not running),
 messaging with a side-loaded app, real GPS / heart rate, battery drain and on-device memory limits.
-Therefore **10b is not "done" and nothing ships (10e, Connect IQ Store, FP Client 4.0) until it has
-been verified on at least one physical Garmin watch** paired with a phone running Garmin Connect —
-either a tester's watch (a side-loaded `.prg` is enough) or a cheap second-hand one. If 10b fails
-on real hardware, 10c/10d are redesigned before release, not patched afterwards.
+~~Therefore nothing ships (10e, Connect IQ Store, FP Client 4.0) until verified on a physical
+Garmin.~~ **Gate rewritten 2026-10-19 (maintainer decision):** the maintainer keeps **one line of
+development, 4.x**, and expects that a tester may never turn up — so the phone app is no longer
+held back by the watch:
+
+- **FP Client 4.0 ships** with the Garmin link built in but **dormant**: on phones without Garmin
+  Connect it does nothing at all; with Garmin Connect it only registers itself and probes at most
+  once a day whether FP Wear is installed. Pulls, chunk requests, the two 15-minute workers and
+  the Settings card ("experimental") appear only once FP Wear is found or sends something.
+  A failing Connect IQ SDK can never take the app down (start guarded). So the link costs nothing
+  for everyone else, yet is ready the day a FP Wear user shows up.
+- **FP Wear (the watch app) stays unpublished — no Connect IQ Store — until the full loop
+  (record → background delivery → FitPub upload) has passed on at least one physical Garmin**
+  paired with a phone running Garmin Connect: a tester's watch (side-loaded `.prg`) or a cheap
+  second-hand one. If it fails there, 10b–10d are redesigned before the Store, not patched after.
 
 **Sub-steps (one prompt each; verify Garmin's current SDK docs at the start of 10a — nothing below
 has been prototyped yet):**
@@ -1105,8 +1116,8 @@ has been prototyped yet):**
   a watch: the transfer itself (the simulator cannot transmit, CIQQA-4579) and message-size limits
   on real hardware. Garmin workouts are not yet shown in the phone's pending-upload banner (10e).
 - **10e — Hardening & release.** Battery and memory limits on the watch, Connect IQ Store listing,
-  FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs. Blocked by the real-watch gate above: the
-  full record → background delivery → FitPub upload loop must have passed on a physical Garmin.
+  FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs. Per the rewritten gate above, only the
+  FP Wear Store submission waits for a physical Garmin; FP Client 4.0 does not.
 
   **Split 2026-10-19.** *Part 1 — everything that does not need a watch — 🟡 done:* Settings →
   "Garmin watch" card (Garmin Connect state, paired watches, FP Wear installed or not via
@@ -1116,5 +1127,12 @@ has been prototyped yet):**
   draft (the agreement requires a policy and location opt-in) and a Store listing draft with a
   working `.iq` export (138 KB). **Decision 2026-10-19 (maintainer):** F-Droid is abandoned and
   the project moves from AGPL-3.0 to Apache-2.0 from 4.0 on (sole copyright holder; 3.x releases
-  stay AGPL) — this settles both open licence questions. *Part 2 — after the field test:* battery and memory on real
-  hardware, screenshots, Store submission, FP Client 4.0 release.
+  stay AGPL) — this settles both open licence questions. **Dormant link (2026-10-19):** the
+  readiness review before 4.0 found three issues, fixed: every Garmin Connect user would have run
+  the 15-minute pull (~25 s awake each time) and the SDK chatter for an app they cannot get → now
+  dormant until FP Wear is found (persisted `fitpub_garmin_link.active`, daily probe); an SDK
+  throwing in `Application.onCreate` would have crashed the app → guarded; the Settings card was
+  shown to everyone → only when active or something is pending, titled "experimental". Smoke-
+  tested on the maintainer's phone (no Garmin Connect): starts, no Garmin work scheduled.
+  *Part 2:* FP Client 4.0 release (version bump, `VERSION_CHECKLIST.md`) — not gated. *After a
+  field test only:* battery and memory on real hardware, screenshots, Store submission of FP Wear.

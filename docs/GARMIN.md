@@ -234,7 +234,17 @@ the protocol, queue, ack and pull — not the background wake-up, which exists o
 
 ## Status on the phone and the watch (10e, part 1)
 
-- **FP Client → Settings → "Garmin watch"** (`GarminWatchCard`): whether Garmin Connect is there
+**Dormant by default.** FP Client 4.0 ships the link to everyone, but it stays dormant until FP
+Wear is found: without Garmin Connect nothing runs; with it, the SDK starts with the process (so
+Garmin Connect knows whom to wake for a first FP Wear message) and asks the paired watches at most
+once a day whether FP Wear is installed. Only when it is — or a FP Wear message arrives — does
+`GarminLink.active` (persisted) switch on the pulls, chunk requests, both 15-minute workers and
+the Settings card. It switches off again when every paired watch reports FP Wear gone and nothing
+is pending. SDK start is guarded, so a misbehaving Connect IQ SDK cannot crash FP Client.
+
+
+- **FP Client → Settings → "Garmin watch (experimental)"** (`GarminWatchCard`, active link or
+  pending workouts only): whether Garmin Connect is there
   and reachable (`GCM_UPGRADE_NEEDED` and friends in words), each paired watch with connected /
   not connected and *FP Wear installed / not installed* (asked from the watch via
   `getApplicationInfo`), the workouts not yet on FitPub with the newest error, and **Sync now**
