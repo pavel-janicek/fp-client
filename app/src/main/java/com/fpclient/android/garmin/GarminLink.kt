@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
  * Garmin Connect, so a first watch message can wake it), but pulls, chunk requests and the two
  * 15-minute workers only run once the link is *active* — FP Wear answered `getApplicationInfo`
  * as installed, or a FP Wear message arrived. The probe asks the watches at most once a day while
- * dormant. It goes dormant again when every paired watch reports FP Wear gone and nothing is
+ * dormant, and whenever the Settings card is opened or its "Look for FP Wear" is tapped. It goes dormant again when every paired watch reports FP Wear gone and nothing is
  * pending.
  *
  * SDK setup runs on the main thread, where the SDK also delivers its callbacks. Sends go to one
@@ -226,6 +226,12 @@ object GarminLink {
     }
 
     private fun preferences(context: Context) = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    /** "Look for FP Wear" in Settings: asks the watches now instead of waiting for the daily probe. */
+    fun lookForWatchApp(context: Context) {
+        start(context)
+        refreshStatus()
+    }
 
     /** "Sync now" in Settings: ask the watches, fetch what is missing, upload what is complete. */
     fun syncNow(context: Context) {

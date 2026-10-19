@@ -18,25 +18,32 @@ import com.fpclient.android.garmin.GarminInboxStore
 import com.fpclient.android.garmin.GarminLink
 
 /**
- * "Garmin watch" card (Iteration 10e), shown only once FP Wear was found or a Garmin workout is
- * in flight (see [GarminLink.active]); "experimental" until FP Wear has been tested on a real watch: whether the link can work at all (Garmin Connect present,
+ * "Garmin watch" card (Iteration 10e), shown on phones with Garmin Connect; "experimental" until
+ * FP Wear has been tested on a real watch: whether the link can work at all (Garmin Connect present,
  * SDK up), the paired watches with their connection and whether FP Wear is installed, the
  * workouts still on their way to FitPub with the newest error, and "Sync now". Meant to answer
  * "why did my workout not arrive?" without adb.
+ *
+ * While the link is [dormant] (FP Wear not found yet, nothing pending) it only lists the watches
+ * and offers "Look for FP Wear", so someone who installed FP Wear after FP Client does not wait for
+ * the daily probe. Opening Settings asks the watches too, once the SDK is ready.
  */
 @Composable
-internal fun GarminWatchCard(inbox: GarminInboxStore) {
+internal fun GarminWatchCard(inbox: GarminInboxStore, dormant: Boolean) {
     val context = LocalContext.current
     val status by GarminLink.status.collectAsState()
     val pending by inbox.pendingCount.collectAsState()
     val latestError by inbox.latestError.collectAsState()
-    LaunchedEffect(Unit) { GarminLink.refreshStatus() }
+    // Keyed on availability: Settings may open while the SDK is still starting.
+    LaunchedEffect(status.availability) {
+        if (status.availability == GarminLink.Availability.READY) GarminLink.refreshStatus()
+    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text("Garmin watch (experimental)", style = MaterialTheme.typography.titleSmall)
             Text(
-                statusText(status),
+                statusText(status, dormant),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),
@@ -53,28 +60,42 @@ internal fun GarminWatchCard(inbox: GarminInboxStore) {
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
-            Text(
-                if (pending > 0) "$pending Garmin workout(s) not on FitPub yet" else "No Garmin workouts waiting",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            latestError?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 2.dp))
-            }
-            if (status.availability != GarminLink.Availability.NO_GARMIN_CONNECT) {
-                OutlinedButton(
-                    onClick = {
-                        inbox.retryManually()
-                        GarminLink.syncNow(context)
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                ) { Text("Sync now") }
+            if (dormant) {
+                if (status.availability == GarminLink.Availability.READY) {
+                    Text(
+                        "Using FP Wear on your Garmin? Install it on the watch, then look for it here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    OutlinedButton(
+                        onClick = { GarminLink.lookForWatchApp(context) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Look for FP Wear") }
+                }
+            } else {
+                Text(
+                    if (pending > 0) "$pending Garmin workout(s) not on FitPub yet" else "No Garmin workouts waiting",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                latestError?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 2.dp))
+                }
+                if (status.availability != GarminLink.Availability.NO_GARMIN_CONNECT) {
+                    OutlinedButton(
+                        onClick = {
+                            inbox.retryManually()
+                            GarminLink.syncNow(context)
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Sync now") }
+                }
             }
         }
     }
 }
 
-private fun statusText(status: GarminLink.Status): String = when (status.availability) {
+private fun statusText(status: GarminLink.Status, dormant: Boolean): String = when (status.availability) {
     GarminLink.Availability.NO_GARMIN_CONNECT ->
         "Workouts from a Garmin watch need the Garmin Connect app on this phone and the FP Wear app on the watch."
     GarminLink.Availability.STARTING -> "Connecting to Garmin Connect…"
@@ -83,6 +104,9 @@ private fun statusText(status: GarminLink.Status): String = when (status.availab
         "GCM_NOT_INSTALLED" -> "Garmin Connect is not installed."
         else -> "Garmin Connect is not reachable (${status.error ?: "unknown error"})."
     }
-    GarminLink.Availability.READY ->
-        if (status.devices.isEmpty()) "No watch is paired in Garmin Connect." else "Workouts saved in FP Wear upload to FitPub on their own."
+    GarminLink.Availability.READY -> when {
+        status.devices.isEmpty() -> "No watch is paired in Garmin Connect."
+        dormant -> "FP Wear has not been found on your watch yet."
+        else -> "Workouts saved in FP Wear upload to FitPub on their own."
+    }
 }

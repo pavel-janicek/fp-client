@@ -239,13 +239,15 @@ Wear is found: without Garmin Connect nothing runs; with it, the SDK starts with
 Garmin Connect knows whom to wake for a first FP Wear message) and asks the paired watches at most
 once a day whether FP Wear is installed. Only when it is — or a FP Wear message arrives — does
 `GarminLink.active` (persisted) switch on the pulls, chunk requests, both 15-minute workers and
-the Settings card. It switches off again when every paired watch reports FP Wear gone and nothing
-is pending. SDK start is guarded, so a misbehaving Connect IQ SDK cannot crash FP Client.
+the full Settings card. It switches off again when every paired watch reports FP Wear gone and
+nothing is pending. While dormant, phones with Garmin Connect see a short Settings card that lists
+the paired watches and offers **Look for FP Wear**; opening Settings asks the watches too — so
+installing FP Wear after FP Client never means waiting for the daily probe. SDK start is guarded, so a misbehaving Connect IQ SDK cannot crash FP Client.
 
 
-- **FP Client → Settings → "Garmin watch (experimental)"** (`GarminWatchCard`, active link or
-  pending workouts only): whether Garmin Connect is there
-  and reachable (`GCM_UPGRADE_NEEDED` and friends in words), each paired watch with connected /
+- **FP Client → Settings → "Garmin watch (experimental)"** (`GarminWatchCard`; the full card with an
+  active link or pending workouts): whether Garmin Connect is there and reachable
+  (`GCM_UPGRADE_NEEDED` and friends in words), each paired watch with connected /
   not connected and *FP Wear installed / not installed* (asked from the watch via
   `getApplicationInfo`), the workouts not yet on FitPub with the newest error, and **Sync now**
   (manual retry of everything, then pull + fetch missing chunks + upload).
