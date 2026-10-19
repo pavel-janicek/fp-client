@@ -2,12 +2,15 @@ import Toybox.Application;
 import Toybox.Communications;
 import Toybox.Lang;
 import Toybox.System;
+import Toybox.Time;
 
 //! Sending to and handling messages from FP Client on the phone. Shared by the foreground app
 //! and the background service. A completed transmit only means the Garmin Connect app took the
 //! message — not that FP Client stored it — so the queue is cleared by the phone's `ack` alone.
 (:background)
 module PhoneLink {
+    //! When FP Client last sent anything (epoch seconds), so the watch can tell "phone silent".
+    const LAST_PHONE_KEY = "lastPhone";
 
     //! Transmits every queued workout. [onDone] (background only) runs once all transmits have
     //! reported back, so the service can exit; it runs immediately when nothing is queued.
@@ -44,6 +47,9 @@ module PhoneLink {
     function handle(data as Object?, onDone as Method?) as Void {
         var type = Protocol.typeOf(data);
         System.println("FP: phone message " + type);
+        if (type != null) {
+            Storage.setValue(LAST_PHONE_KEY, Time.now().value());
+        }
         if (Protocol.TYPE_ACK.equals(type)) {
             PendingWorkouts.remove((data as Dictionary<String, Object?>)[Protocol.KEY_ID]);
             if (onDone != null) {

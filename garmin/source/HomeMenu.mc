@@ -1,5 +1,7 @@
+import Toybox.Application;
 import Toybox.Lang;
 import Toybox.System;
+import Toybox.Time;
 import Toybox.WatchUi;
 
 //! Start screen: the activity types, then a sync row that shows whether workouts still wait for
@@ -30,11 +32,29 @@ class HomeMenu extends WatchUi.Menu2 {
         WatchUi.requestUpdate();
     }
 
+    //! "All sent", or how many wait plus when the phone last answered — "no reply yet" usually
+    //! means FP Client (or Garmin Connect) is missing on the phone.
     private function syncStatus() as String {
         var pending = PendingWorkouts.count();
-        return pending == 0
-            ? WatchUi.loadResource(Rez.Strings.StatusAllSent) as String
-            : Lang.format(WatchUi.loadResource(Rez.Strings.StatusPending) as String, [pending]);
+        if (pending == 0) {
+            return WatchUi.loadResource(Rez.Strings.StatusAllSent) as String;
+        }
+        var last = Storage.getValue(PhoneLink.LAST_PHONE_KEY);
+        if (!(last instanceof Number)) {
+            return Lang.format(WatchUi.loadResource(Rez.Strings.StatusPendingNever) as String, [pending]);
+        }
+        return Lang.format(WatchUi.loadResource(Rez.Strings.StatusPendingSeen) as String,
+            [pending, formatAge(Time.now().value() - last)]);
+    }
+
+    static function formatAge(seconds as Number) as String {
+        if (seconds < 3600) {
+            return (seconds / 60).toString() + " min";
+        }
+        if (seconds < 48 * 3600) {
+            return (seconds / 3600).toString() + " h";
+        }
+        return (seconds / 86400).toString() + " d";
     }
 }
 

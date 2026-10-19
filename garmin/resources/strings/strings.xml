@@ -2,7 +2,8 @@
     <string id="AppName">FP Wear</string>
     <string id="SyncNow">Sync now</string>
     <string id="StatusAllSent">All sent to phone</string>
-    <string id="StatusPending">Waiting for phone: $1$</string>
+    <string id="StatusPendingNever">Waiting: $1$ · phone never replied</string>
+    <string id="StatusPendingSeen">Waiting: $1$ · phone seen $2$ ago</string>
     <string id="Paused">PAUSED</string>
     <string id="Resume">Resume</string>
     <string id="Save">Save</string>

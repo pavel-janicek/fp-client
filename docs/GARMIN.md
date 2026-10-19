@@ -232,6 +232,83 @@ the protocol, queue, ack and pull — not the background wake-up, which exists o
    the ack brings the count back to 0. Kill FP Client and press START again: the workout stays
    queued until FP Client is started (its `pull`) — which mimics the lost-first-message case.
 
+## Status on the phone and the watch (10e, part 1)
+
+- **FP Client → Settings → "Garmin watch"** (`GarminWatchCard`): whether Garmin Connect is there
+  and reachable (`GCM_UPGRADE_NEEDED` and friends in words), each paired watch with connected /
+  not connected and *FP Wear installed / not installed* (asked from the watch via
+  `getApplicationInfo`), the workouts not yet on FitPub with the newest error, and **Sync now**
+  (manual retry of everything, then pull + fetch missing chunks + upload).
+- **Banner** above every tab while Garmin workouts are on their way ("N Garmin workout(s) on the
+  way to FitPub — <error>"), tapping opens Settings; the Wear OS banner stays separate.
+- **Watch "Sync now" row:** "All sent to phone", or "Waiting: N · phone seen 3 h ago" / "Waiting:
+  N · phone never replied" (the last FP Client message is stored as `lastPhone`) — "never" almost
+  always means FP Client or Garmin Connect is missing on the phone.
+
+## Licence and distribution (read 2026-10-19 — not legal advice)
+
+The Connect IQ SDK **and** the Android companion library (`ciq-companion-app-sdk`, whose POM names
+"Garmin CONNECT IQ SDK License Agreement and CONNECT IQ Application Developer Agreement") fall
+under one agreement (§ IX.e: "references … to the SDK include the Companion SDK"):
+
+- **Proprietary, not open source.** § I.a: a "limited, non-exclusive, personal, revocable …
+  non-sublicensable" licence; § I.b forbids redistributing the Program Materials or deriving
+  their source. Shipping the companion AAR inside an app is the intended use (Garmin publishes it
+  on Maven Central for that), but it is a **closed-source component in an AGPL-3.0 app**.
+  - *AGPL:* to keep FP Client's licence coherent, the copyright holder can grant an AGPL §7
+    "additional permission" to combine with the Garmin companion library (a linking exception).
+    **Decision for the maintainer**, not taken here.
+  - *F-Droid:* a proprietary dependency is not accepted in F-Droid's main repository. Note that
+    `:app` already depends on `play-services-wearable` (Wear OS, Iteration 9), which F-Droid
+    treats the same way — so this is not new, but it adds to it. Options: a `foss` flavor without
+    Wear OS and Garmin for F-Droid, or leaving F-Droid. **Decision for the maintainer.**
+- **Distribution:** the agreement describes distribution through the Connect IQ Store (§ II.b)
+  but does not forbid side-loading for testing; nothing requires the app's own source to be
+  closed. Do not commit SDK files or the developer key (`.gitignore` covers both).
+- **Privacy (Exhibit A):** an app that collects data **must have a privacy policy** (§ I.a);
+  **location requires notice and opt-in** (§ I.c); data may not be kept longer than needed
+  (§ I.b) or sold/transferred (§ I.d). See the draft below.
+
+### Privacy policy section (draft, to merge into FP Client's policy)
+
+> **FP Wear for Garmin watches.** The FP Wear watch app records your workout on your Garmin
+> watch: GPS position, altitude, heart rate and step count, once per second, while you record.
+> It saves the workout as a normal activity on your watch, which Garmin Connect syncs to your
+> Garmin account under Garmin's own terms. FP Wear additionally sends the workout over Bluetooth,
+> through the Garmin Connect app, to FP Client on your phone. FP Wear itself has no internet
+> access and sends nothing anywhere else. On the watch, a workout is deleted as soon as the phone
+> confirms it has received it. FP Client then uploads it to the FitPub instance you are signed in
+> to, with the visibility you would get for a Wear OS workout (public by default; change it on
+> FitPub), and then deletes the recorded samples; it keeps only a short summary (activity, time,
+> distance, watch name) of recent workouts so that none is uploaded twice. No data goes to the FP
+> Client developers or any other third party. Location is only recorded while you record a workout, after you
+> start it on the watch.
+
+## Connect IQ Store listing (draft — do not submit before the real-watch gate)
+
+- **Export:** `"$SDK/monkeyc" -e -f monkey.jungle -o bin/fitpub.iq -y ~/garmin/developer_key.der -r`
+  — one file for every target (138 KB for the six current targets; `.iq` is git-ignored).
+- **Name:** FP Wear · **Type:** Device app · **Category:** Health & Fitness.
+- **Short description:** Record workouts on your Garmin and share them to your FitPub instance.
+- **Description:**
+  > Record a run, walk, hike or ride on your Garmin watch and have it appear on your own FitPub
+  > instance automatically — no Strava, no export, no manual upload.
+  >
+  > FP Wear records like the built-in activities (GPS, heart rate, steps) and also saves a normal
+  > Garmin activity, so Garmin Connect keeps working as before. After you save, the workout goes
+  > to the free FP Client app on your Android phone, which uploads it to the FitPub instance you
+  > are signed in to.
+  >
+  > Requires: FP Client for Android (Google Play / GitHub), the Garmin Connect app on the same
+  > phone, and an account on a FitPub instance. iPhone is not supported.
+  >
+  > Open source: https://github.com/pavel-janicek/fitpub-android
+- **Permissions to explain:** Positioning (GPS track), Sensor (heart rate), Fit (save the native
+  activity), Communications (send to the phone), Background (finish sending while the app is
+  closed).
+- **Still to do:** store icon and screenshots (the simulator can take them, but its window does
+  not take scripted input reliably — capture by hand), privacy policy URL, the "beta" wording.
+
 ## Targets
 
 `minApiLevel 5.0.0`, current devices only. The list is the device profiles installed on the

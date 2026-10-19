@@ -1107,3 +1107,13 @@ has been prototyped yet):**
 - **10e — Hardening & release.** Battery and memory limits on the watch, Connect IQ Store listing,
   FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs. Blocked by the real-watch gate above: the
   full record → background delivery → FitPub upload loop must have passed on a physical Garmin.
+
+  **Split 2026-10-19.** *Part 1 — everything that does not need a watch — 🟡 done:* Settings →
+  "Garmin watch" card (Garmin Connect state, paired watches, FP Wear installed or not via
+  `getApplicationInfo`, pending workouts with the newest error, Sync now), a Garmin banner above
+  every tab, the watch's sync row telling how long ago the phone last answered, the licence read
+  (proprietary companion SDK in an AGPL app: AGPL §7 exception and F-Droid flavor are open
+  maintainer decisions — `docs/GARMIN.md` → "Licence and distribution"), a privacy-policy section
+  draft (the agreement requires a policy and location opt-in) and a Store listing draft with a
+  working `.iq` export (138 KB). *Part 2 — after the field test:* battery and memory on real
+  hardware, screenshots, Store submission, FP Client 4.0 release.

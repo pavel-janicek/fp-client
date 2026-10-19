@@ -58,6 +58,10 @@ class GarminInboxStore(context: Context) {
     /** Workouts not yet on FitPub (still arriving or waiting to upload). */
     val pendingCount: StateFlow<Int> = mutablePendingCount
 
+    private val mutableLatestError = MutableStateFlow(readEntries().latestError())
+    /** Why the newest unfinished workout is stuck, for the banner and Settings. */
+    val latestError: StateFlow<String?> = mutableLatestError
+
     fun all(): List<GarminInboxEntry> = synchronized(lock) { readEntries() }
 
     fun get(id: String): GarminInboxEntry? = all().firstOrNull { it.id == id }
@@ -104,6 +108,11 @@ class GarminInboxStore(context: Context) {
         entryDirectory(id).deleteRecursively()
     }
 
+    /** User-initiated retry: every unfinished entry gets another try, server rejections included. */
+    fun retryManually() = synchronized(lock) {
+        writeEntries(readEntries().map { if (it.uploadedActivityId == null) it.copy(blocked = false, rejectedByServer = false, lastError = null) else it })
+    }
+
     /** Automatic pass: unblocks transient failures; server-rejected entries stay blocked. */
     fun retryBlocked() = synchronized(lock) {
         writeEntries(readEntries().map { if (it.rejectedByServer) it else it.copy(blocked = false, lastError = null) })
@@ -132,7 +141,11 @@ class GarminInboxStore(context: Context) {
         val saved = preferences.edit().putString(KEY_ENTRIES, json.encodeToString(serializer, kept)).commit()
         check(saved) { "Could not persist Garmin workout inbox" }
         mutablePendingCount.value = kept.count { it.uploadedActivityId == null }
+        mutableLatestError.value = kept.latestError()
     }
+
+    private fun List<GarminInboxEntry>.latestError(): String? =
+        filter { it.uploadedActivityId == null }.sortedByDescending { it.receivedAtEpochMs }.firstNotNullOfOrNull { it.lastError }
 
     private fun writeAtomically(file: File, text: String) {
         file.parentFile?.mkdirs()

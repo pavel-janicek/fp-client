@@ -213,6 +213,7 @@ fun SettingsScreen(
                     ) { Text("Manage watch workouts ($watchPendingCount)") }
                 }
             }
+            GarminWatchCard(container.garminInboxStore)
             UpdateCheckCard()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {

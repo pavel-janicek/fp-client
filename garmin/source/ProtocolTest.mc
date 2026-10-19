@@ -77,3 +77,11 @@ function activityTablesStayAligned(logger as Logger) as Boolean {
     Test.assertEqual("RUN", Activities.KEYS[0]);
     return true;
 }
+
+(:test)
+function phoneAgeFormatsMinutesHoursDays(logger as Logger) as Boolean {
+    Test.assertEqual("5 min", HomeMenu.formatAge(300));
+    Test.assertEqual("3 h", HomeMenu.formatAge(3 * 3600 + 59));
+    Test.assertEqual("2 d", HomeMenu.formatAge(2 * 86400));
+    return true;
+}

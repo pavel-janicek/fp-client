@@ -15,6 +15,8 @@ import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +62,22 @@ object GarminLink {
     /** True once the SDK is up; false while starting and when Garmin Connect is not installed. */
     val isReady: Boolean get() = state == State.READY
 
+    /** What Settings shows about the link; see [refreshStatus]. */
+    data class Status(
+        val availability: Availability = Availability.STARTING,
+        /** Why the SDK could not start (an IQSdkErrorStatus name), for [Availability.ERROR]. */
+        val error: String? = null,
+        val devices: List<Device> = emptyList(),
+    )
+
+    enum class Availability { NO_GARMIN_CONNECT, STARTING, READY, ERROR }
+
+    /** A watch paired in Garmin Connect; [appInstalled] null until the watch answered. */
+    data class Device(val id: Long, val name: String, val connected: Boolean, val appInstalled: Boolean?)
+
+    private val mutableStatus = MutableStateFlow(Status())
+    val status: StateFlow<Status> = mutableStatus
+
     /** Idempotent; safe from any thread. Does nothing on phones without Garmin Connect. */
     fun start(context: Context) {
         appContext = context.applicationContext
@@ -67,6 +85,7 @@ object GarminLink {
             if (state != State.IDLE) return@post
             if (!isAvailable(appContext)) {
                 state = State.UNAVAILABLE
+                mutableStatus.value = Status(Availability.NO_GARMIN_CONNECT)
                 return@post
             }
             state = State.STARTING
@@ -82,6 +101,7 @@ object GarminLink {
                 override fun onInitializeError(status: ConnectIQ.IQSdkErrorStatus) {
                     Log.w(TAG, "Connect IQ unavailable: $status")
                     state = State.UNAVAILABLE
+                    mutableStatus.value = Status(Availability.ERROR, error = status.name)
                 }
 
                 override fun onSdkShutDown() {
@@ -117,6 +137,45 @@ object GarminLink {
         }
         pullAll()
         fetchAllMissing()
+        refreshStatus()
+    }
+
+    /**
+     * Re-reads the paired watches, whether each is connected and whether FP Wear is installed on
+     * it (asked from the watch, so that answer arrives a moment later). No-op until ready.
+     */
+    fun refreshStatus() {
+        mainHandler.post {
+            val sdk = connectIQ?.takeIf { state == State.READY } ?: return@post
+            val devices = knownDevices(sdk).map { device ->
+                val connected = runCatching { sdk.getDeviceStatus(device) == IQDevice.IQDeviceStatus.CONNECTED }.getOrDefault(false)
+                Device(device.deviceIdentifier, device.friendlyName.orEmpty(), connected, null)
+            }
+            mutableStatus.value = Status(Availability.READY, devices = devices)
+            for (device in knownDevices(sdk)) {
+                runCatching {
+                    sdk.getApplicationInfo(GarminProtocol.APP_ID, device, object : ConnectIQ.IQApplicationInfoListener {
+                        override fun onApplicationInfoReceived(app: IQApp) = setInstalled(device.deviceIdentifier, true)
+
+                        override fun onApplicationNotInstalled(applicationId: String) = setInstalled(device.deviceIdentifier, false)
+                    })
+                }.onFailure { Log.w(TAG, "No app info from ${device.friendlyName}", it) }
+            }
+        }
+    }
+
+    private fun setInstalled(deviceId: Long, installed: Boolean) {
+        val current = mutableStatus.value
+        mutableStatus.value = current.copy(devices = current.devices.map { if (it.id == deviceId) it.copy(appInstalled = installed) else it })
+    }
+
+    /** "Sync now" in Settings: ask the watches, fetch what is missing, upload what is complete. */
+    fun syncNow(context: Context) {
+        start(context)
+        pullAll()
+        fetchAllMissing()
+        refreshStatus()
+        GarminUploadWorker.enqueue(context.applicationContext)
     }
 
     private fun onMessages(device: IQDevice, app: IQApp, messages: List<Any?>?, status: ConnectIQ.IQMessageStatus) {
