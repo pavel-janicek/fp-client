@@ -2,6 +2,8 @@ package com.fpclient.android
 
 import android.app.Application
 import android.content.Context
+import com.fpclient.android.garmin.GarminLink
+import com.fpclient.android.garmin.GarminPullWorker
 import com.fpclient.android.notifications.InstantDeliveryService
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
@@ -46,6 +48,12 @@ class FitPubApplication : Application() {
         // start, so a signed-out device or another account's subscription never connects even
         // if this runs at a bad moment.
         InstantDeliveryService.startIfEnabled(this)
+
+        // Garmin watch link (Iteration 10b). Started here, not lazily, because Garmin Connect
+        // may start this process just to deliver a watch message — the SDK has to come up so it
+        // can pull that message again (see GarminLink). Neither does anything without Garmin Connect.
+        GarminLink.start(this)
+        GarminPullWorker.schedule(this)
 
         // Configure osmdroid tile cache in app storage.
         @Suppress("DEPRECATION")

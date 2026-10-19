@@ -22,6 +22,7 @@ import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.wear.WearWorkoutInboxStore
 import com.fpclient.android.data.session.SessionStore
+import com.fpclient.android.garmin.GarminInboxStore
 import com.fpclient.android.wear.PhoneWearAuthRelay
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -116,6 +117,9 @@ class AppContainer(context: Context) {
     }
 
     val wearWorkoutInboxStore: WearWorkoutInboxStore by lazy { WearWorkoutInboxStore(context) }
+
+    /** Workouts received from the Garmin watch app (Iteration 10b; the upload queue from 10d). */
+    val garminInboxStore: GarminInboxStore by lazy { GarminInboxStore(context) }
 
     /**
      * Body metrics a user opts in for calorie recording (height/weight/age/sex). Health data, so

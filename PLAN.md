@@ -1040,6 +1040,23 @@ has been prototyped yet):**
   only a Store-installed one; that the SDK needs the Garmin Connect app on the phone (expected —
   every Garmin user has it), its licence/distribution terms, and what it adds to the merged
   manifest (Play permission declarations).
+
+  **Status 2026-10-19: 🟡 implemented, simulator-tested, NOT verified on a real watch** (gate
+  above). Details and the test procedure: `docs/GARMIN.md` → "Phone link (10b)". Findings from
+  reading SDK 2.4.0 (`ciq-companion-app-sdk`, Maven Central, no transitive dependencies): it adds
+  no permissions, only a `<queries>` entry for Garmin Connect, an exported
+  `IQGarminBindingService` (caller signature-checked against Garmin) and a dialog activity. That
+  service is the background answer: Garmin Connect binds it — starting a dead FP Client — but a
+  message arriving before the SDK's async init is **dropped while reported as delivered**, so
+  push alone is unreliable by design. Implemented accordingly: watch queue + explicit `ack`,
+  phone `pull` whenever its SDK becomes ready and every 15 min, watch background service for
+  `pull`/`ack` plus a 5-min retry timer. Wire contract pinned by `GarminProtocolTest` ⇄
+  `ProtocolTest.mc`. Verified: both sides build (watch at type-check level 3 for all six targets,
+  phone debug + R8 release), unit tests pass on both sides, and in the simulator a test workout
+  that cannot be sent stays queued. Not done in 10b: the "app installed on watch" check
+  (`getApplicationInfo`, belongs to the 10e UX), a read of the SDK licence terms (before 10e), and
+  an end-to-end run with a phone — the tethered (adb ↔ simulator) procedure is documented and
+  needs the maintainer's phone on USB. The watch app is named "FP Wear", as on Wear OS.
 - **10c — Watch recording.** Monkey C: activity-type picker, GPS position, heart rate, steps,
   start / pause / resume / stop, readable on small round and square screens; Connect IQ app
   permissions (`Positioning`, `Sensor`, `Communications`, `Fit`, …) kept to the minimum. Records a
