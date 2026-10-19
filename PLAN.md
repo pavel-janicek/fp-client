@@ -947,6 +947,11 @@ FIT and uploads it to FitPub exactly like a Wear OS workout (calories, steps and
 rule from 9h–9j included). The hard constraint still applies: **no change to the FitPub server
 API**.
 
+**Goal, made explicit 2026-10-19:** a Garmin owner finishes and saves a workout on the watch, and it
+appears on FitPub **automatically, in the background** — no need to open FP Client. The phone is the
+bridge (it holds the session and uploads with its own JWT), as for Wear OS. No sign-in happens on
+the Garmin side at all.
+
 **Decision 2026-10-14 — approach: a Connect IQ app.** Alternatives were researched and rejected:
 
 | Option | Why not |
@@ -970,6 +975,18 @@ Program in the table above (server-to-server cloud API, legal entities only). St
 whether Mobile SDK messaging through the Garmin Connect phone app works with a side-loaded watch
 app or only with a Store-installed one.
 
+**Decision 2026-10-19 — the watch app records the workout itself *and* saves a native Garmin
+activity.** The user starts "FP" on the watch instead of the built-in Run/Bike activity. Alongside
+streaming samples to the phone, the app records a native session (`ActivityRecording.createSession()`
+→ `save()`), whose FIT Garmin syncs to Garmin Connect as usual — so the user loses nothing on the
+Garmin side and the workout reaches FitPub as well. Other paths considered:
+
+| Option | Verdict |
+|---|---|
+| Built-in Garmin activity, picked up on the watch | Impossible: a Connect IQ app has no access to the native activity FIT files on the watch. |
+| Connect IQ **data field** inside the built-in activity | Rejected: data fields may not use `Communications`; only a background service may, at most every 5 min for 30 s, and data-field memory is tiny — a whole track cannot be moved that way. |
+| Built-in activity → Garmin Connect cloud → relay on the maintainer's VPS (`python-garminconnect`) → phone | Deferred, optional add-on at most: unofficial, reverse-engineered login that Garmin breaks (garth died 2026-06), and the relay must hold the user's Garmin refresh token, so it only suits a single self-hosting user. Not part of v4.0. |
+
 **Decision 2026-10-14 — repo layout: same repository, top-level `garmin/`.**
 - `garmin/` is a plain Connect IQ project (`manifest.xml`, `monkey.jungle`, `source/`,
   `resources/`), **not** a Gradle module — `settings.gradle.kts` keeps including only `:app` and
@@ -992,15 +1009,29 @@ has been prototyped yet):**
 - **10a — Scaffolding.** `garmin/` Connect IQ project (target device list incl. the maintainer's
   watch), `.gitignore` entries, CI path filters, `docs/GARMIN.md` (toolchain setup, simulator,
   side-loading to a real watch). Verify: an empty app builds and runs in the simulator.
-- **10b — Phone ↔ Garmin link.** Connect IQ Mobile SDK in `:app`: device discovery, "app installed
-  on watch" check, message send/receive, a pinned message contract tested on both sides. To verify
-  first: whether the SDK needs the Garmin Connect app on the phone, its licence/distribution terms,
-  and what it adds to the merged manifest (Play permission declarations).
+- **10b — Phone ↔ Garmin link, starting with a background-delivery prototype.** Automatic upload
+  is the goal, so the riskiest question is answered first, before any recording UI: **does a
+  message reach FP Client when its process is not running?** The Mobile SDK talks through the
+  Garmin Connect phone app, and delivery to a dead process is not guaranteed. Design the link so it
+  never depends on luck:
+  - the watch keeps each finished workout until the phone acknowledges it (like
+    `WearWorkoutInboxStore`), retrying on its side;
+  - the phone also pulls: a periodic worker (~15 min) initialises the SDK and asks the watch
+    "anything pending?" — which needs the watch to answer from a **background service** even when
+    the FP app is closed (`registerForPhoneAppMessageEvent`); verify that too.
+  If neither push nor pull works in the background, the "automatic" goal must be revisited before
+  10c. Then the rest: device discovery, "app installed on watch" check, a pinned message contract
+  tested on both sides. Also verify: whether messaging works with a **side-loaded** watch app or
+  only a Store-installed one; that the SDK needs the Garmin Connect app on the phone (expected —
+  every Garmin user has it), its licence/distribution terms, and what it adds to the merged
+  manifest (Play permission declarations).
 - **10c — Watch recording.** Monkey C: activity-type picker, GPS position, heart rate, steps,
   start / pause / resume / stop, readable on small round and square screens; Connect IQ app
-  permissions (`Positioning`, `Sensor`, `Communications`, …) kept to the minimum. Open question: also
-  record a native `ActivityRecording` session (shows up in Garmin Connect), or only stream samples
-  to the phone.
+  permissions (`Positioning`, `Sensor`, `Communications`, `Fit`, …) kept to the minimum. Records a
+  native `ActivityRecording` session **and** buffers samples for the phone (decision above).
+  Verify: whether a Connect IQ-recorded session gets Training Effect and the other Garmin metrics
+  in Garmin Connect (the docs do not say), and the memory / storage limits on the maintainer's
+  watch — a one-hour GPS workout is 3,600+ one-second samples.
 - **10d — Transfer & upload.** Chunked, resumable transfer of the recorded samples to the phone
   (Connect IQ messages are size-limited); the phone builds the FIT with the existing Garmin FIT SDK
   dependency, applies `CalorieFitAmender` and stride totals, and uploads through the existing
