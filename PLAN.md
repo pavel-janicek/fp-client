@@ -1055,8 +1055,13 @@ has been prototyped yet):**
   phone debug + R8 release), unit tests pass on both sides, and in the simulator a test workout
   that cannot be sent stays queued. Not done in 10b: the "app installed on watch" check
   (`getApplicationInfo`, belongs to the 10e UX), a read of the SDK licence terms (before 10e), and
-  an end-to-end run with a phone — the tethered (adb ↔ simulator) procedure is documented and
-  needs the maintainer's phone on USB. The watch app is named "FP Wear", as on Wear OS.
+  an end-to-end run with a phone. **Tethered run attempted 2026-10-19 and blocked:** the Linux
+  simulator segfaults on the first watch → phone `transmit` over adb (Garmin bug CIQQA-4579; also
+  with SDK 8.4.1, also against a silent TCP listener, also with a plain string) — so watch → phone
+  can only be verified on a real watch, which raises the stakes of the gate above. The run did
+  find one phone bug, fixed: in TETHERED mode `sendMessage` writes the adb socket synchronously and
+  threw `NetworkOnMainThreadException`; sends now go to one background thread. The watch app is
+  named "FP Wear", as on Wear OS.
 - **10c — Watch recording.** Monkey C: activity-type picker, GPS position, heart rate, steps,
   start / pause / resume / stop, readable on small round and square screens; Connect IQ app
   permissions (`Positioning`, `Sensor`, `Communications`, `Fit`, …) kept to the minimum. Records a

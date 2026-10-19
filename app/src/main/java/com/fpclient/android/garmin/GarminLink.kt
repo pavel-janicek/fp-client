@@ -10,11 +10,11 @@ import com.fpclient.android.FitPubApplication
 import com.garmin.android.connectiq.ConnectIQ
 import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
+import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * The phone end of the Garmin link (Iteration 10b), built so delivery never depends on FP Client
@@ -29,7 +29,9 @@ import kotlinx.coroutines.withContext
  *   it still holds; nothing leaves the watch's queue without our explicit `ack`.
  * - **Periodic pull:** [GarminPullWorker] repeats the pull every 15 minutes.
  *
- * SDK calls are made on the main thread, where the SDK also delivers its callbacks.
+ * SDK setup runs on the main thread, where the SDK also delivers its callbacks. Sends go to one
+ * background thread: in TETHERED mode `sendMessage` writes the adb socket synchronously, which the
+ * main thread may not do (NetworkOnMainThreadException); one thread keeps them in order.
  */
 object GarminLink {
     private const val TAG = "GarminLink"
@@ -40,6 +42,7 @@ object GarminLink {
     private val watchApp = IQApp(GarminProtocol.APP_ID)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val sendExecutor = Executors.newSingleThreadExecutor { Thread(it, "garmin-send") }
 
     @Volatile private var state = State.IDLE
     private var connectIQ: ConnectIQ? = null
@@ -83,7 +86,10 @@ object GarminLink {
     fun pullAll() {
         mainHandler.post {
             val sdk = connectIQ?.takeIf { state == State.READY } ?: return@post
-            for (device in knownDevices(sdk)) send(sdk, device, GarminProtocol.pull())
+            for (device in knownDevices(sdk)) {
+                Log.i(TAG, "pull → ${device.friendlyName}")
+                send(sdk, device, GarminProtocol.pull())
+            }
         }
     }
 
@@ -108,6 +114,7 @@ object GarminLink {
             Log.w(TAG, "Message from ${device.friendlyName} not usable: $status")
             return
         }
+        Log.i(TAG, "${messages?.size ?: 0} message(s) from ${device.friendlyName}")
         val inbox = FitPubApplication.container(appContext).garminInboxStore
         for (workout in messages.orEmpty().mapNotNull(GarminProtocol::parseWorkout)) {
             scope.launch {
@@ -118,19 +125,23 @@ object GarminLink {
                     deviceName = device.friendlyName.orEmpty(),
                     receivedAtEpochMs = System.currentTimeMillis(),
                 )
-                if (inbox.record(entry)) GarminNotifications.postReceived(appContext, entry)
+                val isNew = inbox.record(entry)
+                Log.i(TAG, "workout ${workout.id} ${if (isNew) "stored" else "already known"}, ack")
+                if (isNew) GarminNotifications.postReceived(appContext, entry)
                 // Ack duplicates too: the watch resends until an ack gets through.
-                withContext(Dispatchers.Main) { connectIQ?.let { send(it, device, GarminProtocol.ack(workout.id)) } }
+                connectIQ?.let { send(it, device, GarminProtocol.ack(workout.id)) }
             }
         }
     }
 
     private fun send(sdk: ConnectIQ, device: IQDevice, message: Map<String, Any>) {
-        runCatching {
-            sdk.sendMessage(device, watchApp, message) { target, _, status ->
-                if (status != ConnectIQ.IQMessageStatus.SUCCESS) Log.w(TAG, "Send to ${target.friendlyName} failed: $status")
-            }
-        }.onFailure { Log.w(TAG, "Send to ${device.friendlyName} failed", it) }
+        sendExecutor.execute {
+            runCatching {
+                sdk.sendMessage(device, watchApp, message) { target, _, status ->
+                    if (status != ConnectIQ.IQMessageStatus.SUCCESS) Log.w(TAG, "Send to ${target.friendlyName} failed: $status")
+                }
+            }.onFailure { Log.w(TAG, "Send to ${device.friendlyName} failed", it) }
+        }
     }
 
     private fun knownDevices(sdk: ConnectIQ): List<IQDevice> =

@@ -134,6 +134,15 @@ that the watch background service is woken for `pull`, and timings / battery.
 
 ### Testing with the simulator and a phone (tethered)
 
+> **Blocked on Linux — watch → phone does not work in the simulator.** The simulator segfaults on
+> the first `Communications.transmit` over the adb connection, before writing a single byte:
+> Garmin bug **CIQQA-4579** (acknowledged, no fix or workaround yet;
+> <https://forums.garmin.com/developer/connect-iq/i/bug-reports/simulator-segfaults-on-communications-transmit-over-the-tethered-adb-connection-sdk-9-1-0-and-9-2-0-linux>).
+> Reproduced here 2026-10-19 with SDK 9.2.0 **and 8.4.1**, against the phone and against a silent
+> TCP listener on port 7381 in place of the phone, with a string payload as well as ours — so it
+> is neither FP Client nor the message format. Phone → watch reportedly still works. Until Garmin
+> fixes it, the watch → phone direction can only be tested on a real watch (PLAN gate).
+
 The SDK's TETHERED mode replaces Garmin Connect with an adb tunnel to the simulator. It exercises
 the protocol, queue, ack and pull — not the background wake-up, which exists only via Garmin Connect.
 

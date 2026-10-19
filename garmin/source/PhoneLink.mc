@@ -28,6 +28,7 @@ module PhoneLink {
     //! Applies one phone message. [onDone] as in sendPending.
     function handle(data as Object?, onDone as Method?) as Void {
         var type = Protocol.typeOf(data);
+        System.println("FP: phone message " + type);
         if (Protocol.TYPE_ACK.equals(type)) {
             PendingWorkouts.remove((data as Dictionary<String, Object?>)[Protocol.KEY_ID]);
             if (onDone != null) {
@@ -36,7 +37,6 @@ module PhoneLink {
         } else if (Protocol.TYPE_PULL.equals(type)) {
             sendPending(onDone);
         } else {
-            System.println("FP: ignored phone message");
             if (onDone != null) {
                 onDone.invoke();
             }
@@ -75,6 +75,7 @@ class TransmitListener extends Communications.ConnectionListener {
     }
 
     function onComplete() as Void {
+        System.println("FP: transmit complete");
         _tracker.finished();
     }
 
