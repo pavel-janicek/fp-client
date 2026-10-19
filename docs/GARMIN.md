@@ -327,7 +327,7 @@ development machine, chosen to span the display classes:
 | `fenix7s` | 240 px round MIP (smallest) |
 | `fenix7` | 260 px round MIP |
 | `vivoactive5`, `vivoactive6` | 390 px round AMOLED |
-| `epix2pro47mm` | 416 px round AMOLED |
+| `epix2`, `epix2pro47mm` | 416 px round AMOLED (`epix2` added 2026-10-19 for a tester's epix Gen 2) |
 | `fenix847mm` | 454 px round AMOLED (largest) |
 
 Forerunner, Venu, Instinct (monochrome) and Edge are not installed yet — add their profiles in

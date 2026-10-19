@@ -12,6 +12,7 @@
         entry="FitPubApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="5.0.0">
 
         <iq:products>
+            <iq:product id="epix2"/>
             <iq:product id="epix2pro47mm"/>
             <iq:product id="fenix7"/>
             <iq:product id="fenix7s"/>
