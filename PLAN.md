@@ -1004,6 +1004,17 @@ Garmin side and the workout reaches FitPub as well. Other paths considered:
   `.github/workflows/android.yml` gets `paths-ignore: garmin/**`, and a separate Garmin workflow
   is added once the SDK can be installed in CI (likely a prebuilt Connect IQ SDK Docker image).
 
+**🚩 Gate — a real Garmin watch (noted 2026-10-19).** The maintainer owns no Garmin device, so
+development runs blind: the Connect IQ simulator plus the Mobile SDK's simulator (adb-tethered)
+mode cover 10a, 10c and 10d — UI, message protocol, chunked transfer, FIT build and upload. What
+the simulator cannot answer, because it bypasses the Garmin Connect phone app: the 10b
+background-delivery question (does a message reach a FP Client whose process is not running),
+messaging with a side-loaded app, real GPS / heart rate, battery drain and on-device memory limits.
+Therefore **10b is not "done" and nothing ships (10e, Connect IQ Store, FP Client 4.0) until it has
+been verified on at least one physical Garmin watch** paired with a phone running Garmin Connect —
+either a tester's watch (a side-loaded `.prg` is enough) or a cheap second-hand one. If 10b fails
+on real hardware, 10c/10d are redesigned before release, not patched afterwards.
+
 **Sub-steps (one prompt each; verify Garmin's current SDK docs at the start of 10a — nothing below
 has been prototyped yet):**
 - **10a — Scaffolding.** `garmin/` Connect IQ project (target device list incl. the maintainer's
@@ -1037,4 +1048,5 @@ has been prototyped yet):**
   dependency, applies `CalorieFitAmender` and stride totals, and uploads through the existing
   pipeline with a pending/retry inbox like `WearWorkoutInboxStore`.
 - **10e — Hardening & release.** Battery and memory limits on the watch, Connect IQ Store listing,
-  FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs.
+  FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs. Blocked by the real-watch gate above: the
+  full record → background delivery → FitPub upload loop must have passed on a physical Garmin.
