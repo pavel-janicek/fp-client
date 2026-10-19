@@ -5,7 +5,7 @@ import Toybox.WatchUi;
 
 //! The workout screen: activity and state on top, moving time large in the middle, distance (GPS
 //! state before START) and heart rate below, and what START does at the bottom. Positions derive
-//! from the dc, so one layout serves round and square displays from 240 to 454 px.
+//! from the dc, so one layout serves round and square displays from 208 to 454 px.
 class WorkoutView extends WatchUi.View {
     private var _controller as WorkoutController;
 

@@ -3,20 +3,23 @@
     rewrite this file, so re-check the diff after using them.
 
     Targets are the devices whose profiles are installed via the SDK Manager (see docs/GARMIN.md);
-    minApiLevel 5.0.0 keeps the app on current Connect IQ watches. Permissions arrive with the
+    minApiLevel 3.4.0 because of the Forerunner 55 (Connect IQ 3.4; every other target has 5.x) —
+    the type checker still checks each target against its own API. Permissions arrive with the
     steps that need them: 10b Communications + Background (phone link, background service);
     10c Fit (native activity), Positioning (GPS), Sensor (heart rate).
 -->
 <iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
     <iq:application id="acb5d45a68f54311b0223006a814250f" type="watch-app" name="@Strings.AppName"
-        entry="FitPubApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="5.0.0">
+        entry="FitPubApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.4.0">
 
         <iq:products>
             <iq:product id="epix2"/>
             <iq:product id="epix2pro47mm"/>
             <iq:product id="fenix7"/>
+            <iq:product id="fenix7x"/>
             <iq:product id="fenix7s"/>
             <iq:product id="fenix847mm"/>
+            <iq:product id="fr55"/>
             <iq:product id="vivoactive5"/>
             <iq:product id="vivoactive6"/>
         </iq:products>

@@ -9,7 +9,8 @@ import Toybox.System;
 //!   [secondsSinceStart, latE6, lonE6, altitudeDm, heartRate, steps]
 //! with null for a value the watch did not have (no GPS fix, no heart rate).
 //!
-//! Storage is finite and device-dependent (10 MB on every current target; one hour ≈ 100 KB): if
+//! Storage is finite and device-dependent (10 MB on most targets, 128 KB on the Forerunner 55;
+//! one hour ≈ 100 KB): if
 //! a write fails, sampling stops but the native Garmin activity keeps recording, and the summary
 //! still reaches the phone.
 class SampleBuffer {

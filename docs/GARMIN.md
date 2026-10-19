@@ -109,8 +109,10 @@ press never ends a workout) → **Save** stores it, queues the summary and sends
   heartRate, steps]` (integers — 32-bit Floats would cost GPS precision; null when unknown).
   Steps are the delta of the daily step counter. Written to Storage in 60-sample chunks
   (~2 KB, limit 32 KB per value) under `c<id>_<n>`, never kept whole in memory: the background
-  service that loads the queue has only **64 KB** (watch app: 768 KB). Every target has
-  **10 MB** app storage (`appStorageCapacity` in the device profiles); one hour ≈ 100 KB. A failed
+  service that loads the queue has only **64 KB** (watch app: 768 KB; Forerunner 55: 32 KB and
+  128 KB). Targets have **10 MB** app storage (`appStorageCapacity` in the device profiles),
+  except the Forerunner 55 with **128 KB**; one hour ≈ 100 KB, so on the FR55 a workout longer than
+  about an hour (less with older ones still queued) keeps only its first part for FitPub. A failed
   write stops sampling but not the native activity.
 - **Queue entry = summary only** {id, created, label, sport, duration, distance, chunks}; the
   phone's ack — sent once it holds every chunk — deletes the entry and its chunks.
@@ -321,18 +323,21 @@ under one agreement (§ IX.e: "references … to the SDK include the Companion S
 
 ## Targets
 
-`minApiLevel 5.0.0`, current devices only. The list is the device profiles installed on the
-development machine, chosen to span the display classes:
+`minApiLevel 3.4.0` (the Forerunner 55 has Connect IQ 3.4; everything else 5.x — the compiler still
+checks each target against its own API). The list started as the installed device profiles spanning
+the display classes and grows with the testers' watches:
 
 | Device id | Display |
 |---|---|
 | `fenix7s` | 240 px round MIP (smallest) |
+| `fr55` | 208 px round MIP, 64 colours; CIQ 3.4, 128 KB app / 32 KB background / 128 KB storage (added 2026-10-19 for a tester) |
 | `fenix7` | 260 px round MIP |
+| `fenix7x` | 280 px round MIP (added 2026-10-19 for a tester's fēnix 7X Solar) |
 | `vivoactive5`, `vivoactive6` | 390 px round AMOLED |
 | `epix2`, `epix2pro47mm` | 416 px round AMOLED (`epix2` added 2026-10-19 for a tester's epix Gen 2) |
 | `fenix847mm` | 454 px round AMOLED (largest) |
 
-Forerunner, Venu, Instinct (monochrome) and Edge are not installed yet — add their profiles in
+Other Forerunners, Venu, Instinct (monochrome) and Edge are not targeted yet — add their profiles in
 the SDK Manager and to `manifest.xml` when 10c's UI is sized for them.
 
 ## Decisions
