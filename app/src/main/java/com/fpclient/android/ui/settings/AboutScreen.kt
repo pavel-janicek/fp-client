@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,11 +20,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.fpclient.android.BuildConfig
+import com.fpclient.android.garmin.GarminLink
 
 /**
  * Static "About" information: app version, contact/community links, bug
@@ -39,6 +46,10 @@ fun AboutScreen(onBack: () -> Unit) {
     val matrixRoomUrl = "https://matrix.to/#/#fitpub-users:matrix.org"
     val issuesUrl = "https://github.com/pavel-janicek/fp-client/issues"
     val projectUrl = "https://github.com/pavel-janicek/fp-client"
+    val context = LocalContext.current
+    val garminTesting by GarminLink.testing.collectAsState()
+    // Seven taps on the version toggle the Garmin tester card (docs/GARMIN-TESTERS.md).
+    val versionTaps = remember { mutableIntStateOf(0) }
 
     Scaffold(
         topBar = {
@@ -72,7 +83,20 @@ fun AboutScreen(onBack: () -> Unit) {
                     Text(
                         "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp),
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .clickable {
+                                versionTaps.intValue += 1
+                                if (versionTaps.intValue >= 7) {
+                                    versionTaps.intValue = 0
+                                    GarminLink.setTesting(context, !garminTesting)
+                                    Toast.makeText(
+                                        context,
+                                        if (garminTesting) "Garmin testing off" else "Garmin testing on — see Settings",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            },
                     )
                 }
             }

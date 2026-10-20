@@ -91,8 +91,12 @@ stop here and write to the group.
 
 ## Step 7: Let the phone find the watch
 
-Open FP Client on your phone and go to **Settings**. Find the card **Garmin watch (experimental)**
-and tap **Look for FP Wear**. The card should then show your watch.
+The Garmin part of FP Client is hidden while it's being tested, so switch it on first:
+
+1. Open FP Client and go to **Settings → About this app**.
+2. Tap the line **Version 4.0.0 (63)** seven times. A short message says **Garmin testing on**.
+3. Go back to **Settings**. Find the new card **Garmin watch (experimental)** and tap
+   **Look for FP Wear**. The card should then show your watch with "FP Wear installed".
 
 ## Step 8: Go for a walk
 

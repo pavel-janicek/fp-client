@@ -55,6 +55,7 @@ object GarminLink {
     private const val FETCH_DELAY_MS = 15_000L
     private const val PREFERENCES_NAME = "fitpub_garmin_link"
     private const val KEY_ACTIVE = "active"
+    private const val KEY_TESTING = "testing"
     private const val KEY_LAST_PROBE = "last_probe_ms"
     private const val DORMANT_PROBE_INTERVAL_MS = 24 * 60 * 60 * 1000L
 
@@ -94,6 +95,19 @@ object GarminLink {
     /** FP Wear is in use with this phone; see the class comment. Drives the Settings card too. */
     val active: StateFlow<Boolean> = mutableActive
 
+    private val mutableTesting = MutableStateFlow(false)
+    /**
+     * Hidden switch for FP Wear testers (seven taps on the version in About): shows the dormant
+     * Settings card with "Look for FP Wear". FP Wear is not in the Connect IQ Store yet, so other
+     * Garmin Connect users would only see a card for an app they cannot get.
+     */
+    val testing: StateFlow<Boolean> = mutableTesting
+
+    fun setTesting(context: Context, value: Boolean) {
+        preferences(context).edit().putBoolean(KEY_TESTING, value).apply()
+        mutableTesting.value = value
+    }
+
     /** [active] read straight from storage, for callers that run before [start] (worker scheduling). */
     fun isActive(context: Context): Boolean = preferences(context).getBoolean(KEY_ACTIVE, false)
 
@@ -101,6 +115,7 @@ object GarminLink {
     fun start(context: Context) {
         appContext = context.applicationContext
         mutableActive.value = isActive(appContext)
+        mutableTesting.value = preferences(appContext).getBoolean(KEY_TESTING, false)
         mainHandler.post {
             if (state != State.IDLE) return@post
             if (!isAvailable(appContext)) {

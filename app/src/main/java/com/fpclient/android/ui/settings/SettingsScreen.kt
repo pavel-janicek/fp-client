@@ -213,13 +213,15 @@ fun SettingsScreen(
                     ) { Text("Manage watch workouts ($watchPendingCount)") }
                 }
             }
-            // Garmin (Iteration 10e): only for phones with Garmin Connect, where FP Wear was found
-            // or a Garmin workout is still in flight — everyone else never hears of it.
+            // Garmin (Iteration 10e): only where FP Wear was found or a Garmin workout is still in
+            // flight; the dormant card ("Look for FP Wear") only for testers who switched it on in
+            // About, on phones with Garmin Connect — everyone else never hears of it.
             val garminActive by com.fpclient.android.garmin.GarminLink.active.collectAsState()
+            val garminTesting by com.fpclient.android.garmin.GarminLink.testing.collectAsState()
             val garminPending by container.garminInboxStore.pendingCount.collectAsState()
             val garminContext = LocalContext.current
             val garminConnect = remember { com.fpclient.android.garmin.GarminLink.isAvailable(garminContext) }
-            if (garminActive || garminPending > 0 || garminConnect) {
+            if (garminActive || garminPending > 0 || (garminTesting && garminConnect)) {
                 GarminWatchCard(container.garminInboxStore, dormant = !garminActive && garminPending == 0)
             }
             UpdateCheckCard()
