@@ -42,6 +42,16 @@ class GarminUploadWorker(appContext: Context, params: WorkerParameters) : Corout
         }
 
         for (entry in inbox.all().filter { it.isPendingUpload && !it.blocked }.sortedBy { it.receivedAtEpochMs }) {
+            // An earlier upload whose response was lost (timeout, dropped network) may already
+            // be on the server: take it over instead of creating a second, identical activity.
+            val alreadyOnServer = (container.activityRepository.findUploaded(session.username, entry.createdEpochSeconds * 1000) as? ApiResult.Success)?.data
+            if (alreadyOnServer != null) {
+                inbox.markUploaded(entry.id, alreadyOnServer)
+                container.activitiesVersion.value += 1
+                GarminNotifications.postUploaded(applicationContext, entry)
+                continue
+            }
+
             val title = entry.label.ifBlank { "Workout" }
             val fit = GarminFitWriter.write(inbox.fitFile(entry), entry, inbox.samples(entry), title)
             val bodyProfile = container.bodyProfileStore.current()
