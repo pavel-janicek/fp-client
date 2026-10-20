@@ -61,7 +61,7 @@ under **Settings → System → About**. We'll make a file for it.
 ## Step 4: Download it
 
 On your computer, open the latest release on
-**<https://github.com/pavel-janicek/fitpub-android/releases>**. Expand **Assets** and download the
+**<https://github.com/pavel-janicek/fp-client/releases>**. Expand **Assets** and download the
 file for your watch from step 3.
 
 Don't rename the file.
