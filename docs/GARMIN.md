@@ -86,6 +86,12 @@ tools/run-simulator.sh &                                  # wait for its window
 
 The launcher-icon "will be scaled" warning is expected: one SVG serves every icon size.
 
+**Tester builds:** `tools/build-all.sh` builds every product in `manifest.xml` as
+`bin/fitpub-<device>_<version>.prg`, the version from `source/Version.mc` with dots turned into
+underscores (`fitpub-fenix7x_4_0_0.prg`). The watch shows the same version as the last row of its
+home menu. Bump `Version.NAME` together with the phone's `versionName`. The step-by-step guide for
+testers is [GARMIN-TESTERS.md](GARMIN-TESTERS.md).
+
 **Side-load to a real watch:** build for that device id, connect the watch over USB and copy the
 `.prg` to `GARMIN/APPS/`. Side-loaded apps get no Garmin Connect app settings, and whether the
 phone link (Mobile SDK) works with them is an open 10b question.
@@ -144,7 +150,7 @@ press never ends a workout) → **Save** stores it, queues the summary and sends
 
 What a tester needs, and what each step proves:
 
-1. **Watch:** `fitpub-<device>.prg` built for their exact model (`manifest.xml` products, add the
+1. **Watch:** `fitpub-<device>_<version>.prg` built for their exact model (`manifest.xml` products, add the
    model if missing), copied to `GARMIN/APPS/`, plus the empty log file above.
 2. **Phone:** Garmin Connect paired with the watch, and an FP Client **built from this branch**
    (WIRELESS, i.e. without `-PgarminTethered`) and signed with the same key as the build already
@@ -335,6 +341,7 @@ the display classes and grows with the testers' watches:
 | `fenix7x` | 280 px round MIP (added 2026-10-19 for a tester's fēnix 7X Solar) |
 | `vivoactive5`, `vivoactive6` | 390 px round AMOLED |
 | `epix2`, `epix2pro47mm` | 416 px round AMOLED (`epix2` added 2026-10-19 for a tester's epix Gen 2) |
+| `fr965` | 454 px round AMOLED (added 2026-10-20 for a tester's Forerunner 965) |
 | `fenix847mm` | 454 px round AMOLED (largest) |
 
 Other Forerunners, Venu, Instinct (monochrome) and Edge are not targeted yet — add their profiles in

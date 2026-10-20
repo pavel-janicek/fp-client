@@ -5,9 +5,10 @@ import Toybox.Time;
 import Toybox.WatchUi;
 
 //! Start screen: the activity types, then a sync row that shows whether workouts still wait for
-//! the phone and resends them when selected (like "Sync now" in the Wear OS app).
+//! the phone and resends them when selected (like "Sync now" in the Wear OS app), and last the
+//! version, so a tester can check which build is on the watch.
 class HomeMenu extends WatchUi.Menu2 {
-    private static const SYNC_ID = :sync;
+    static const SYNC_ID = :sync;
 
     function initialize() {
         Menu2.initialize({ :title => WatchUi.loadResource(Rez.Strings.AppName) as String });
@@ -15,6 +16,7 @@ class HomeMenu extends WatchUi.Menu2 {
             addItem(new WatchUi.MenuItem(Activities.LABELS[i], null, i, null));
         }
         addItem(new WatchUi.MenuItem(WatchUi.loadResource(Rez.Strings.SyncNow) as String, syncStatus(), SYNC_ID, null));
+        addItem(new WatchUi.MenuItem(WatchUi.loadResource(Rez.Strings.Version) as String, Version.NAME, :version, null));
     }
 
     function onShow() as Void {
@@ -70,7 +72,7 @@ class HomeMenuDelegate extends WatchUi.Menu2InputDelegate {
             System.println("FP: open " + Activities.KEYS[id]);
             var controller = new WorkoutController(id);
             WatchUi.pushView(new WorkoutView(controller), new WorkoutDelegate(controller), WatchUi.SLIDE_UP);
-        } else {
+        } else if (id == HomeMenu.SYNC_ID) {
             PhoneLink.sendPending(null);
         }
     }

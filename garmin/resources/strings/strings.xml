@@ -4,6 +4,7 @@
     <string id="StatusAllSent">All sent to phone</string>
     <string id="StatusPendingNever">Waiting: $1$ · phone never replied</string>
     <string id="StatusPendingSeen">Waiting: $1$ · phone seen $2$ ago</string>
+    <string id="Version">Version</string>
     <string id="Paused">PAUSED</string>
     <string id="Resume">Resume</string>
     <string id="Save">Save</string>
