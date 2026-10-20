@@ -1,0 +1,3 @@
+4.0.0 (release 4.0.0):
+- Garmin watches (experimental): with the FP Wear app on a Garmin watch and Garmin Connect on this phone, workouts recorded on the watch are shared to FitPub automatically. FP Wear is in testing and not yet in the Connect IQ Store.
+- FP Client is now licensed under the Apache License 2.0.

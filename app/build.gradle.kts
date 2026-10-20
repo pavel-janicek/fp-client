@@ -12,8 +12,8 @@ android {
         applicationId = "com.fpclient.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 61
-        versionName = "3.3.2"
+        versionCode = 63
+        versionName = "4.0.0"
         // Garmin link over adb to the Connect IQ simulator instead of Garmin Connect; debug only.
         buildConfigField("boolean", "GARMIN_TETHERED", "false")
     }
