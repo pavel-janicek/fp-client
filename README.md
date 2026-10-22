@@ -26,6 +26,34 @@ later in **Settings → Account → Instance**), sign in, and:
 
 Built with Kotlin and Jetpack Compose (Material 3 for phone, Wear Compose for watch).
 
+## Privacy settings
+
+Everything is in **Settings → Privacy** on the phone.
+
+- **Default visibility.** Sets who sees a new activity:
+
+  | Choice | Who sees the activity |
+  |---|---|
+  | **Only me** (default) | Only you. Nothing is shared. |
+  | **Followers** | Your followers. |
+  | **This instance** | People on your FitPub instance. |
+  | **Public** | Everyone. The activity is also shared with other fediverse servers. |
+
+  The setting applies to:
+  - workouts recorded on the phone,
+  - uploaded files,
+  - manually entered activities,
+  - workouts from a Garmin watch, through FP Wear or Garmin Connect.
+
+  The recording summary and the upload form start with this choice, and you can still pick
+  another visibility there. You can change any activity's visibility later in FitPub.
+- **Privacy zones.** These hide the start and end of your activities near places you choose,
+  such as your home.
+
+> **Wear OS watch:** workouts recorded on the Wear OS watch do not follow the default
+> visibility yet. They are uploaded as **Public**, and the watch has no setting for it. You can
+> change each one in FitPub after it arrives.
+
 ## Wear OS App (FitPub Wear)
 
 FP Client includes a standalone Wear OS companion module (`:wear`) that allows athletes to leave their phone at home while recording activities:
