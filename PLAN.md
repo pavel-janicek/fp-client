@@ -305,8 +305,13 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
 **Blockers to resolve before any code:**
 1. **Where it runs.** The Connect API is server to server (OAuth consumer secret, Garmin pushes to
    a webhook). The secret cannot live in the APK and the phone cannot receive webhooks, so this
-   belongs on the FitPub server or in a small separate relay. Either one conflicts with the
-   standing rule "no change to the FitPub server API", so this is a decision for the maintainer.
+   belongs on the FitPub server or in a small separate relay.
+   **Decided 2026-10-22 (maintainer): a separate relay**, working name `connect.paveljanicek.cz`,
+   in the maintainer's `dockerized-server` project next to `fitpub-push-relay` (Plan 8g), which
+   is the model: Go standard library only, payloads never logged, a `PRIVACY.md`, TLS through
+   Nginx Proxy Manager. This keeps the FitPub server unchanged, provided the relay hands
+   activities to FitPub as an ordinary upload with the user's own token. How the relay gets and
+   stores that token is still open.
 2. **Terms vs. federation.** A comment by the article's author says Garmin's terms forbid
    passing API content to other entities without written permission. FitPub federates
    activities over ActivityPub to other servers. Read the developer agreement and, if unclear,
