@@ -350,8 +350,10 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
   uses it instead of the hard-coded `ActivityVisibilities.PUBLIC`. Federation is then purely
   the user's choice. *Decided in implementation (maintainer, 2026-10-22):* it is a general
   setting, not a Garmin one: **Settings → Privacy → Default visibility**, default **Only me**,
-  for every new activity (phone recordings, file uploads, manual entries, Wear OS workouts
-  without a choice on the watch, FP Wear and Garmin Connect imports).
+  for every new activity (phone recordings, file uploads, manual entries, FP Wear and Garmin
+  Connect imports). **Open gap:** Wear OS workouts stay Public. The watch has no visibility
+  setting and sends a fixed `"PUBLIC"` (`WatchWorkoutSyncStore.DEFAULT_VISIBILITY`), also when
+  it uploads directly. A fix needs the phone to pass the default to the watch.
 - **Consent when linking.** Before the OAuth Custom Tab opens, the user confirms a sentence
   along the lines of "I understand that activities imported from Garmin and shared from FitPub
   will carry Garmin attribution by default." Linking stays blocked until they confirm. The
