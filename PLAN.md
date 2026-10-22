@@ -317,14 +317,41 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
    activities over ActivityPub to other servers. Read the developer agreement and, if unclear,
    ask Garmin in writing before building anything.
 
+**Design decisions 2026-10-22 (maintainer):**
+- **Linking.** OAuth with Garmin, started from FP Client: a Custom Tab opens the relay's
+  `/garmin/start`, Garmin redirects back to the relay's `/garmin/callback`, and the relay swaps
+  the code using its client secret and sends the user back to the app via a deep link. The
+  Garmin password never reaches the relay or the app. *To verify:* the docs are believed to
+  say OAuth 2.0 with PKCE.
+- **Token model B: the relay is a mailbox and the phone uploads.** The relay holds only the
+  Garmin tokens (and has to handle Garmin's deregistration webhook). It fetches the FIT on
+  Garmin's notification and queues it for the user's FP Client. The phone collects it and
+  uploads it with its own JWT through the existing Garmin inbox and `GarminUploadWorker` path
+  (calories, retries, the start-time duplicate check from `09e109a`). FitPub credentials never
+  leave the phone, and the relay knows nothing about FitPub instances. This mirrors
+  `fitpub-push-relay`: ntfy can wake the phone instantly, and the queued FIT should be
+  encrypted to a phone public key (as in Plan 8h) so only ciphertext rests on disk.
+  Rejected: the relay holding the FitPub JWT (a full-power credential on a third-party server;
+  the fixed-lifetime JWT would silently expire), and an upload-only FitPub token (it needs a
+  server change).
+- **Retention:** 30 days for an uncollected FIT, as for push mailboxes.
+- **Audience:** first the maintainer and the FP Wear testers, later anyone with a Garmin who
+  uploads to FitPub through FP Client (from a handful to a few dozen users). That needs the
+  **Startup** tier, because Personal covers one person. The 1,000-user cap is far off.
+- **Double sources** (FP Wear and the Connect API on the same workout) are unlikely. The
+  start-time duplicate check covers them, so no extra rule is needed.
+- **Long term, the relay replaces the Connect IQ app.** FP Wear (Iteration 10) is the
+  stop-gap until the relay works. Weigh this before investing in the Connect IQ Store
+  submission and further FP Wear features (10e).
+
 **Next steps, in order:**
 1. *Now:* nothing. The FP Wear tester round continues unchanged.
 2. *Soon (a few minutes):* register for the **Personal** tier with the maintainer's own account.
    Pull a few activities and compare the API FIT with the Garmin Connect export (missing
-   fields) and with what makni.cz makes of it.
-3. Settle blockers 1 and 2 above.
-4. Only then apply for **Startup**. 1,000 users is far above the current audience, so the
-   2027-04-01 Enterprise billing should not apply.
+   fields) and with what makni.cz makes of it. Confirm the OAuth flavour and the
+   notification model (ping and pull, or push).
+3. Settle blocker 2 above (terms vs. federation).
+4. Apply for **Startup** before the testers are linked.
 
 ### Iteration 1 — Make it compile ✅
 > "FitPub Android does not compile — `./gradlew assembleDebug` reports 28 Kotlin
