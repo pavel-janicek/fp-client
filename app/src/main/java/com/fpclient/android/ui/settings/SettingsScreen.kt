@@ -97,14 +97,22 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onOpenEmailChange: () -> Unit,
     onOpenWearWorkoutInbox: () -> Unit = {},
-    scrollToPush: Boolean = false,
+    initialSection: String? = null,
 ) {
-    // The Activity tab's mailbox-disabled banner deep-links here with scrollToPush: open the
-    // Notifications page directly, and let Back from it leave Settings, back to the banner.
+    // Deep links open a page directly: "push" (the Activity tab's mailbox-disabled banner) opens
+    // Notifications, and Back from it leaves Settings, back to the banner; "watches" (the return
+    // from Garmin's sign-in) opens Watches, and Back from it shows the Settings overview.
+    val fromBanner = initialSection == "push"
     var section by rememberSaveable {
-        mutableStateOf(if (scrollToPush) SettingsSection.NOTIFICATIONS else null)
+        mutableStateOf(
+            when (initialSection) {
+                "push" -> SettingsSection.NOTIFICATIONS
+                "watches" -> SettingsSection.WATCHES
+                else -> null
+            },
+        )
     }
-    val closeSection = { if (scrollToPush) onBack() else section = null }
+    val closeSection = { if (fromBanner && section == SettingsSection.NOTIFICATIONS) onBack() else section = null }
     BackHandler(enabled = section != null) { closeSection() }
 
     Scaffold(
@@ -388,8 +396,19 @@ private fun WatchesSection(
     val garminPending by container.garminInboxStore.pendingCount.collectAsState()
     val context = LocalContext.current
     val garminConnect = remember { GarminLink.isAvailable(context) }
-    if (garminActive || garminPending > 0 || (garminTesting && garminConnect)) {
+    val fpWearCard = garminActive || garminPending > 0 || (garminTesting && garminConnect)
+    if (fpWearCard) {
         GarminWatchCard(container.garminInboxStore, dormant = !garminActive && garminPending == 0)
+    }
+    // Garmin Connect import (PLAN "Garmin Connect API"): for testers until the relay has
+    // Garmin's Startup tier; a phone that already has a relay mailbox keeps the card.
+    val connectMailbox by container.garminConnectStore.mailbox.collectAsState()
+    val connectCard = garminTesting || connectMailbox != null
+    if (connectCard) {
+        GarminConnectCard(container)
+    }
+    if (fpWearCard || connectCard) {
+        GarminVisibilityCard(container.garminConnectStore)
     }
     HandshakeDiagnosticsCard(container, appViewModel)
 }

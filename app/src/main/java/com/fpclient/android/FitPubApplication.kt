@@ -2,6 +2,7 @@ package com.fpclient.android
 
 import android.app.Application
 import android.content.Context
+import com.fpclient.android.garmin.GarminConnectWorker
 import com.fpclient.android.garmin.GarminLink
 import com.fpclient.android.garmin.GarminPullWorker
 import com.fpclient.android.garmin.GarminUploadWorker
@@ -56,6 +57,8 @@ class FitPubApplication : Application() {
         GarminLink.start(this)
         GarminPullWorker.schedule(this)
         GarminUploadWorker.schedulePeriodic(this)
+        // Garmin Connect relay imports: periodic only while this phone has a relay mailbox.
+        GarminConnectWorker.schedulePeriodic(this)
 
         // Configure osmdroid tile cache in app storage.
         @Suppress("DEPRECATION")

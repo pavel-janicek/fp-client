@@ -66,6 +66,22 @@
             </intent-filter>
         </service>
 
+        <!-- Garmin Connect relay (PLAN "Garmin Connect API"): the relay's page returns here after
+             Garmin's sign-in. A separate, UI-less activity so CLEAR_TOP can close the Custom Tab. -->
+        <activity
+            android:name=".garmin.GarminConnectReturnActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fpclient" android:host="garmin-connect" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -66,6 +66,9 @@ object Routes {
     /** Settings opened so the Push / mailbox-push section is scrolled into view. */
     fun settingsScrollPush() = "settings?scroll=push"
 
+    /** Settings opened on the Watches page (after Garmin's sign-in). */
+    fun settingsWatches() = "settings?scroll=watches"
+
     /** Plain Settings (no scroll request), matching the optional-arg route pattern. */
     fun settings() = "settings"
 

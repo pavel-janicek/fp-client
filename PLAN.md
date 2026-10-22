@@ -281,7 +281,7 @@ Prompts, in dependency order. Steps 1-2 are **server-side**
 > new Play Services dependency is exactly the kind of change that can break the F-Droid
 > buildserver."
 
-### Garmin Connect API (cloud import of native Garmin activities) — ⬜ research, not scheduled
+### Garmin Connect API (cloud import of native Garmin activities) — 🟡 relay and app built, testing on the maintainer's account
 
 **Why it matters.** Garmin reopened the Connect Developer Program on 2026-10-21 (DC Rainmaker,
 <https://www.dcrainmaker.com/2026/10/garmin-connect-api-revamps-connect-developer.html>). Through
@@ -360,14 +360,31 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
   <https://developer.garmin.com/brand-guidelines/overview/>. Check them before implementing.
   Keep the existing title and description logic, and append rather than overwrite.
 
+**Status 2026-10-22:**
+- The app is registered with Garmin. The relay (`fitpub-garmin-relay` in `dockerized-server`)
+  is live at `connect.paveljanicek.cz` and verified against Garmin: OAuth 2.0 PKCE linking,
+  push notifications, the encrypted mailbox and the deregistration and permission notifications.
+  A file uploaded to Garmin Connect arrived byte-identical after decryption.
+- Activities created or uploaded on the Garmin Connect website (`manual`) are skipped by
+  decision. Only watch recordings are imported.
+- FP Client side (step 4) is built:
+  - a **Garmin Connect™** card in Settings → Watches, shown to testers (seven taps on the
+    version in About) or once a phone has a relay mailbox; it has the attribution
+    acknowledgement and the relay's privacy link, then a Custom Tab to Garmin's sign-in,
+    returning through `fpclient://garmin-connect`;
+  - **Visibility of Garmin imports** (Only me / Followers / Public, default Only me), used by
+    Garmin Connect imports and FP Wear uploads;
+  - `GarminConnectWorker` every 15 minutes and on demand: decrypts the relay's files with the
+    existing `WebPushCrypto`, skips activities already on FitPub (start-time check), uploads
+    with the description "Garmin [device model]" (the attribution Garmin's API brand
+    guidelines ask for next to the title), maps the sport, then deletes the file on the relay.
+
 **Next steps, in order:**
-1. *Now:* nothing. The FP Wear tester round continues unchanged.
-2. *Soon (a few minutes):* register for the **Personal** tier with the maintainer's own account.
-   Pull a few activities and compare the API FIT with the Garmin Connect export (missing
-   fields) and with what makni.cz makes of it. Confirm the OAuth flavour and the
-   notification model (ping and pull, or push).
-3. Settle blocker 2 above (terms vs. federation).
-4. Apply for **Startup** before the testers are linked.
+1. Link the maintainer's account from the app and import a real watch activity (needs a
+   Garmin watch; a file uploaded on the website is skipped as `manual`).
+2. Settle blocker 2 above (terms vs. federation) in writing with Garmin.
+3. Update the relay's `PRIVACY.md` (attribution, no AI use) and the app's privacy policy.
+4. Apply for **Startup** before the testers are linked, then open the card to them.
 
 ### Iteration 1 — Make it compile ✅
 > "FitPub Android does not compile — `./gradlew assembleDebug` reports 28 Kotlin

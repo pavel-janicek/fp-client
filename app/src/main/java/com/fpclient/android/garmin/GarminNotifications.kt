@@ -23,14 +23,18 @@ internal object GarminNotifications {
     /** Replaces the "received" notification once the workout is on FitPub. */
     fun postUploaded(context: Context, entry: GarminInboxEntry) = post(context, "Garmin workout shared to FitPub", entry)
 
-    private fun post(context: Context, title: String, entry: GarminInboxEntry) {
+    /** A Garmin Connect import is on FitPub (PLAN "Garmin Connect API", step 4). */
+    fun postImported(context: Context, text: String) = post(context, "Garmin activity imported to FitPub", text)
+
+    private fun post(context: Context, title: String, entry: GarminInboxEntry) = post(context, title, summaryText(entry))
+
+    private fun post(context: Context, title: String, text: String) {
         if (!PushNotifications.canPost(context)) return
         context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Garmin watch", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Workouts received from the FP Wear app on a Garmin watch"
+                description = "Workouts from a Garmin watch: FP Wear and Garmin Connect imports"
             },
         )
-        val text = summaryText(entry)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)

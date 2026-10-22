@@ -1,6 +1,7 @@
 package com.fpclient.android
 
 import android.content.Intent
+import android.widget.Toast
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -44,6 +45,8 @@ import com.fpclient.android.ui.navigation.SharedUriArg
 import com.fpclient.android.ui.theme.FPClientTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.fpclient.android.garmin.GarminConnectReturnActivity
+import com.fpclient.android.garmin.GarminConnectWorker
 
 class MainActivity : ComponentActivity() {
 
@@ -71,6 +74,7 @@ class MainActivity : ComponentActivity() {
         // stack a duplicate detail screen (same reasoning as the shared-file guard above).
         requestedPath.value =
             if (savedInstanceState == null) intent.getStringExtra(PushNotifications.EXTRA_OPEN_PATH) else null
+        if (savedInstanceState == null) handleGarminConnectReturn(intent)
         // Workouts whose share attempt failed (or that were recorded without a reachable
         // server, Iteration 8d) are retried silently on the next launch, once per process
         // and only for a signed-in session — the Record screen keeps the queue visible and
@@ -125,6 +129,26 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         requestedTab.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_TAB)
         requestedPath.value = intent.getStringExtra(PushNotifications.EXTRA_OPEN_PATH)
+        handleGarminConnectReturn(intent)
+    }
+
+    /**
+     * Back from Garmin's sign-in ([GarminConnectReturnActivity]): say how it went, refresh the
+     * link status, start the imports, and show Settings → Watches where the card lives.
+     */
+    private fun handleGarminConnectReturn(intent: Intent?) {
+        val result = intent?.getStringExtra(GarminConnectReturnActivity.EXTRA_RESULT) ?: return
+        intent.removeExtra(GarminConnectReturnActivity.EXTRA_RESULT)
+        Toast.makeText(this, GarminConnectReturnActivity.message(result), Toast.LENGTH_LONG).show()
+        requestedPath.value = GARMIN_SETTINGS_PATH
+        val container = FitPubApplication.container(this)
+        lifecycleScope.launch {
+            container.garminConnectSync.refreshStatus()
+            if (result == GarminConnectReturnActivity.RESULT_LINKED) {
+                GarminConnectWorker.schedulePeriodic(this@MainActivity)
+                GarminConnectWorker.enqueue(this@MainActivity)
+            }
+        }
     }
 
     /** File shared into the app (share sheet: ACTION_SEND + EXTRA_STREAM) or opened via
@@ -138,6 +162,9 @@ class MainActivity : ComponentActivity() {
 
 /** Matches the server-relative activity paths mailbox push payloads carry (`/activities/<id>`). */
 private val PUSH_ACTIVITY_PATH = Regex("^/activities/([^/?#]+)")
+
+/** In-app path (not a server path) that opens Settings → Watches, e.g. after Garmin's sign-in. */
+private const val GARMIN_SETTINGS_PATH = "fpclient:settings/watches"
 
 @Composable
 private fun ServerSetupRoute(
@@ -308,7 +335,12 @@ private fun FitPubNavGraph(
     LaunchedEffect(requestedPath) {
         val path = requestedPath ?: return@LaunchedEffect
         val activityId = PUSH_ACTIVITY_PATH.matchEntire(path)?.groupValues?.get(1)
-        if (!activityId.isNullOrBlank()) {
+        if (path == GARMIN_SETTINGS_PATH) {
+            // Replaces the Settings screen the user started linking from, if it is still open.
+            navController.navigate(Routes.settingsWatches()) {
+                popUpTo(Routes.SETTINGS) { inclusive = true }
+            }
+        } else if (!activityId.isNullOrBlank()) {
             navController.navigate(Routes.activityDetail(activityId))
         }
         onRequestedPathHandled()
@@ -446,8 +478,9 @@ private fun FitPubNavGraph(
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
                 onOpenEmailChange = { navController.navigate(Routes.EMAIL_CHANGE) },
                 onOpenWearWorkoutInbox = { navController.navigate(Routes.WEAR_WORKOUT_INBOX) },
-                // Deep-linked from the Activity tab's mailbox-disabled banner: scroll to Push.
-                scrollToPush = it.arguments?.getString("scroll") == "push",
+                // Deep links: the Activity tab's mailbox-disabled banner opens Notifications
+                // (scroll=push), the return from Garmin's sign-in opens Watches (scroll=watches).
+                initialSection = it.arguments?.getString("scroll"),
             )
         }
         composable(Routes.WEAR_WORKOUT_INBOX) {
