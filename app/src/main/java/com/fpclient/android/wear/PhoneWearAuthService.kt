@@ -63,6 +63,8 @@ class PhoneWearAuthService : WearableListenerService() {
             // The watch asks for auth every time its app opens, so answering with the body
             // profile here is what keeps its copy (used for direct-upload calories) current.
             WearBodyProfileSync.sendTo(this@PhoneWearAuthService, nodeId, app.container.bodyProfileStore.current())
+            // Same for the default visibility the watch stamps on its workouts.
+            WearUploadDefaultsSync.sendTo(this@PhoneWearAuthService, nodeId, app.container.defaultVisibilityStore.visibility.value)
         }
     }
 

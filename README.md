@@ -43,6 +43,7 @@ Everything is in **Settings → Privacy** on the phone.
   - workouts recorded on the phone,
   - uploaded files,
   - manually entered activities,
+  - workouts recorded on the Wear OS watch,
   - workouts from a Garmin watch, through FP Wear or Garmin Connect.
 
   The recording summary and the upload form start with this choice, and you can still pick
@@ -50,9 +51,10 @@ Everything is in **Settings → Privacy** on the phone.
 - **Privacy zones.** These hide the start and end of your activities near places you choose,
   such as your home.
 
-> **Wear OS watch:** workouts recorded on the Wear OS watch do not follow the default
-> visibility yet. They are uploaded as **Public**, and the watch has no setting for it. You can
-> change each one in FitPub after it arrives.
+> **Wear OS watch:** the watch has no visibility setting of its own. The phone sends it the
+> default visibility when the watch app opens and whenever you change the setting, and the
+> watch uses it for every workout it records. A watch that has not heard from the phone yet
+> uses **Only me**. Workouts recorded with a watch app older than this version stay **Public**.
 
 ## Wear OS App (FitPub Wear)
 

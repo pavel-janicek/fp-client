@@ -23,6 +23,7 @@ import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.wear.WearWorkoutInboxStore
 import com.fpclient.android.data.session.SessionStore
 import com.fpclient.android.data.settings.DefaultVisibilityStore
+import com.fpclient.android.wear.WearUploadDefaultsSync
 import com.fpclient.android.garmin.GarminConnectClient
 import com.fpclient.android.garmin.GarminConnectStore
 import com.fpclient.android.garmin.GarminConnectSync
@@ -126,7 +127,9 @@ class AppContainer(context: Context) {
     val garminInboxStore: GarminInboxStore by lazy { GarminInboxStore(context) }
 
     /** The visibility new activities start with, from every source (Settings → Privacy). */
-    val defaultVisibilityStore: DefaultVisibilityStore by lazy { DefaultVisibilityStore(context) }
+    val defaultVisibilityStore: DefaultVisibilityStore by lazy {
+        DefaultVisibilityStore(context) { WearUploadDefaultsSync.push(context, it) }
+    }
 
     /** This phone's mailbox on the Garmin Connect relay. */
     val garminConnectStore: GarminConnectStore by lazy { GarminConnectStore(context) }

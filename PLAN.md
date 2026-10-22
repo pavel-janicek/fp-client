@@ -351,9 +351,12 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
   the user's choice. *Decided in implementation (maintainer, 2026-10-22):* it is a general
   setting, not a Garmin one: **Settings → Privacy → Default visibility**, default **Only me**,
   for every new activity (phone recordings, file uploads, manual entries, FP Wear and Garmin
-  Connect imports). **Open gap:** Wear OS workouts stay Public. The watch has no visibility
-  setting and sends a fixed `"PUBLIC"` (`WatchWorkoutSyncStore.DEFAULT_VISIBILITY`), also when
-  it uploads directly. A fix needs the phone to pass the default to the watch.
+  Connect imports) and Wear OS workouts. The watch has no visibility setting: the phone
+  mirrors the default to it (`WearUploadDefaultsSync`, message `/fitpub/upload-defaults`, sent
+  on change, on app start and in reply to every watch auth request, like the body profile).
+  The watch stamps it on each recorded workout (`UploadDefaultsSync`), for its direct upload
+  and for the relay. Until the phone has sent a value the watch uses `PRIVATE`. Before this
+  change the watch sent a fixed `"PUBLIC"`.
 - **Consent when linking.** Before the OAuth Custom Tab opens, the user confirms a sentence
   along the lines of "I understand that activities imported from Garmin and shared from FitPub
   will carry Garmin attribution by default." Linking stays blocked until they confirm. The

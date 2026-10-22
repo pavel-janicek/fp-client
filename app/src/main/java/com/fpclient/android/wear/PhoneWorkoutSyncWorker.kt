@@ -95,8 +95,8 @@ class PhoneWorkoutSyncWorker(
                 file = uploadFile,
                 title = entry.title,
                 description = entry.description,
-                // What the watch sent. The watch has no visibility setting: it sends a fixed
-                // "PUBLIC" (WatchWorkoutSyncStore.DEFAULT_VISIBILITY); blank falls back to Settings.
+                // What the watch stamped: the phone's default it mirrors (WearUploadDefaultsSync).
+                // Blank falls back to the default here.
                 visibility = entry.visibility.ifBlank { container.defaultVisibilityStore.visibility.value },
             )) {
                 is ApiResult.Success -> {

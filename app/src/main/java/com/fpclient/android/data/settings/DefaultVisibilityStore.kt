@@ -9,14 +9,18 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The visibility every new activity starts with (Settings → Privacy): phone recordings, file
- * uploads, manual entries, FP Wear and Garmin Connect imports. Not yet Wear OS workouts: the
- * watch sends a fixed "PUBLIC" (see README, "Privacy settings"). "Only me" by default, so
+ * uploads, manual entries, Wear OS workouts (the watch gets a copy through [onChange] and the
+ * auth handshake), FP Wear and Garmin Connect imports. "Only me" by default, so
  * nothing is shared or federated until the user decides so. Forms still let the user pick
  * another visibility per activity.
  */
-class DefaultVisibilityStore internal constructor(private val prefs: SharedPreferences) {
+class DefaultVisibilityStore internal constructor(
+    private val prefs: SharedPreferences,
+    private val onChange: (String) -> Unit = {},
+) {
 
-    constructor(context: Context) : this(context.getSharedPreferences("fitpub_upload_defaults", Context.MODE_PRIVATE))
+    constructor(context: Context, onChange: (String) -> Unit) :
+        this(context.getSharedPreferences("fitpub_upload_defaults", Context.MODE_PRIVATE), onChange)
 
     private val mutableVisibility = MutableStateFlow(
         prefs.getString(KEY, null)?.takeIf { it in ActivityVisibilities.ALL } ?: DEFAULT,
@@ -27,6 +31,7 @@ class DefaultVisibilityStore internal constructor(private val prefs: SharedPrefe
         if (visibility !in ActivityVisibilities.ALL) return
         prefs.edit().putString(KEY, visibility).apply()
         mutableVisibility.value = visibility
+        onChange(visibility)
     }
 
     companion object {

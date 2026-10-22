@@ -39,6 +39,16 @@ class WatchWearAuthService : WearableListenerService() {
             }
             return
         }
+        if (path == com.fpclient.android.wear.recording.UploadDefaultsProtocol.MESSAGE_PATH) {
+            val visibility = com.fpclient.android.wear.recording.UploadDefaultsProtocol.decode(event.data)
+            if (visibility != null) {
+                serviceScope.launch {
+                    com.fpclient.android.wear.recording.UploadDefaultsSync.apply(this@WatchWearAuthService, visibility)
+                    WearLog.i("WatchWearAuthService", "Applied default visibility: $visibility")
+                }
+            }
+            return
+        }
         if (path != WearAuthProtocol.CREDENTIALS_PATH &&
             path != WearAuthProtocol.SIGNED_OUT_PATH &&
             path != WearAuthProtocol.EXPIRED_PATH

@@ -67,6 +67,10 @@
                 <data android:scheme="wear" android:host="*" android:path="/fitpub/body-profile" />
             </intent-filter>
             <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:path="/fitpub/upload-defaults" />
+            </intent-filter>
+            <intent-filter>
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpub/workout/" />
             </intent-filter>

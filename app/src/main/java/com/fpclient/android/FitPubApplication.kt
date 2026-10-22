@@ -12,6 +12,7 @@ import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.wear.PhoneWearAuthRelay
 import com.fpclient.android.wear.WearBodyProfileSync
+import com.fpclient.android.wear.WearUploadDefaultsSync
 import com.fpclient.android.wear.PhoneWorkoutSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,9 @@ class FitPubApplication : Application() {
         // Catch a reachable watch up with the calorie body profile (it may have been reinstalled
         // or paired since the last save). Off the main thread: the store opens encrypted prefs.
         applicationScope.launch { WearBodyProfileSync.broadcast(this@FitPubApplication, container.bodyProfileStore.current()) }
+        applicationScope.launch {
+            WearUploadDefaultsSync.broadcast(this@FitPubApplication, container.defaultVisibilityStore.visibility.value)
+        }
 
         // Background notification delivery (Iteration 8f): create the channel up front so the
         // OS-level toggle for it is visible in system settings even before the first poll, and
