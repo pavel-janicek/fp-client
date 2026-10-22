@@ -344,6 +344,22 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
   stop-gap until the relay works. Weigh this before investing in the Connect IQ Store
   submission and further FP Wear features (10e).
 
+**Sharing and attribution (maintainer, 2026-10-22):**
+- **Default visibility setting.** Settings get a picker for the default visibility of
+  imported Garmin activities (Public / Followers / Local / Private). `GarminUploadWorker`
+  uses it instead of the hard-coded `ActivityVisibilities.PUBLIC`. Federation is then purely
+  the user's choice. *To decide in implementation:* the default value (Private is the safe
+  choice), and whether the picker also covers the FP Wear inbox (same worker, so probably yes).
+- **Consent when linking.** Before the OAuth Custom Tab opens, the user confirms a sentence
+  along the lines of "I understand that activities imported from Garmin and shared from FitPub
+  will carry Garmin attribution by default." Linking stays blocked until they confirm. The
+  same screen links the relay's privacy policy.
+- **Attribution added automatically.** `GarminUploadWorker` appends an attribution line to
+  the activity description (for example "Recorded on Garmin <device model>", with the model
+  taken from the FIT `device_info` / `file_id` when present). Exact wording and logo use follow
+  <https://developer.garmin.com/brand-guidelines/overview/>. Check them before implementing.
+  Keep the existing title and description logic, and append rather than overwrite.
+
 **Next steps, in order:**
 1. *Now:* nothing. The FP Wear tester round continues unchanged.
 2. *Soon (a few minutes):* register for the **Personal** tier with the maintainer's own account.
