@@ -281,6 +281,46 @@ Prompts, in dependency order. Steps 1-2 are **server-side**
 > new Play Services dependency is exactly the kind of change that can break the F-Droid
 > buildserver."
 
+### Garmin Connect API (cloud import of native Garmin activities) — ⬜ research, not scheduled
+
+**Why it matters.** Garmin reopened the Connect Developer Program on 2026-10-21 (DC Rainmaker,
+<https://www.dcrainmaker.com/2026/10/garmin-connect-api-revamps-connect-developer.html>). Through
+it FitPub could receive the native Garmin activity as a full `.FIT` from any Garmin watch: no FP
+Wear install, and no limit from the watch's app storage (the Forerunner 55 holds only about 1 h
+of FP Wear samples). This replaces the Iteration 10 rejection reasons "legal entities only" and
+"paused for new applicants". The server-to-server objection there still stands.
+
+**What changed (per the article; not yet checked against Garmin's own terms):**
+
+| Tier | Cost | Users | Notes |
+|---|---|---|---|
+| Personal | free | 1 (own data) | keys almost instantly |
+| Startup | free | up to 1,000 | + Courses & Training API (push routes/workouts to Garmin) |
+| Enterprise | $1,000 entry (credited), then a negotiated fee per monthly active user from **2027-04-01** | > 1,000 | + history backfill, Golf API, support |
+
+Personal and Startup both get JSON activity summaries and full `.FIT` files. Garmin reportedly
+strips some fields from API FIT files (VO2Max mentioned in the comments; unconfirmed). Connect IQ
+is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
+
+**Blockers to resolve before any code:**
+1. **Where it runs.** The Connect API is server to server (OAuth consumer secret, Garmin pushes to
+   a webhook). The secret cannot live in the APK and the phone cannot receive webhooks, so this
+   belongs on the FitPub server or in a small separate relay. Either one conflicts with the
+   standing rule "no change to the FitPub server API", so this is a decision for the maintainer.
+2. **Terms vs. federation.** A comment by the article's author says Garmin's terms forbid
+   passing API content to other entities without written permission. FitPub federates
+   activities over ActivityPub to other servers. Read the developer agreement and, if unclear,
+   ask Garmin in writing before building anything.
+
+**Next steps, in order:**
+1. *Now:* nothing. The FP Wear tester round continues unchanged.
+2. *Soon (a few minutes):* register for the **Personal** tier with the maintainer's own account.
+   Pull a few activities and compare the API FIT with the Garmin Connect export (missing
+   fields) and with what makni.cz makes of it.
+3. Settle blockers 1 and 2 above.
+4. Only then apply for **Startup**. 1,000 users is far above the current audience, so the
+   2027-04-01 Enterprise billing should not apply.
+
 ### Iteration 1 — Make it compile ✅
 > "FitPub Android does not compile — `./gradlew assembleDebug` reports 28 Kotlin
 > errors (see PLAN.md table). Fix every error following existing conventions:
@@ -956,7 +996,7 @@ the Garmin side at all.
 
 | Option | Why not |
 |---|---|
-| Garmin Connect Developer Program (Activity / Health API) | Server-to-server push to a backend — FP Client has none and the FitPub server may not change. Approval is for legal entities only (individual applications are rejected), and the program was reported **paused for new applicants** in 2026-09. |
+| Garmin Connect Developer Program (Activity / Health API) | Server-to-server push to a backend — FP Client has none and the FitPub server may not change. Approval is for legal entities only (individual applications are rejected), and the program was reported **paused for new applicants** in 2026-09. *Update 2026-10-22: reopened with free Personal/Startup tiers; see "Garmin Connect API" in the roadmap.* |
 | Read Garmin workouts from Android **Health Connect** | Garmin Connect writes exercise summaries to Health Connect (one-way, since mid-2025) but **no GPS route**, so FitPub would get map-less activities. Heart rate needs `android.permission.health.READ_HEART_RATE` — the permission Google Play review already refused (see 9i). Every `health.READ_*` type is a separate Play Console declaration. |
 | Manual: export the original FIT from Garmin Connect (web) and upload it in FP Client | Works today with full data (route, HR, calories, steps) through the 1.x file upload, but it is manual. Kept as the documented fallback for users; not the 4.0 feature. |
 
