@@ -19,6 +19,32 @@ step you got stuck.
 
 ---
 
+## Tested FP Wear with version 4.0.0? Remove it from your watch
+
+From FP Client **4.1.0**, the FP Wear watch app no longer works. The phone stops receiving its
+workouts, and the Garmin Connect import below replaces it. Please remove FP Wear from your
+watch.
+
+1. **Before you update FP Client to 4.1.0, sync what is still on the watch.** Open FP Wear on the
+   watch once, with the phone nearby and FP Client 4.0.0 signed in. Wait until FP Client no
+   longer shows "Garmin workout(s) on the way to FitPub". Workouts left in FP Wear after the
+   update can't reach FitPub any more. If FP Client has already updated, those workouts are
+   lost, sorry.
+2. Connect the watch to the computer with its USB cable, the same way as when you installed FP
+   Wear:
+   - **Windows:** the watch shows up in File Explorer.
+   - **Mac:** use [OpenMTP](https://openmtp.ganeshrvel.com/).
+3. Open the folder **GARMIN → APPS** and delete the FP Wear file, `fitpub-…prg` (for example
+   `fitpub-fr965_4_0_0.prg`).
+4. If you created a log file for us, also delete it from **GARMIN → APPS → LOGS**
+   (`FITPUB-….TXT`).
+5. Disconnect the watch. **FP Wear** disappears from the app list. If it is still there, restart
+   the watch.
+
+Can't find the file, or FP Wear stays on the watch? Write to the group with your watch model.
+
+---
+
 ## Step 1: Join the tester group
 
 Open **<https://groups.google.com/g/fp-client>** and click **Join group**.
