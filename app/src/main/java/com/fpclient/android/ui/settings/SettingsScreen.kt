@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.fpclient.android.AppContainer
 import com.fpclient.android.BuildConfig
+import com.fpclient.android.data.dto.ActivityVisibilities
 import com.fpclient.android.data.dto.UnitSystems
 import com.fpclient.android.garmin.GarminLink
 import com.fpclient.android.ui.AppViewModel
@@ -151,6 +154,7 @@ fun SettingsScreen(
                     WatchesSection(container, appViewModel, onOpenWearWorkoutInbox)
                 }
                 SettingsSection.PRIVACY -> SectionPage {
+                    DefaultVisibilityCard(container)
                     SettingsCard("Privacy zones", "Hide the start and end of your activities near places you choose.") {
                         OutlinedButton(onClick = onOpenPrivacyZones, modifier = Modifier.fillMaxWidth()) {
                             Text("Manage privacy zones")
@@ -222,7 +226,10 @@ private fun SettingsOverview(
         Icons.Outlined.Watch, "Watches",
         if (waiting > 0) "$waiting workout(s) waiting to sync" else "Wear OS and Garmin workouts",
     ) { onOpen(SettingsSection.WATCHES) }
-    SettingsRow(Icons.Outlined.Lock, "Privacy", "Privacy zones") { onOpen(SettingsSection.PRIVACY) }
+    val defaultVisibility by container.defaultVisibilityStore.visibility.collectAsState()
+    SettingsRow(Icons.Outlined.Lock, "Privacy", "New activities: ${visibilityLabel(defaultVisibility)} · privacy zones") {
+        onOpen(SettingsSection.PRIVACY)
+    }
     if (sessionState.loggedIn) {
         SettingsRow(Icons.Outlined.Inventory2, "Data", "Import, Komoot, export") { onOpen(SettingsSection.DATA) }
     }
@@ -269,6 +276,38 @@ private fun SettingsCard(title: String, description: String? = null, content: @C
                 }
             }
             content()
+        }
+    }
+}
+
+private val VISIBILITY_CHOICES = listOf(
+    ActivityVisibilities.PRIVATE to "Only me",
+    ActivityVisibilities.FOLLOWERS to "Followers",
+    ActivityVisibilities.LOCAL to "This instance",
+    ActivityVisibilities.PUBLIC to "Public",
+)
+
+private fun visibilityLabel(value: String): String =
+    VISIBILITY_CHOICES.firstOrNull { it.first == value }?.second ?: value.lowercase()
+
+/**
+ * The visibility every new activity starts with: phone recordings, uploads, manual entries,
+ * Wear OS and Garmin workouts. Forms still allow another choice per activity.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DefaultVisibilityCard(container: AppContainer) {
+    val store = container.defaultVisibilityStore
+    val visibility by store.visibility.collectAsState()
+    SettingsCard(
+        "Default visibility",
+        "Who sees a new activity, whether it comes from this phone, a file or a watch. " +
+            "\"Public\" also shares it with other fediverse servers. You can change each activity later.",
+    ) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            VISIBILITY_CHOICES.forEach { (value, label) ->
+                FilterChip(selected = visibility == value, onClick = { store.set(value) }, label = { Text(label) })
+            }
         }
     }
 }
@@ -396,19 +435,14 @@ private fun WatchesSection(
     val garminPending by container.garminInboxStore.pendingCount.collectAsState()
     val context = LocalContext.current
     val garminConnect = remember { GarminLink.isAvailable(context) }
-    val fpWearCard = garminActive || garminPending > 0 || (garminTesting && garminConnect)
-    if (fpWearCard) {
+    if (garminActive || garminPending > 0 || (garminTesting && garminConnect)) {
         GarminWatchCard(container.garminInboxStore, dormant = !garminActive && garminPending == 0)
     }
     // Garmin Connect import (PLAN "Garmin Connect API"): for testers until the relay has
     // Garmin's Startup tier; a phone that already has a relay mailbox keeps the card.
     val connectMailbox by container.garminConnectStore.mailbox.collectAsState()
-    val connectCard = garminTesting || connectMailbox != null
-    if (connectCard) {
+    if (garminTesting || connectMailbox != null) {
         GarminConnectCard(container)
-    }
-    if (fpWearCard || connectCard) {
-        GarminVisibilityCard(container.garminConnectStore)
     }
     HandshakeDiagnosticsCard(container, appViewModel)
 }

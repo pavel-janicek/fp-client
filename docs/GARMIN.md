@@ -9,7 +9,8 @@ PLAN.md → Iteration 10; this file covers what is needed to build and run it.
 FIT build and upload) are implemented and tested as far as a simulator and unit tests can go;
 none is **verified on a real watch** — the release gate in PLAN.md → Iteration 10 still applies
 (see "Field test" below). End to end: record on the watch → Save → summary and samples to the
-phone → FIT built on the phone → uploaded to FitPub, public by default like Wear OS workouts.
+phone → FIT built on the phone → uploaded to FitPub with the default visibility from
+Settings → Privacy ("Only me" unless the user changes it).
 
 ## Project map
 
@@ -296,8 +297,8 @@ under one agreement (§ IX.e: "references … to the SDK include the Companion S
 > through the Garmin Connect app, to FP Client on your phone. FP Wear itself has no internet
 > access and sends nothing anywhere else. On the watch, a workout is deleted as soon as the phone
 > confirms it has received it. FP Client then uploads it to the FitPub instance you are signed in
-> to, with the visibility you would get for a Wear OS workout (public by default; change it on
-> FitPub), and then deletes the recorded samples; it keeps only a short summary (activity, time,
+> to, with your default visibility from FP Client's Settings → Privacy ("Only me" unless you
+> change it; you can also change each activity on FitPub), and then deletes the recorded samples; it keeps only a short summary (activity, time,
 > distance, watch name) of recent workouts so that none is uploaded twice. No data goes to the FP
 > Client developers or any other third party. Location is only recorded while you record a workout, after you
 > start it on the watch.

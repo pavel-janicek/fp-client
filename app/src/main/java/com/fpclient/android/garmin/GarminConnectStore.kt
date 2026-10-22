@@ -2,7 +2,6 @@ package com.fpclient.android.garmin
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.fpclient.android.data.dto.ActivityVisibilities
 import com.fpclient.android.util.openEncryptedPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,10 +38,7 @@ data class GarminConnectStatus(
     val lastError: String? = null,
 )
 
-/**
- * Keystore-encrypted, like the push keys ([com.fpclient.android.notifications.PushSubscriptionStore]).
- * It also keeps the visibility for Garmin imports, which the FP Wear uploader reads too.
- */
+/** Keystore-encrypted, like the push keys ([com.fpclient.android.notifications.PushSubscriptionStore]). */
 class GarminConnectStore internal constructor(private val prefs: SharedPreferences) {
 
     constructor(context: Context) : this(openEncryptedPrefs(context, "fitpub_garmin_connect"))
@@ -60,7 +56,6 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
         const val WAITING = "waiting_files"
         const val LAST_SYNC = "last_sync"
         const val LAST_ERROR = "last_error"
-        const val VISIBILITY = "import_visibility"
     }
 
     private val mutableMailbox = MutableStateFlow(readMailbox())
@@ -68,16 +63,6 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
 
     private val mutableStatus = MutableStateFlow(readStatus())
     val status: StateFlow<GarminConnectStatus> = mutableStatus.asStateFlow()
-
-    private val mutableVisibility = MutableStateFlow(
-        prefs.getString(Keys.VISIBILITY, null)?.takeIf { it in ActivityVisibilities.ALL } ?: DEFAULT_VISIBILITY,
-    )
-
-    /**
-     * Visibility of activities imported from Garmin (Garmin Connect and FP Wear). Private by
-     * default: sharing them with followers or the fediverse is the user's choice.
-     */
-    val visibility: StateFlow<String> = mutableVisibility.asStateFlow()
 
     private fun readMailbox(): GarminConnectMailbox? {
         return GarminConnectMailbox(
@@ -111,7 +96,7 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
         mutableMailbox.value = mailbox
     }
 
-    /** Forgets the mailbox, its keys and the cached status (the visibility choice stays). */
+    /** Forgets the mailbox, its keys and the cached status. */
     fun clear() {
         prefs.edit()
             .remove(Keys.RELAY).remove(Keys.ID).remove(Keys.TOKEN)
@@ -136,14 +121,7 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
         mutableStatus.value = next
     }
 
-    fun setVisibility(visibility: String) {
-        if (visibility !in ActivityVisibilities.ALL) return
-        prefs.edit().putString(Keys.VISIBILITY, visibility).apply()
-        mutableVisibility.value = visibility
-    }
-
     companion object {
         const val DEFAULT_RELAY = "https://connect.paveljanicek.cz"
-        val DEFAULT_VISIBILITY = ActivityVisibilities.PRIVATE
     }
 }

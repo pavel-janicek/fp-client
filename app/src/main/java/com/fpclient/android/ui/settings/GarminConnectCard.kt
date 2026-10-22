@@ -14,7 +14,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -36,10 +35,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.fpclient.android.AppContainer
 import com.fpclient.android.R
-import com.fpclient.android.data.dto.ActivityVisibilities
 import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.garmin.GarminConnectStatus
-import com.fpclient.android.garmin.GarminConnectStore
 import com.fpclient.android.garmin.GarminConnectWorker
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -121,7 +118,8 @@ internal fun GarminConnectCard(container: AppContainer) {
             } else {
                 Text(
                     "Activities you record on your Garmin watch reach FitPub automatically, through " +
-                        "FP Client's relay. Your FitPub login never leaves this phone.",
+                        "FP Client's relay, with your default visibility (Settings → Privacy). " +
+                        "Your FitPub login never leaves this phone.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Row(
@@ -210,35 +208,4 @@ private fun summary(hasMailbox: Boolean, status: GarminConnectStatus): String = 
     status.linkLost == "replaced" -> "Your Garmin account was connected on another device."
     status.linkLost == "relink" -> "Garmin ended the connection. Connect again to resume imports."
     else -> "Import activities from any Garmin watch"
-}
-
-/**
- * Who sees activities that come from Garmin, through Garmin Connect or FP Wear. Private by
- * default: federating them is the user's choice.
- */
-@Composable
-internal fun GarminVisibilityCard(store: GarminConnectStore) {
-    val visibility by store.visibility.collectAsState()
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column {
-                Text("Visibility of Garmin imports", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "Who sees activities that arrive from your Garmin watch. You can change each one later.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    ActivityVisibilities.PRIVATE to "Only me",
-                    ActivityVisibilities.FOLLOWERS to "Followers",
-                    ActivityVisibilities.PUBLIC to "Public",
-                ).forEach { (value, label) ->
-                    FilterChip(selected = visibility == value, onClick = { store.setVisibility(value) }, label = { Text(label) })
-                }
-            }
-        }
-    }
 }

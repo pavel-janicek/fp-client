@@ -22,8 +22,8 @@ import java.util.concurrent.TimeUnit
 /**
  * Uploads complete Garmin workouts to FitPub (Iteration 10d): builds the FIT from the samples
  * ([GarminFitWriter]), adds calories when the user opted in (the same [CalorieFitAmender] as Wear
- * OS workouts) and uploads it like a Wear OS workout — with the Garmin import visibility from
- * Settings (private by default), the activity type fixed
+ * OS workouts) and uploads it like a Wear OS workout — with the default visibility from
+ * Settings → Privacy, the activity type fixed
  * up when the server guessed another one, transient failures retried, server rejections parked
  * with their message.
  */
@@ -62,7 +62,7 @@ class GarminUploadWorker(appContext: Context, params: WorkerParameters) : Corout
                 fit
             }
 
-            val visibility = container.garminConnectStore.visibility.value
+            val visibility = container.defaultVisibilityStore.visibility.value
             when (val result = container.activityRepository.uploadFile(
                 file = uploadFile,
                 title = title,

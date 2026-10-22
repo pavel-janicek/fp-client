@@ -348,8 +348,10 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
 - **Default visibility setting.** Settings get a picker for the default visibility of
   imported Garmin activities (Public / Followers / Local / Private). `GarminUploadWorker`
   uses it instead of the hard-coded `ActivityVisibilities.PUBLIC`. Federation is then purely
-  the user's choice. *To decide in implementation:* the default value (Private is the safe
-  choice), and whether the picker also covers the FP Wear inbox (same worker, so probably yes).
+  the user's choice. *Decided in implementation (maintainer, 2026-10-22):* it is a general
+  setting, not a Garmin one: **Settings → Privacy → Default visibility**, default **Only me**,
+  for every new activity (phone recordings, file uploads, manual entries, Wear OS workouts
+  without a choice on the watch, FP Wear and Garmin Connect imports).
 - **Consent when linking.** Before the OAuth Custom Tab opens, the user confirms a sentence
   along the lines of "I understand that activities imported from Garmin and shared from FitPub
   will carry Garmin attribution by default." Linking stays blocked until they confirm. The
@@ -372,8 +374,7 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
     version in About) or once a phone has a relay mailbox; it has the attribution
     acknowledgement and the relay's privacy link, then a Custom Tab to Garmin's sign-in,
     returning through `fpclient://garmin-connect`;
-  - **Visibility of Garmin imports** (Only me / Followers / Public, default Only me), used by
-    Garmin Connect imports and FP Wear uploads;
+  - imports use the general **Default visibility** (Settings → Privacy, default Only me);
   - `GarminConnectWorker` every 15 minutes and on demand: decrypts the relay's files with the
     existing `WebPushCrypto`, skips activities already on FitPub (start-time check), uploads
     with the description "Garmin [device model]" (the attribution Garmin's API brand

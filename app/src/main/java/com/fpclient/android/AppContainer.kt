@@ -22,6 +22,7 @@ import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.wear.WearWorkoutInboxStore
 import com.fpclient.android.data.session.SessionStore
+import com.fpclient.android.data.settings.DefaultVisibilityStore
 import com.fpclient.android.garmin.GarminConnectClient
 import com.fpclient.android.garmin.GarminConnectStore
 import com.fpclient.android.garmin.GarminConnectSync
@@ -124,12 +125,17 @@ class AppContainer(context: Context) {
     /** Workouts received from the Garmin watch app (Iteration 10b; the upload queue from 10d). */
     val garminInboxStore: GarminInboxStore by lazy { GarminInboxStore(context) }
 
-    /** This phone's mailbox on the Garmin Connect relay, and the Garmin import visibility. */
+    /** The visibility new activities start with, from every source (Settings → Privacy). */
+    val defaultVisibilityStore: DefaultVisibilityStore by lazy { DefaultVisibilityStore(context) }
+
+    /** This phone's mailbox on the Garmin Connect relay. */
     val garminConnectStore: GarminConnectStore by lazy { GarminConnectStore(context) }
 
     /** Linking, status and imports through the Garmin Connect relay (PLAN "Garmin Connect API"). */
     val garminConnectSync: GarminConnectSync by lazy {
-        GarminConnectSync(garminConnectStore, GarminConnectClient(), activityRepository, sessionStore, context.cacheDir)
+        GarminConnectSync(
+            garminConnectStore, GarminConnectClient(), activityRepository, sessionStore, defaultVisibilityStore, context.cacheDir,
+        )
     }
 
     /**

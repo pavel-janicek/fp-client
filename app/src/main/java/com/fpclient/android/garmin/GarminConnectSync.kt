@@ -5,6 +5,7 @@ import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.data.network.isPermanentUploadRejection
 import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.session.SessionStore
+import com.fpclient.android.data.settings.DefaultVisibilityStore
 import com.fpclient.android.notifications.WebPushCrypto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,6 +25,7 @@ class GarminConnectSync(
     private val client: GarminConnectClient,
     private val activities: ActivityRepository,
     private val sessionStore: SessionStore,
+    private val defaultVisibility: DefaultVisibilityStore,
     private val cacheDir: File,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -150,7 +152,7 @@ class GarminConnectSync(
             }
             val file = File(cacheDir, "garmin-connect-${meta.summaryId.replace(Regex("[^A-Za-z0-9-]"), "_")}.${extension(meta.fileType)}")
             withContext(Dispatchers.IO) { file.writeBytes(data) }
-            val visibility = store.visibility.value
+            val visibility = defaultVisibility.visibility.value
             val title = meta.activityName?.trim()?.ifBlank { null }
             val result = try {
                 activities.uploadFile(file = file, title = title, description = attribution(meta.deviceName), visibility = visibility)

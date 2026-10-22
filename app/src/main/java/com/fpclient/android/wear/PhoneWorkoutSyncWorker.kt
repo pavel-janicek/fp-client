@@ -95,7 +95,8 @@ class PhoneWorkoutSyncWorker(
                 file = uploadFile,
                 title = entry.title,
                 description = entry.description,
-                visibility = entry.visibility,
+                // The watch's choice; none made on the watch means the default from Settings.
+                visibility = entry.visibility.ifBlank { container.defaultVisibilityStore.visibility.value },
             )) {
                 is ApiResult.Success -> {
                     val activity = result.data
@@ -105,7 +106,7 @@ class PhoneWorkoutSyncWorker(
                             ActivityUpdateRequest(
                                 title = activity.title ?: entry.title,
                                 description = activity.description ?: entry.description,
-                                visibility = activity.visibility ?: entry.visibility.ifBlank { ActivityVisibilities.PRIVATE },
+                                visibility = activity.visibility ?: entry.visibility.ifBlank { container.defaultVisibilityStore.visibility.value },
                                 activityType = entry.activityType,
                             ),
                         )
