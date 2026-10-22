@@ -92,8 +92,6 @@ fun MainScaffold(
     val sessionState by appViewModel.uiState.collectAsState()
     val watchWorkoutPending by container.wearWorkoutInboxStore.pendingCount.collectAsState()
     val latestInboxError by container.wearWorkoutInboxStore.latestError.collectAsState()
-    val garminPending by container.garminInboxStore.pendingCount.collectAsState()
-    val garminError by container.garminInboxStore.latestError.collectAsState()
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -142,24 +140,6 @@ fun MainScaffold(
                         text = buildString {
                             append("$watchWorkoutPending watch workout(s) waiting to sync · tap to manage")
                             latestInboxError?.let { append(" — "); append(it) }
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
-            }
-            // Garmin workouts on their way to FitPub (Iteration 10e); details and "Sync now" live
-            // in Settings → Garmin watch.
-            if (garminPending > 0) {
-                androidx.compose.material3.Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = onOpenSettings,
-                ) {
-                    Text(
-                        text = buildString {
-                            append("$garminPending Garmin workout(s) on the way to FitPub · tap for details")
-                            garminError?.let { append(" — "); append(it) }
                         },
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

@@ -7,37 +7,25 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.fpclient.android.R
 import com.fpclient.android.notifications.PushNotifications
-import java.util.Locale
 
 /**
- * Garmin workout progress: "received" when the summary arrives (the visible proof that delivery
- * works on a real watch), replaced by "shared to FitPub" after the upload. A channel of its own,
- * so it can be muted without muting FitPub activity.
+ * "Garmin activity imported to FitPub" after a Garmin Connect import (PLAN "Garmin Connect API").
+ * A channel of its own, so it can be muted without muting FitPub activity.
  */
 internal object GarminNotifications {
     private const val CHANNEL_ID = "fitpub_garmin"
     private const val NOTIFICATION_ID = 5301
 
-    fun postReceived(context: Context, entry: GarminInboxEntry) = post(context, "Garmin workout received", entry)
-
-    /** Replaces the "received" notification once the workout is on FitPub. */
-    fun postUploaded(context: Context, entry: GarminInboxEntry) = post(context, "Garmin workout shared to FitPub", entry)
-
-    /** A Garmin Connect import is on FitPub (PLAN "Garmin Connect API", step 4). */
-    fun postImported(context: Context, text: String) = post(context, "Garmin activity imported to FitPub", text)
-
-    private fun post(context: Context, title: String, entry: GarminInboxEntry) = post(context, title, summaryText(entry))
-
-    private fun post(context: Context, title: String, text: String) {
+    fun postImported(context: Context, text: String) {
         if (!PushNotifications.canPost(context)) return
         context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Garmin watch", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Workouts from a Garmin watch: FP Wear and Garmin Connect imports"
+            NotificationChannel(CHANNEL_ID, "Garmin", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Activities imported from Garmin Connect"
             },
         )
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
+            .setContentTitle("Garmin activity imported to FitPub")
             .setContentText(text)
             .setAutoCancel(true)
         try {
@@ -45,19 +33,5 @@ internal object GarminNotifications {
         } catch (_: SecurityException) {
             // The permission was revoked between the check above and the notify() call.
         }
-    }
-
-    /** "Run · 5.23 km · 31:20 from fēnix 8" — whatever the watch reported, nothing invented. */
-    internal fun summaryText(entry: GarminInboxEntry): String {
-        val parts = mutableListOf(entry.label.ifBlank { "Workout" })
-        entry.distanceMeters?.takeIf { it > 0 }?.let { parts += String.format(Locale.ROOT, "%.2f km", it / 1000.0) }
-        entry.durationSeconds?.let { seconds ->
-            val h = seconds / 3600
-            val m = seconds % 3600 / 60
-            val s = seconds % 60
-            parts += if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s) else String.format(Locale.ROOT, "%02d:%02d", m, s)
-        }
-        val from = entry.deviceName.takeIf { it.isNotBlank() }?.let { " from $it" }.orEmpty()
-        return parts.joinToString(" · ") + from
     }
 }

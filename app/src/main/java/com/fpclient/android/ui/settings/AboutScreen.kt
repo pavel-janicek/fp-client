@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.fpclient.android.BuildConfig
-import com.fpclient.android.garmin.GarminLink
+import com.fpclient.android.FitPubApplication
 
 /**
  * Static "About" information: app version, contact/community links, bug
@@ -47,8 +47,9 @@ fun AboutScreen(onBack: () -> Unit) {
     val issuesUrl = "https://github.com/pavel-janicek/fp-client/issues"
     val projectUrl = "https://github.com/pavel-janicek/fp-client"
     val context = LocalContext.current
-    val garminTesting by GarminLink.testing.collectAsState()
-    // Seven taps on the version toggle the Garmin tester card (docs/GARMIN-TESTERS.md).
+    val garminStore = FitPubApplication.container(context).garminConnectStore
+    val garminTesting by garminStore.testing.collectAsState()
+    // Seven taps on the version toggle the Garmin Connect tester card (docs/GARMIN-TESTERS.md).
     val versionTaps = remember { mutableIntStateOf(0) }
 
     Scaffold(
@@ -89,10 +90,10 @@ fun AboutScreen(onBack: () -> Unit) {
                                 versionTaps.intValue += 1
                                 if (versionTaps.intValue >= 7) {
                                     versionTaps.intValue = 0
-                                    GarminLink.setTesting(context, !garminTesting)
+                                    garminStore.setTesting(!garminTesting)
                                     Toast.makeText(
                                         context,
-                                        if (garminTesting) "Garmin testing off" else "Garmin testing on — see Settings",
+                                        if (garminTesting) "Garmin testing off" else "Garmin testing on — see Settings → Watches",
                                         Toast.LENGTH_SHORT,
                                     ).show()
                                 }

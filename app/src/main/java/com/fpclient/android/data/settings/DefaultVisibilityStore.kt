@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * The visibility every new activity starts with (Settings → Privacy): phone recordings, file
  * uploads, manual entries, Wear OS workouts (the watch gets a copy through [onChange] and the
- * auth handshake), FP Wear and Garmin Connect imports. "Only me" by default, so
+ * auth handshake) and Garmin Connect imports. "Only me" by default, so
  * nothing is shared or federated until the user decides so. Forms still let the user pick
  * another visibility per activity.
  */

@@ -27,7 +27,6 @@ import com.fpclient.android.wear.WearUploadDefaultsSync
 import com.fpclient.android.garmin.GarminConnectClient
 import com.fpclient.android.garmin.GarminConnectStore
 import com.fpclient.android.garmin.GarminConnectSync
-import com.fpclient.android.garmin.GarminInboxStore
 import com.fpclient.android.wear.PhoneWearAuthRelay
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -122,9 +121,6 @@ class AppContainer(context: Context) {
     }
 
     val wearWorkoutInboxStore: WearWorkoutInboxStore by lazy { WearWorkoutInboxStore(context) }
-
-    /** Workouts received from the Garmin watch app (Iteration 10b; the upload queue from 10d). */
-    val garminInboxStore: GarminInboxStore by lazy { GarminInboxStore(context) }
 
     /** The visibility new activities start with, from every source (Settings → Privacy). */
     val defaultVisibilityStore: DefaultVisibilityStore by lazy {

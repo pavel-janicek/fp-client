@@ -84,9 +84,3 @@
 # Room's paging integration is referenced by WorkManager but unused here.
 -dontwarn androidx.room.paging.**
 
-# Connect IQ Mobile SDK (Garmin watch link, Iteration 10b): Garmin Connect calls in through the
-# SDK's AIDL binder service and the SDK (de)serializes Monkey C values reflectively, so keep it
-# whole rather than chase individual members after a minified release silently drops messages.
--keep class com.garmin.android.connectiq.** { *; }
--keep class com.garmin.android.apps.connectmobile.connectiq.** { *; }
--keep class com.garmin.monkeybrains.serialization.** { *; }

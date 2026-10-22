@@ -14,8 +14,6 @@ android {
         targetSdk = 36
         versionCode = 63
         versionName = "4.0.0"
-        // Garmin link over adb to the Connect IQ simulator instead of Garmin Connect; debug only.
-        buildConfigField("boolean", "GARMIN_TETHERED", "false")
     }
 
     signingConfigs {
@@ -32,14 +30,6 @@ android {
     }
 
     buildTypes {
-        debug {
-            // ./gradlew :app:installDebug -PgarminTethered=true (see docs/GARMIN.md)
-            buildConfigField(
-                "boolean",
-                "GARMIN_TETHERED",
-                (project.findProperty("garminTethered") == "true").toString(),
-            )
-        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -121,10 +111,6 @@ dependencies {
     // Phone↔watch sign-in relay (Iteration 9b).
     implementation("com.google.android.gms:play-services-wearable:19.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
-
-    // Phone↔Garmin watch link (Iteration 10b): Connect IQ Mobile SDK, talks to the watch app
-    // through the Garmin Connect app. `@aar`: the artifact has no dependencies of its own.
-    implementation("com.garmin.connectiq:ciq-companion-app-sdk:2.4.0@aar")
 
     // Images
     implementation("io.coil-kt:coil-compose:2.7.0")

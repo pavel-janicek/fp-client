@@ -1,13 +1,8 @@
 name: Android CI
 
 on:
-  # garmin/ is a Connect IQ project, not part of the Gradle build (see docs/GARMIN.md).
   push:
-    paths-ignore:
-      - 'garmin/**'
   pull_request:
-    paths-ignore:
-      - 'garmin/**'
 
 jobs:
   build-and-test:

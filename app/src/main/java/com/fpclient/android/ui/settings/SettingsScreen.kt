@@ -60,7 +60,6 @@ import com.fpclient.android.AppContainer
 import com.fpclient.android.BuildConfig
 import com.fpclient.android.data.dto.ActivityVisibilities
 import com.fpclient.android.data.dto.UnitSystems
-import com.fpclient.android.garmin.GarminLink
 import com.fpclient.android.ui.AppViewModel
 import com.fpclient.android.wear.PhoneHandshakeDiagnostics
 import com.fpclient.android.wear.PhoneHandshakeDiagnosticsStore
@@ -207,8 +206,8 @@ private fun SettingsOverview(
     val sessionState by appViewModel.uiState.collectAsState()
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val watchPending by container.wearWorkoutInboxStore.pendingCount.collectAsState()
-    val garminPending by container.garminInboxStore.pendingCount.collectAsState()
-    val waiting = watchPending + garminPending
+    val garminWaiting = container.garminConnectStore.status.collectAsState().value.waitingFiles
+    val waiting = watchPending + garminWaiting
     val host = sessionState.serverUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
 
     SettingsRow(
@@ -427,19 +426,9 @@ private fun WatchesSection(
             Text("Manage watch workouts ($watchPendingCount)")
         }
     }
-    // Garmin (Iteration 10e): only where FP Wear was found or a Garmin workout is still in
-    // flight; the dormant card ("Look for FP Wear") only for testers who switched it on in
-    // About, on phones with Garmin Connect — everyone else never hears of it.
-    val garminActive by GarminLink.active.collectAsState()
-    val garminTesting by GarminLink.testing.collectAsState()
-    val garminPending by container.garminInboxStore.pendingCount.collectAsState()
-    val context = LocalContext.current
-    val garminConnect = remember { GarminLink.isAvailable(context) }
-    if (garminActive || garminPending > 0 || (garminTesting && garminConnect)) {
-        GarminWatchCard(container.garminInboxStore, dormant = !garminActive && garminPending == 0)
-    }
     // Garmin Connect import (PLAN "Garmin Connect API"): for testers until the relay has
     // Garmin's Startup tier; a phone that already has a relay mailbox keeps the card.
+    val garminTesting by container.garminConnectStore.testing.collectAsState()
     val connectMailbox by container.garminConnectStore.mailbox.collectAsState()
     if (garminTesting || connectMailbox != null) {
         GarminConnectCard(container)

@@ -44,7 +44,7 @@ Everything is in **Settings → Privacy** on the phone.
   - uploaded files,
   - manually entered activities,
   - workouts recorded on the Wear OS watch,
-  - workouts from a Garmin watch, through FP Wear or Garmin Connect.
+  - activities imported from Garmin Connect.
 
   The recording summary and the upload form start with this choice, and you can still pick
   another visibility there. You can change any activity's visibility later in FitPub.
@@ -131,9 +131,8 @@ by Zwift.
 
 ### F-Droid
 
-FP Client is no longer pursuing F-Droid inclusion: the Wear OS and Garmin watch support depend on
-proprietary libraries (Google Play services, Garmin's Connect IQ companion SDK), which F-Droid's
-main repository does not accept. Use Google Play or the APK from the Releases page.
+FP Client is no longer pursuing F-Droid inclusion: the Wear OS support depends on proprietary
+libraries (Google Play services), which F-Droid's main repository does not accept. Use Google Play or the APK from the Releases page.
 
 ## Contributing
 
@@ -170,8 +169,6 @@ testing on device, and product decisions are done by a human.
 
 ## License
 
-FP Client — the phone app, the Wear OS app and the Garmin watch app — is licensed under the
+FP Client — the phone app and the Wear OS app — is licensed under the
 [Apache License 2.0](LICENSE) since version 4.0. Releases up to 3.x were published under the GNU
-AGPL-3.0, and copies of those releases remain available under that licence. The Garmin watch
-support uses Garmin's proprietary Connect IQ SDK and companion library, which are covered by
-Garmin's own licence agreement, not by this repository's licence.
+AGPL-3.0, and copies of those releases remain available under that licence.

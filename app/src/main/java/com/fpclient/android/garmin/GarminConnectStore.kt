@@ -56,6 +56,7 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
         const val WAITING = "waiting_files"
         const val LAST_SYNC = "last_sync"
         const val LAST_ERROR = "last_error"
+        const val TESTING = "testing"
     }
 
     private val mutableMailbox = MutableStateFlow(readMailbox())
@@ -63,6 +64,19 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
 
     private val mutableStatus = MutableStateFlow(readStatus())
     val status: StateFlow<GarminConnectStatus> = mutableStatus.asStateFlow()
+
+    private val mutableTesting = MutableStateFlow(prefs.getBoolean(Keys.TESTING, false))
+
+    /**
+     * Tester switch (seven taps on the version in About): shows the Garmin Connect card to
+     * testers until the relay has Garmin's Startup tier and the card opens to everyone.
+     */
+    val testing: StateFlow<Boolean> = mutableTesting.asStateFlow()
+
+    fun setTesting(on: Boolean) {
+        prefs.edit().putBoolean(Keys.TESTING, on).apply()
+        mutableTesting.value = on
+    }
 
     private fun readMailbox(): GarminConnectMailbox? {
         return GarminConnectMailbox(
@@ -123,5 +137,18 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
 
     companion object {
         const val DEFAULT_RELAY = "https://connect.paveljanicek.cz"
+
+        /**
+         * Removes what the FP Wear (Connect IQ) link of 4.0 test builds stored: its background
+         * work, preferences and workout inbox. Cheap and idempotent, so it runs on every start.
+         */
+        fun removeFpWearLeftovers(context: Context) {
+            val app = context.applicationContext
+            val work = androidx.work.WorkManager.getInstance(app)
+            listOf("fitpub_garmin_pull", "fitpub_garmin_upload_now", "fitpub_garmin_upload_retry")
+                .forEach { work.cancelUniqueWork(it) }
+            listOf("fitpub_garmin_link", "fitpub_garmin_inbox").forEach { app.deleteSharedPreferences(it) }
+            java.io.File(app.filesDir, "garmin-inbox").deleteRecursively()
+        }
     }
 }

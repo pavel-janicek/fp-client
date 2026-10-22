@@ -18,7 +18,7 @@ import java.io.File
  *
  * The relay is the queue. A file stays there (encrypted) until FitPub has it, so a sync that
  * stops halfway simply continues next time; an upload whose acknowledgement was lost is caught
- * by the start-time duplicate check, as for FP Wear workouts.
+ * by the start-time duplicate check, as for Wear OS workouts.
  */
 class GarminConnectSync(
     private val store: GarminConnectStore,
