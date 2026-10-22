@@ -144,7 +144,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     )
                     Text(
                         "For watch-pairing bugs, also include phone Logcat filtered to `PhoneWearAuth`, " +
-                            "watch Logcat filtered to `WatchAuth`, and the Settings → Handshake diagnostics state.",
+                            "watch Logcat filtered to `WatchAuth`, and the Settings → Watches → Pairing diagnostics state.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),

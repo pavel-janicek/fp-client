@@ -175,7 +175,7 @@ surfaces. Tiles and complications remain optional follow-up work.
 
 ## Calorie estimate for recorded workouts
 
-The opt-in body profile (Settings → "Calorie recording") lives encrypted on the phone
+The opt-in body profile (Settings → General → "Calorie recording") lives encrypted on the phone
 (`BodyProfileStore`), but a watch that uploads **directly** never passes through the phone, so it
 would otherwise skip the estimate entirely — the FIT written by `WorkoutFitWriter` carries no
 `totalCalories`, and the server's `FitParser` only reports what the file contains. Two mirrored

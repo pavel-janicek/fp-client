@@ -253,7 +253,7 @@ the paired watches and offers **Look for FP Wear**; opening Settings asks the wa
 installing FP Wear after FP Client never means waiting for the daily probe. SDK start is guarded, so a misbehaving Connect IQ SDK cannot crash FP Client.
 
 
-- **FP Client → Settings → "Garmin watch (experimental)"** (`GarminWatchCard`; the full card with an
+- **FP Client → Settings → Watches → "Garmin watch (experimental)"** (`GarminWatchCard`; the full card with an
   active link or pending workouts): whether Garmin Connect is there and reachable
   (`GCM_UPGRADE_NEEDED` and friends in words), each paired watch with connected /
   not connected and *FP Wear installed / not installed* (asked from the watch via

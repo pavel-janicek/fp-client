@@ -443,7 +443,6 @@ private fun FitPubNavGraph(
                 onOpenBatchImport = { navController.navigate(Routes.BATCH_IMPORT) },
                 onOpenKomootImport = { navController.navigate(Routes.KOMOOT_IMPORT) },
                 onOpenDataExport = { navController.navigate(Routes.DATA_EXPORT) },
-                onOpenRecord = { navController.navigate(Routes.RECORD) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
                 onOpenEmailChange = { navController.navigate(Routes.EMAIL_CHANGE) },
                 onOpenWearWorkoutInbox = { navController.navigate(Routes.WEAR_WORKOUT_INBOX) },

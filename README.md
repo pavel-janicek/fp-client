@@ -10,7 +10,7 @@
 FP Client connects your Android phone to any [FitPub](https://fitpub.social)
 instance — a federated, self-hosted fitness activity sharing platform (think "Strava
 meets the Fediverse"). Enter your instance's URL on first launch (you can change it
-later in **Settings → Instance**), sign in, and:
+later in **Settings → Account → Instance**), sign in, and:
 
 - **Track & share** — upload FIT / GPX / TCX files (also inside a ZIP) or log activities
   manually, view them on an OpenStreetMap track, and share them with followers on any instance.
@@ -61,7 +61,7 @@ is none, or more than one, FP Client tells you why and uploads nothing.
 **Your whole history:** request a data export from your Garmin account (Account → *Data
 Management*). The activities sit in further ZIP files inside it, under
 `DI_CONNECT/DI-Connect-Uploaded-Files/`. Unzip the export once and upload those inner ZIP files in
-**Settings → Batch import activities**.
+**Settings → Data → Batch import activities**.
 
 Garmin and Garmin Connect are trademarks of Garmin Ltd. or its subsidiaries. FP Client is not
 affiliated with, endorsed by, or sponsored by Garmin.
@@ -120,7 +120,7 @@ source of truth for known problems.
 1. Check whether an open issue already resembles yours.
 2. Make sure you are running the latest release — open the app, go to
    **Settings** and tap **Check for updates** in the *Updates* card (or open
-   **Settings → About this app → Updates**). If a newer version is available,
+   **Settings → About → Updates**). If a newer version is available,
    update via Google Play or the Releases page (the app shows direct links)
    and confirm your problem still exists before filing an issue.
    The version you are on is shown in **Settings → About this app**;

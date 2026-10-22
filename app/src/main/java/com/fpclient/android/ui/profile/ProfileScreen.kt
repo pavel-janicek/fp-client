@@ -373,20 +373,28 @@ fun ProfileScreen(
     if (embedded) {
         androidx.compose.foundation.layout.Box(modifier.fillMaxSize()) {
             content(Modifier.fillMaxSize())
-            androidx.compose.foundation.layout.Row(
-                modifier = Modifier.align(Alignment.TopEnd),
+            // Record (Iteration 8c) + create + settings, top-right on the Me tab. They float over
+            // the header photo and, once scrolled, over the list, so they sit on a translucent
+            // pill in the surface colour: legible on any photo, on no photo and on content.
+            Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                tonalElevation = 3.dp,
+                shadowElevation = 2.dp,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
             ) {
-                // Record (Iteration 8c) + create + settings, top-right on the Me tab.
-                if (isMe) {
-                    IconButton(onClick = onOpenRecord) {
-                        Icon(Icons.Filled.FiberManualRecord, contentDescription = "Record workout")
+                Row {
+                    if (isMe) {
+                        IconButton(onClick = onOpenRecord) {
+                            Icon(Icons.Filled.FiberManualRecord, contentDescription = "Record workout")
+                        }
                     }
-                }
-                IconButton(onClick = onOpenCreate) {
-                    Icon(Icons.Filled.Add, contentDescription = "New activity")
-                }
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    IconButton(onClick = onOpenCreate) {
+                        Icon(Icons.Filled.Add, contentDescription = "New activity")
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
                 }
             }
         }
