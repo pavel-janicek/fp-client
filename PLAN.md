@@ -393,6 +393,30 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
 3. Update the relay's `PRIVACY.md` (attribution, no AI use) and the app's privacy policy.
 4. Apply for **Startup** before the testers are linked, then open the card to them.
 
+### Privacy zones in the activity detail (4.1.0) — 🟡 in progress
+
+**Problem (maintainer, 2026-10-23).** A route that lies inside a privacy zone behaves badly.
+- The FitPub server builds route downloads strictly without points inside the owner's privacy zones, for everyone including the owner (`ActivityRouteService.createRoute`). With fewer than two visible points it refuses the download and sends `routeDownloadAvailable: false`.
+- The owner's map shows the whole route, other people's maps only the part outside the zones.
+- The web hides its download button on `routeDownloadAvailable` and draws the owner's zones as circles. The "hidden for others" hint appears only on hover.
+- FP Client ignored `routeDownloadAvailable` and showed the download button anyway. Worse, it asked for a save location first (Storage Access Framework creates the file at once) and fetched the GPX afterwards, so a refused download left an empty 0-byte file.
+- FP Client never told the owner that the route, or part of it, is hidden from others.
+
+**Plan (no server change):**
+1. **Download.** Show the button only when `routeDownloadAvailable == true`, like the web. Fetch the GPX first and only then offer the save location, so a refused download never leaves an empty file and its error shows before any picker.
+2. **Notice for the owner** below the map, computed in the app from `privacyZones` (sent to the owner only) and the track points:
+   - the whole route inside zones: others see the activity without a map, and the route cannot be downloaded; the original file stays available in Settings → Data → Export my data;
+   - part of the route: that part is hidden from others.
+   The server offsets each zone slightly per activity (10–15 % of the radius) to obscure its centre, so the app's split is an estimate and the wording says so.
+3. **Zones on the owner's map**, drawn as translucent circles like the web.
+
+Points 1 and 2 are done (2026-10-23):
+- `RoutePrivacy.coverage` returns NONE, PARTIAL or FULL; it is unit-tested.
+- `PrivacyZoneNotice` sits below the map, owner only.
+- The download button is gated on `routeDownloadAvailable`, and the GPX is fetched before the save picker opens.
+
+Point 3 is next.
+
 ### Iteration 1 — Make it compile ✅
 > "FitPub Android does not compile — `./gradlew assembleDebug` reports 28 Kotlin
 > errors (see PLAN.md table). Fix every error following existing conventions:

@@ -94,30 +94,38 @@ fun ActivityDetailScreen(
     var downloading by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf<String?>(null) }
 
-    // Lets the user pick where to store the GPX file (Storage Access Framework);
-    // the bytes are fetched from the instance only after a location is chosen.
+    // The GPX is fetched first and only then may the user pick where to store it (Storage
+    // Access Framework). The picker creates the file the moment a location is chosen, so asking
+    // first left an empty 0-byte file whenever the instance then refused the route.
+    var pendingRoute by remember { mutableStateOf<ByteArray?>(null) }
     val saveRouteLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/gpx+xml"),
     ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+        val bytes = pendingRoute
+        pendingRoute = null
+        if (uri == null || bytes == null) return@rememberLauncherForActivityResult
         scope.launch {
-            downloading = true
-            vm.downloadRoute { result ->
-                when (result) {
-                    is ApiResult.Success -> {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                context.contentResolver.openOutputStream(uri)?.use { it.write(result.data) }
-                                    ?: error("Couldn't open the chosen file for writing")
-                            }
-                        } catch (e: Exception) {
-                            downloadError = "Couldn't save the GPX file: ${e.message}"
-                        }
-                    }
-                    is ApiResult.Error -> downloadError = result.message ?: "Couldn't download the route."
+            try {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        ?: error("Couldn't open the chosen file for writing")
                 }
-                downloading = false
+            } catch (e: Exception) {
+                downloadError = "Couldn't save the GPX file: ${e.message}"
             }
+        }
+    }
+    val downloadThenSave: () -> Unit = {
+        downloading = true
+        vm.downloadRoute { result ->
+            when (result) {
+                is ApiResult.Success -> {
+                    pendingRoute = result.data
+                    saveRouteLauncher.launch("fitpub-route-$activityId.gpx")
+                }
+                is ApiResult.Error -> downloadError = result.message ?: "Couldn't download the route."
+            }
+            downloading = false
         }
     }
 
@@ -142,10 +150,12 @@ fun ActivityDetailScreen(
                         }) {
                             Icon(Icons.Filled.Share, contentDescription = "Share activity")
                         }
-                        // Route files require an account on the instance that owns the activity.
-                        if (!ui.isRemote) {
+                        // Route files require an account on the instance that owns the activity,
+                        // and exist only when the server offers them: it refuses routes the
+                        // owner's privacy settings or zones hide (the web gates on the same flag).
+                        if (!ui.isRemote && ui.activity?.routeDownloadAvailable == true) {
                             IconButton(
-                                onClick = { saveRouteLauncher.launch("fitpub-route-$activityId.gpx") },
+                                onClick = downloadThenSave,
                                 enabled = !downloading,
                             ) {
                                 Icon(Icons.Filled.Download, contentDescription = "Download route as GPX")

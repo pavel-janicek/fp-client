@@ -34,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.Lock
+import com.fpclient.android.util.RoutePrivacy
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
@@ -240,6 +242,35 @@ internal fun MapCanvas(segments: List<List<org.osmdroid.util.GeoPoint>>, modifie
         onRelease = { map -> map.onDetach() },
         modifier = modifier,
     )
+}
+
+/**
+ * Tells the owner what other people see of a route that crosses their privacy zones. The split
+ * is computed in the app ([RoutePrivacy]) and is approximate near zone edges, because the server
+ * shifts each zone slightly per activity.
+ */
+@Composable
+internal fun PrivacyZoneNotice(coverage: RoutePrivacy.Coverage) {
+    val text = when (coverage) {
+        RoutePrivacy.Coverage.FULL ->
+            "This route lies inside your privacy zones. Others see this activity without a map, " +
+                "and the route can't be downloaded. Your original file stays available in " +
+                "Settings → Data → Export my data."
+        else -> "Part of this route lies inside your privacy zones and is hidden from others."
+    }
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp).padding(top = 2.dp),
+        )
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 /** The web detail page's "Indoor" badge (house icon + label) shown next to the title. */
