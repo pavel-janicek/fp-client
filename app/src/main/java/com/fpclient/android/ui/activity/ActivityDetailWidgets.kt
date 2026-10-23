@@ -140,7 +140,11 @@ fun CommentComposer(
 }
 
 @Composable
-fun TrackMap(segments: List<List<org.osmdroid.util.GeoPoint>>, hasTrack: Boolean) {
+fun TrackMap(
+    segments: List<List<org.osmdroid.util.GeoPoint>>,
+    hasTrack: Boolean,
+    privacyZones: List<com.fpclient.android.data.dto.PrivacyZonePreviewDto> = emptyList(),
+) {
     if (!hasTrack || segments.isEmpty()) return
     var expanded by rememberSaveable { mutableStateOf(false) }
 
@@ -148,6 +152,7 @@ fun TrackMap(segments: List<List<org.osmdroid.util.GeoPoint>>, hasTrack: Boolean
         Box {
             MapCanvas(
                 segments = segments,
+                privacyZones = privacyZones,
                 modifier = Modifier.fillMaxWidth().height(220.dp),
             )
             FilledTonalIconButton(
@@ -169,7 +174,7 @@ fun TrackMap(segments: List<List<org.osmdroid.util.GeoPoint>>, hasTrack: Boolean
         ) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-                    MapCanvas(segments = segments, modifier = Modifier.fillMaxSize())
+                    MapCanvas(segments = segments, privacyZones = privacyZones, modifier = Modifier.fillMaxSize())
                     // Same translucent tonal button, same top-right corner as the
                     // "Enlarge map" button — the familiar affordance closes the view.
                     FilledTonalIconButton(
@@ -190,11 +195,19 @@ fun TrackMap(segments: List<List<org.osmdroid.util.GeoPoint>>, hasTrack: Boolean
  * The osmdroid track map itself: draws the polyline segments and zooms to fit
  * the whole track. Used both for the small inline map on the activity detail
  * screen and for the enlarged full-screen version — only the size differs.
+ *
+ * [privacyZones] (the owner's own view only) are drawn as translucent red circles under the
+ * route, like the web's owner map, so the owner sees which part others don't. The zoom still
+ * fits the route alone: a large zone would otherwise shrink the route to a dot.
  */
 @Composable
 // Shared with the peak-detail screen, which draws the tracks of every activity that reached
 // a summit. `internal` rather than private for exactly that reason.
-internal fun MapCanvas(segments: List<List<org.osmdroid.util.GeoPoint>>, modifier: Modifier = Modifier) {
+internal fun MapCanvas(
+    segments: List<List<org.osmdroid.util.GeoPoint>>,
+    modifier: Modifier = Modifier,
+    privacyZones: List<com.fpclient.android.data.dto.PrivacyZonePreviewDto> = emptyList(),
+) {
     androidx.compose.ui.viewinterop.AndroidView(
         factory = { context ->
             org.osmdroid.views.MapView(context).apply {
@@ -204,7 +217,25 @@ internal fun MapCanvas(segments: List<List<org.osmdroid.util.GeoPoint>>, modifie
             }
         },
         update = { map ->
-            map.overlays.removeAll { it is org.osmdroid.views.overlay.Polyline }
+            map.overlays.removeAll { it is org.osmdroid.views.overlay.Polyline || it is org.osmdroid.views.overlay.Polygon }
+            // Zones first, so the route is drawn on top of them.
+            privacyZones.forEach { zone ->
+                val lat = zone.latitude ?: return@forEach
+                val lon = zone.longitude ?: return@forEach
+                val radius = zone.radiusMeters?.takeIf { it > 0 } ?: return@forEach
+                val circle = org.osmdroid.views.overlay.Polygon(map).apply {
+                    points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(
+                        org.osmdroid.util.GeoPoint(lat, lon),
+                        radius.toDouble(),
+                    )
+                    fillPaint.color = PRIVACY_ZONE_FILL
+                    outlinePaint.color = PRIVACY_ZONE_OUTLINE
+                    outlinePaint.strokeWidth = 3f
+                    // A picture, not a control: same tap fall-through as the route below.
+                    setOnClickListener { _, _, _ -> false }
+                }
+                map.overlays.add(circle)
+            }
             val allPoints = mutableListOf<org.osmdroid.util.GeoPoint>()
             segments.forEach { seg ->
                 if (seg.isNotEmpty()) {
@@ -327,3 +358,7 @@ internal fun IndoorPlaceholder(activityType: String?) {
         }
     }
 }
+
+/** The web owner map's zone colours: translucent red fill with a stronger red outline. */
+private const val PRIVACY_ZONE_FILL = 0x33DC3545
+private const val PRIVACY_ZONE_OUTLINE = 0xAADC3545.toInt()

@@ -122,11 +122,11 @@ internal fun DetailBody(
             activity.indoor == true -> item { IndoorPlaceholder(activityType = activity.activityType) }
             hasTrack -> {
                 val segments = viewModel.trackSegments()
-                item { TrackMap(segments = segments, hasTrack = true) }
                 // Owner only: the server sends privacyZones just to the owner, who sees the whole
                 // route while everyone else gets it without the parts inside the zones.
-                val zones = activity.privacyZones.orEmpty()
-                if (ui.isOwnActivity && zones.isNotEmpty()) {
+                val zones = if (ui.isOwnActivity) activity.privacyZones.orEmpty() else emptyList()
+                item { TrackMap(segments = segments, hasTrack = true, privacyZones = zones) }
+                if (zones.isNotEmpty()) {
                     val coverage = RoutePrivacy.coverage(
                         segments.flatten().map { it.latitude to it.longitude },
                         zones,

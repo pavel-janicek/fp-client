@@ -1,7 +1,8 @@
 <en-US>
 4.1.0 (release 4.1.0):
 - New activities are visible only to you by default. Change it in Settings → Privacy; it also applies to your Wear OS watch.
-- Settings is now a short list of categories, each with its own page.
-- The settings button on your profile stays visible on any header photo.
+- Your privacy zones show on your activity maps, with a note when a route is hidden from others.
+- Settings is now sorted into categories.
+- The settings button on your profile is always visible.
 - Garmin (experimental, testers): import activities through Garmin Connect. The FP Wear watch app from 4.0.0 is no longer supported.
 </en-US>
