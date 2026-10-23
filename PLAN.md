@@ -393,6 +393,23 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
 3. Update the relay's `PRIVACY.md` (attribution, no AI use) and the app's privacy policy.
 4. Apply for **Startup** before the testers are linked, then open the card to them.
 
+### Garmin Connect: instant import and a useful notification (4.2.0) — ⬜ planned
+
+**Idea (maintainer, 2026-10-23).** The relay could push a notification as soon as Garmin delivers a FIT.
+
+**Today:**
+- The relay has the file seconds after the watch syncs.
+- `GarminConnectWorker` asks the relay only every 15 minutes (WorkManager's minimum), so imports can lag about 15 minutes.
+- The "Garmin activity imported to FitPub" notification does nothing when tapped.
+
+**Decided direction:** keep automatic uploads (the default visibility "Only me" keeps them private) and use the push only to speed things up:
+1. **Tap opens the activity.** `GarminNotifications.postImported` gets the new activity id; tapping opens its detail, where title, description and visibility can be changed. Small, app only.
+2. **ntfy wake-up from the relay.** The phone gives the relay its ntfy topic, the same private topic instant delivery already subscribes to (`InstantDeliveryService`). After a FIT is queued, the relay publishes an empty message tagged `fitpub-garmin`, and the app enqueues `GarminConnectWorker` at once.
+   - No activity data travels through ntfy. The relay's PRIVACY.md already announces an optional wake-up.
+   - It helps only users with instant delivery switched on; everyone else keeps the 15-minute check.
+   - Not Firebase: push stays independent of Google, as for notifications (Iteration 8).
+3. *Optional, later:* an **"Ask before uploading"** switch. Imports wait in a list until the user confirms or edits them. A bigger piece, needed only if users ask for it.
+
 ### Privacy zones in the activity detail (4.1.0) — ✅ done (not yet tried on a phone)
 
 **Problem (maintainer, 2026-10-23).** A route that lies inside a privacy zone behaves badly.
