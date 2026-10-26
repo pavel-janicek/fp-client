@@ -22,6 +22,11 @@ import com.fpclient.android.notifications.PushSubscriptionStore
 import com.fpclient.android.recording.RecordingShareManager
 import com.fpclient.android.wear.WearWorkoutInboxStore
 import com.fpclient.android.data.session.SessionStore
+import com.fpclient.android.data.settings.DefaultVisibilityStore
+import com.fpclient.android.wear.WearUploadDefaultsSync
+import com.fpclient.android.garmin.GarminConnectClient
+import com.fpclient.android.garmin.GarminConnectStore
+import com.fpclient.android.garmin.GarminConnectSync
 import com.fpclient.android.wear.PhoneWearAuthRelay
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -116,6 +121,21 @@ class AppContainer(context: Context) {
     }
 
     val wearWorkoutInboxStore: WearWorkoutInboxStore by lazy { WearWorkoutInboxStore(context) }
+
+    /** The visibility new activities start with, from every source (Settings → Privacy). */
+    val defaultVisibilityStore: DefaultVisibilityStore by lazy {
+        DefaultVisibilityStore(context) { WearUploadDefaultsSync.push(context, it) }
+    }
+
+    /** This phone's mailbox on the Garmin Connect relay. */
+    val garminConnectStore: GarminConnectStore by lazy { GarminConnectStore(context) }
+
+    /** Linking, status and imports through the Garmin Connect relay (PLAN "Garmin Connect API"). */
+    val garminConnectSync: GarminConnectSync by lazy {
+        GarminConnectSync(
+            garminConnectStore, GarminConnectClient(), activityRepository, sessionStore, defaultVisibilityStore, context.cacheDir,
+        )
+    }
 
     /**
      * Body metrics a user opts in for calorie recording (height/weight/age/sex). Health data, so

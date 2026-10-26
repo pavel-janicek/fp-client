@@ -2,12 +2,15 @@ package com.fpclient.android
 
 import android.app.Application
 import android.content.Context
+import com.fpclient.android.garmin.GarminConnectWorker
+import com.fpclient.android.garmin.GarminConnectStore
 import com.fpclient.android.notifications.InstantDeliveryService
 import com.fpclient.android.notifications.NotificationPollWorker
 import com.fpclient.android.notifications.PushFetchWorker
 import com.fpclient.android.notifications.PushNotifications
 import com.fpclient.android.wear.PhoneWearAuthRelay
 import com.fpclient.android.wear.WearBodyProfileSync
+import com.fpclient.android.wear.WearUploadDefaultsSync
 import com.fpclient.android.wear.PhoneWorkoutSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +33,9 @@ class FitPubApplication : Application() {
         // Catch a reachable watch up with the calorie body profile (it may have been reinstalled
         // or paired since the last save). Off the main thread: the store opens encrypted prefs.
         applicationScope.launch { WearBodyProfileSync.broadcast(this@FitPubApplication, container.bodyProfileStore.current()) }
+        applicationScope.launch {
+            WearUploadDefaultsSync.broadcast(this@FitPubApplication, container.defaultVisibilityStore.visibility.value)
+        }
 
         // Background notification delivery (Iteration 8f): create the channel up front so the
         // OS-level toggle for it is visible in system settings even before the first poll, and
@@ -47,11 +53,17 @@ class FitPubApplication : Application() {
         // if this runs at a bad moment.
         InstantDeliveryService.startIfEnabled(this)
 
+        // FP Wear (the Connect IQ watch app) was removed in favour of Garmin Connect imports:
+        // drop what a 4.0 test build left behind.
+        GarminConnectStore.removeFpWearLeftovers(this)
+        // Garmin Connect relay imports: periodic only while this phone has a relay mailbox.
+        GarminConnectWorker.schedulePeriodic(this)
+
         // Configure osmdroid tile cache in app storage.
         @Suppress("DEPRECATION")
         val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this)
         Configuration.getInstance().load(this, prefs)
-        Configuration.getInstance().userAgentValue = "FP-Client/3.3.2"
+        Configuration.getInstance().userAgentValue = "FP-Client/4.1.0"
 
         // osmdroid needs access to a writeable tile cache dir for modern scoped storage.
         Configuration.getInstance().osmdroidBasePath = filesDir

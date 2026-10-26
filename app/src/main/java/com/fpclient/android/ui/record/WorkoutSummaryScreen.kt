@@ -341,6 +341,7 @@ fun WorkoutSummaryRoute(
         viewModel(factory = WorkoutSummaryViewModel.factory(container))
     val finished by TrackRecordingBus.finished.collectAsState()
     val share = container.recordingShareManager
+    val defaultVisibility = container.defaultVisibilityStore.visibility.value
     val data by produceState<SummaryData?>(null, sessionId, finished) {
         value = withContext(Dispatchers.IO) {
             val onBus = finished?.takeIf { it.snapshot.startedAtEpochMs == sessionId }
@@ -354,7 +355,7 @@ fun WorkoutSummaryRoute(
                     movingMs = onBus.movingMs,
                     title = pending?.title.orEmpty(),
                     description = pending?.description.orEmpty(),
-                    visibility = pending?.visibility ?: ActivityVisibilities.PUBLIC,
+                    visibility = pending?.visibility ?: defaultVisibility,
                 )
             } else {
                 val segments = share.readSegments(sessionId)
@@ -366,7 +367,7 @@ fun WorkoutSummaryRoute(
                     movingMs = share.movingMsFor(sessionId),
                     title = pending?.title.orEmpty(),
                     description = pending?.description.orEmpty(),
-                    visibility = pending?.visibility ?: ActivityVisibilities.PUBLIC,
+                    visibility = pending?.visibility ?: defaultVisibility,
                 )
             }
         }

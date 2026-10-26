@@ -10,7 +10,7 @@
 FP Client connects your Android phone to any [FitPub](https://fitpub.social)
 instance — a federated, self-hosted fitness activity sharing platform (think "Strava
 meets the Fediverse"). Enter your instance's URL on first launch (you can change it
-later in **Settings → Instance**), sign in, and:
+later in **Settings → Account → Instance**), sign in, and:
 
 - **Track & share** — upload FIT / GPX / TCX files (also inside a ZIP) or log activities
   manually, view them on an OpenStreetMap track, and share them with followers on any instance.
@@ -25,6 +25,36 @@ later in **Settings → Instance**), sign in, and:
 - **Wear OS companion app** — standalone watch app for recording workouts on-device with GPS, heart rate, and step tracking.
 
 Built with Kotlin and Jetpack Compose (Material 3 for phone, Wear Compose for watch).
+
+## Privacy settings
+
+Everything is in **Settings → Privacy** on the phone.
+
+- **Default visibility.** Sets who sees a new activity:
+
+  | Choice | Who sees the activity |
+  |---|---|
+  | **Only me** (default) | Only you. Nothing is shared. |
+  | **Followers** | Your followers. |
+  | **This instance** | People on your FitPub instance. |
+  | **Public** | Everyone. The activity is also shared with other fediverse servers. |
+
+  The setting applies to:
+  - workouts recorded on the phone,
+  - uploaded files,
+  - manually entered activities,
+  - workouts recorded on the Wear OS watch,
+  - activities imported from Garmin Connect.
+
+  The recording summary and the upload form start with this choice, and you can still pick
+  another visibility there. You can change any activity's visibility later in FitPub.
+- **Privacy zones.** These hide the start and end of your activities near places you choose,
+  such as your home.
+
+> **Wear OS watch:** the watch has no visibility setting of its own. The phone sends it the
+> default visibility when the watch app opens and whenever you change the setting, and the
+> watch uses it for every workout it records. A watch that has not heard from the phone yet
+> uses **Only me**. Workouts recorded with a watch app older than this version stay **Public**.
 
 ## Wear OS App (FitPub Wear)
 
@@ -61,7 +91,7 @@ is none, or more than one, FP Client tells you why and uploads nothing.
 **Your whole history:** request a data export from your Garmin account (Account → *Data
 Management*). The activities sit in further ZIP files inside it, under
 `DI_CONNECT/DI-Connect-Uploaded-Files/`. Unzip the export once and upload those inner ZIP files in
-**Settings → Batch import activities**.
+**Settings → Data → Batch import activities**.
 
 Garmin and Garmin Connect are trademarks of Garmin Ltd. or its subsidiaries. FP Client is not
 affiliated with, endorsed by, or sponsored by Garmin.
@@ -101,16 +131,14 @@ by Zwift.
 
 ### F-Droid
 
-Release 1.3.5 has been deemed "good enough" by the F-Droid people; the
-[merge request](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/47394) is ready
-to be tested. You can [help reviewing it](https://gitlab.com/fdroid/wiki/-/wikis/Internal/Reviewing-new-apps).
+FP Client is no longer pursuing F-Droid inclusion: the Wear OS support depends on proprietary
+libraries (Google Play services), which F-Droid's main repository does not accept. Use Google Play or the APK from the Releases page.
 
 ## Contributing
 
 ### Testing
 
 - Join the Play beta above and use the app daily — real-world usage is the best test.
-- Help review the F-Droid merge request (link above).
 - Or build it yourself: `./gradlew installDebug` (needs JDK 17 and Android SDK platform 36).
 
 ### Submitting issues
@@ -121,9 +149,9 @@ source of truth for known problems.
 1. Check whether an open issue already resembles yours.
 2. Make sure you are running the latest release — open the app, go to
    **Settings** and tap **Check for updates** in the *Updates* card (or open
-   **Settings → About this app → Updates**). If a newer version is available,
-   update via your app store (Google Play or F-Droid — the app shows direct
-   links) and confirm your problem still exists before filing an issue.
+   **Settings → About → Updates**). If a newer version is available,
+   update via Google Play or the Releases page (the app shows direct links)
+   and confirm your problem still exists before filing an issue.
    The version you are on is shown in **Settings → About this app**;
    please include it in your report.
 3. Still broken? Try Settings → Applications → FP Client → *Delete data*, then retry,
@@ -138,3 +166,9 @@ source of truth for known problems.
 FP Client is developed with the help of an AI coding agent
 ([Cline](https://github.com/cline/cline), powered by the ox-alpha model); code reviews,
 testing on device, and product decisions are done by a human.
+
+## License
+
+FP Client — the phone app and the Wear OS app — is licensed under the
+[Apache License 2.0](LICENSE) since version 4.0. Releases up to 3.x were published under the GNU
+AGPL-3.0, and copies of those releases remain available under that licence.

@@ -101,6 +101,7 @@ internal fun CreateButton(
                     distanceMeters = distanceKm.toDoubleOrNull()?.times(1000),
                     elevationGainMeters = elevationM.toDoubleOrNull(),
                     indoor = indoor,
+                    visibility = vm.defaultVisibility,
                 ),
             )
         },

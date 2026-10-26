@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.activity
 
+import com.fpclient.android.util.RoutePrivacy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -119,7 +120,22 @@ internal fun DetailBody(
         val hasTrack = activity.simplifiedTrack != null
         when {
             activity.indoor == true -> item { IndoorPlaceholder(activityType = activity.activityType) }
-            hasTrack -> item { TrackMap(segments = viewModel.trackSegments(), hasTrack = true) }
+            hasTrack -> {
+                val segments = viewModel.trackSegments()
+                // Owner only: the server sends privacyZones just to the owner, who sees the whole
+                // route while everyone else gets it without the parts inside the zones.
+                val zones = if (ui.isOwnActivity) activity.privacyZones.orEmpty() else emptyList()
+                item { TrackMap(segments = segments, hasTrack = true, privacyZones = zones) }
+                if (zones.isNotEmpty()) {
+                    val coverage = RoutePrivacy.coverage(
+                        segments.flatten().map { it.latitude to it.longitude },
+                        zones,
+                    )
+                    if (coverage != RoutePrivacy.Coverage.NONE) {
+                        item { PrivacyZoneNotice(coverage) }
+                    }
+                }
+            }
             else -> item {
                 Text(
                     "No route recorded",

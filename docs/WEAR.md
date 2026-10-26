@@ -1,4 +1,4 @@
-# FitPub Wear — architecture & decision record (Iterations 9a–9d)
+# FitPub Wear — architecture & decision record (Iterations 9a–9d, updated for 4.1.0)
 
 `:wear` is the Wear OS companion module ("FitPub Wear"). It sits next to `:app` in the same
 Gradle build and lets athletes leave the phone at home: sign-in is relayed from the phone (9b),
@@ -175,7 +175,7 @@ surfaces. Tiles and complications remain optional follow-up work.
 
 ## Calorie estimate for recorded workouts
 
-The opt-in body profile (Settings → "Calorie recording") lives encrypted on the phone
+The opt-in body profile (Settings → General → "Calorie recording") lives encrypted on the phone
 (`BodyProfileStore`), but a watch that uploads **directly** never passes through the phone, so it
 would otherwise skip the estimate entirely — the FIT written by `WorkoutFitWriter` carries no
 `totalCalories`, and the server's `FitParser` only reports what the file contains. Two mirrored
@@ -203,6 +203,31 @@ The profile stays on the user's own paired devices; it is never sent to the serv
 pinned by unit tests (`CalorieCalculatorTest`/`CalorieFitAmenderTest` exist in each module), and
 the message wire strings are pinned by `PhoneBodyProfileProtocolTest` (`:app`) and
 `BodyProfileProtocolTest` (`:wear`).
+
+## Default visibility of recorded workouts (4.1.0)
+
+The watch has no visibility setting. It uses the phone's **Default visibility** (Settings →
+Privacy, `DefaultVisibilityStore`; "Only me", i.e. `PRIVATE`, unless the user changes it).
+
+- **Phone → watch.** The phone sends it as a Wear **message** at `/fitpub/upload-defaults` with a
+  single `DataMap` key `visibility` (`WearUploadDefaultsSync`). It goes the same three ways as the
+  body profile: in reply to every watch auth request, on every change of the setting, and on phone
+  app start.
+- **On the watch.** `WatchWearAuthService` accepts only `PUBLIC`, `FOLLOWERS`, `LOCAL` or
+  `PRIVATE` and persists the value (`UploadDefaultsSync`, DataStore
+  `fitpub_wear_upload_defaults`). When a workout stops, `WorkoutRecordingService` stamps it on the
+  `PendingWatchWorkout`. Both upload paths then use the stamped value: the direct upload
+  (`WatchActivityUploader`) and the relay, where `PhoneWorkoutSyncWorker` uploads what the watch
+  sent.
+- **Fallbacks.** A watch that has not heard from the phone yet uses
+  `WatchWorkoutSyncStore.DEFAULT_VISIBILITY` = `PRIVATE`. Entries queued by a watch before 4.1.0
+  have no stamped value and decode as `PUBLIC`, which is what those watches always sent. On the
+  phone, a blank value from the watch falls back to the phone's own default.
+- **Contract.** The wire strings are pinned by `PhoneUploadDefaultsProtocolTest` (`:app`) and
+  `UploadDefaultsProtocolTest` (`:wear`). The manifest of `:wear` registers the path for
+  `WatchWearAuthService` (`MESSAGE_RECEIVED`).
+
+Before 4.1.0 the watch stamped a fixed `PUBLIC` on every workout, whatever the phone app used.
 
 ## Upload format and steps
 

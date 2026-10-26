@@ -154,7 +154,7 @@ class RecordingShareManager(
                         ActivityUpdateRequest(
                             title = activity.title ?: title.orEmpty(),
                             description = activity.description ?: description,
-                            visibility = activity.visibility ?: visibility ?: ActivityVisibilities.PUBLIC,
+                            visibility = activity.visibility ?: visibility ?: ActivityVisibilities.PRIVATE,
                             activityType = activityType,
                         ),
                     )

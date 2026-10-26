@@ -28,8 +28,8 @@ android {
         targetSdk = 36
         // Unique versionCode distinct from :app (Google Play Console requires globally unique
         // versionCodes across all uploaded artifacts in a release listing).
-        versionCode = 62
-        versionName = "3.3.2"
+        versionCode = 68
+        versionName = "4.1.0"
     }
 
     signingConfigs {

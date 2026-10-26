@@ -83,3 +83,4 @@
 }
 # Room's paging integration is referenced by WorkManager but unused here.
 -dontwarn androidx.room.paging.**
+

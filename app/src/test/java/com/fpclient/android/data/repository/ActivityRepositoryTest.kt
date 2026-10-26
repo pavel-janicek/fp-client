@@ -171,5 +171,48 @@ class ActivityRepositoryTest {
         assertTrue(body, body.contains("\"trim\":{\"startIndex\":3,\"endIndex\":77}"))
     }
 
+    /** The newest activities of the user, as `GET /api/web/activities/user/{username}` lists them. */
+    private fun userActivitiesBody() = """
+        {
+          "content": [
+            {"id": "second", "startedAt": "2026-10-20T16:13:56Z", "totalDurationSeconds": 1419},
+            {"id": "older", "startedAt": "2026-10-20T05:54:14Z", "totalDurationSeconds": 1152}
+          ],
+          "page": {"size": 20, "number": 0, "totalElements": 2, "totalPages": 1}
+        }
+    """.trimIndent()
+
+    @Test
+    fun findUploaded_matchesTheWatchStartWithinTheTolerance() = runTest {
+        // The watch keeps milliseconds (session id 1792512836673 = 16:13:56.673Z); the server
+        // stores the FIT start in whole seconds.
+        server.enqueue(MockResponse().setResponseCode(200).setBody(userActivitiesBody()))
+
+        val result = repository.findUploaded("paveljanicek", 1_792_512_836_673L)
+
+        assertEquals(ApiResult.Success("second"), result)
+        assertEquals("/api/web/activities/user/paveljanicek?page=0&size=20", server.takeRequest().path)
+    }
+
+    @Test
+    fun findUploaded_returnsNullForAWorkoutNotOnTheServer() = runTest {
+        server.enqueue(MockResponse().setResponseCode(200).setBody(userActivitiesBody()))
+
+        // Three seconds off: a different workout, never taken over.
+        val result = repository.findUploaded("paveljanicek", 1_792_512_839_673L)
+
+        assertEquals(ApiResult.Success(null), result)
+    }
+
+    @Test
+    fun findUploaded_passesErrorsThrough() = runTest {
+        server.enqueue(MockResponse().setResponseCode(503))
+
+        val result = repository.findUploaded("paveljanicek", 1_792_512_836_673L)
+
+        assertTrue(result is ApiResult.Error)
+        assertEquals(503, (result as ApiResult.Error).statusCode)
+    }
+
     private fun runTest(block: suspend () -> Unit) = kotlinx.coroutines.test.runTest { block() }
 }

@@ -389,6 +389,7 @@ class WorkoutRecordingService : Service(), SensorEventListener {
                 sidecarFileName = exported.sidecarFile.name,
                 fitFileName = exportedFit?.name,
                 activityType = stoppedSession.activityType.name,
+                visibility = UploadDefaultsSync.visibility(this),
                 ownerServerUrl = auth.serverUrl.takeIf { auth.isSignedIn }.orEmpty(),
                 ownerUsername = auth.username.takeIf { auth.isSignedIn }.orEmpty(),
                 createdAtEpochMs = stoppedAt,

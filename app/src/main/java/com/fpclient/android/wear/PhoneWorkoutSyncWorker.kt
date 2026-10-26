@@ -57,6 +57,15 @@ class PhoneWorkoutSyncWorker(
                 continue
             }
 
+            // The watch may have uploaded this workout itself and lost the response (its process
+            // was killed mid-upload) before relaying it here; take that activity over instead of
+            // uploading a second, identical one.
+            val alreadyOnServer = (container.activityRepository.findUploaded(session.username, entry.sessionId) as? ApiResult.Success)?.data
+            if (alreadyOnServer != null) {
+                if (!finishUploaded(entry, alreadyOnServer)) return Result.retry()
+                continue
+            }
+
             val bodyProfile = container.bodyProfileStore.current()
             val fit = inbox.fitFile(entry)
             val gpx = inbox.gpxFile(entry)
@@ -86,7 +95,9 @@ class PhoneWorkoutSyncWorker(
                 file = uploadFile,
                 title = entry.title,
                 description = entry.description,
-                visibility = entry.visibility,
+                // What the watch stamped: the phone's default it mirrors (WearUploadDefaultsSync).
+                // Blank falls back to the default here.
+                visibility = entry.visibility.ifBlank { container.defaultVisibilityStore.visibility.value },
             )) {
                 is ApiResult.Success -> {
                     val activity = result.data
@@ -96,19 +107,12 @@ class PhoneWorkoutSyncWorker(
                             ActivityUpdateRequest(
                                 title = activity.title ?: entry.title,
                                 description = activity.description ?: entry.description,
-                                visibility = activity.visibility ?: entry.visibility.ifBlank { ActivityVisibilities.PRIVATE },
+                                visibility = activity.visibility ?: entry.visibility.ifBlank { container.defaultVisibilityStore.visibility.value },
                                 activityType = entry.activityType,
                             ),
                         )
                     }
-                    inbox.archiveSidecar(entry)
-                    inbox.update(entry.sessionId) { it.copy(uploadedActivityId = activity.id, lastError = null) }
-                    if (acknowledge(entry.copy(uploadedActivityId = activity.id))) {
-                        inbox.remove(entry.sessionId)
-                        container.activitiesVersion.value += 1
-                    } else {
-                        return Result.retry()
-                    }
+                    if (!finishUploaded(entry, activity.id)) return Result.retry()
                 }
                 is ApiResult.Error -> {
                     val statusCode = result.statusCode
@@ -134,6 +138,18 @@ class PhoneWorkoutSyncWorker(
             }
         }
         return Result.success()
+    }
+
+    /** Records the activity, then acks the watch; false when the ack has to be retried. */
+    private suspend fun finishUploaded(entry: WearWorkoutInboxEntry, activityId: String): Boolean {
+        val container = FitPubApplication.container(applicationContext)
+        val inbox = container.wearWorkoutInboxStore
+        inbox.archiveSidecar(entry)
+        inbox.update(entry.sessionId) { it.copy(uploadedActivityId = activityId, lastError = null) }
+        if (!acknowledge(entry.copy(uploadedActivityId = activityId))) return false
+        inbox.remove(entry.sessionId)
+        container.activitiesVersion.value += 1
+        return true
     }
 
     private suspend fun acknowledge(entry: WearWorkoutInboxEntry): Boolean {

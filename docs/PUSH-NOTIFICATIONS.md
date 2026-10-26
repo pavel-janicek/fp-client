@@ -78,7 +78,7 @@ latency changes. (8i, the first cut of this feature, was the opposite: it upload
 private key so the relay could decrypt and forward readable text. 8j exists to undo that,
 and `PRIVACY.md` in the relay repo says so.)
 
-### In the app (Settings → Push)
+### In the app (Settings → Notifications)
 
 1. Enable **Mailbox push** (8h) first — the instant switch only appears while your account
    owns the mailbox.
@@ -106,9 +106,9 @@ instead of minutes. But it does not have to be *seen*:
 
 | Want | Do this | Effect |
 | --- | --- | --- |
-| Hide it, keep instant delivery | Settings → Push → **Hide it** (or Android → Apps → FP Client → Notifications → *FitPub instant delivery* → off) | The notification disappears; the connection keeps running. Your activity notifications are unaffected, because this is a separate channel. |
+| Hide it, keep instant delivery | Settings → Notifications → **Hide it** (or Android → Apps → FP Client → Notifications → *FitPub instant delivery* → off) | The notification disappears; the connection keeps running. Your activity notifications are unaffected, because this is a separate channel. |
 | Swipe it away | Swipe the notification (Android 13 and later) | Same. It is not re-posted until the service restarts. |
-| Get rid of it entirely | Tap **Stop** on the notification, or switch instant delivery off in Settings | Removes the service and the notification — and takes you back to ~15-minute delivery. |
+| Get rid of it entirely | Tap **Stop** on the notification, or switch instant delivery off in Settings → Notifications | Removes the service and the notification — and takes you back to ~15-minute delivery. |
 
 Turning off the channel does **not** stop the connection; turning off the feature does. The app
 says which one it is doing, because the difference is the difference between "instant" and

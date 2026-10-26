@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import android.content.Context
 import android.net.Uri
 import com.fpclient.android.data.dto.ActivityDto
+import com.fpclient.android.data.dto.ActivitySummaryDto
 import com.fpclient.android.data.dto.ActivityTrimDataDto
 import com.fpclient.android.data.dto.ActivityUpdateRequest
 import com.fpclient.android.data.dto.BoostDto
@@ -27,6 +28,8 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.time.Instant
+import kotlin.math.abs
 
 class ActivityRepository(
     private val api: FitPubApi,
@@ -90,6 +93,20 @@ class ActivityRepository(
             ApiResult.Error(ErrorMessages.fromThrowable(e), throwable = e)
         }
     }
+
+    /**
+     * The id of [username]'s activity that started at [startedAtEpochMs] (within
+     * [UPLOAD_MATCH_TOLERANCE_MS]), or null when there is none among the newest ones.
+     *
+     * Watch workouts are checked before upload: an upload whose response was lost (process
+     * killed on the watch, timeout, dropped Wi-Fi) may still have reached the server, and
+     * resending the same file would create a second, identical activity.
+     */
+    suspend fun findUploaded(username: String, startedAtEpochMs: Long): ApiResult<String?> =
+        when (val result = userActivities(username, page = 0, size = UPLOAD_MATCH_PAGE_SIZE)) {
+            is ApiResult.Success -> ApiResult.Success(result.data.content.matchingStart(startedAtEpochMs)?.id)
+            is ApiResult.Error -> result
+        }
 
     suspend fun createManual(request: ManualActivityRequest): ApiResult<ActivityDto> {
         return try {
@@ -328,5 +345,16 @@ class ActivityRepository(
 
     companion object {
         fun visibilityFromName(name: String?): String = name ?: "PUBLIC"
+
+        /** The server stores whole seconds of the FIT start; the watch keeps milliseconds. */
+        internal const val UPLOAD_MATCH_TOLERANCE_MS = 2_000L
+        private const val UPLOAD_MATCH_PAGE_SIZE = 20
     }
 }
+
+/** The activity whose start lies within [ActivityRepository.UPLOAD_MATCH_TOLERANCE_MS] of [startedAtEpochMs]. */
+internal fun List<ActivitySummaryDto>.matchingStart(startedAtEpochMs: Long): ActivitySummaryDto? =
+    firstOrNull { activity ->
+        val startedAt = activity.startedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+        startedAt != null && abs(startedAt - startedAtEpochMs) <= ActivityRepository.UPLOAD_MATCH_TOLERANCE_MS
+    }

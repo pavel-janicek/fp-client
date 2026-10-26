@@ -35,7 +35,7 @@ import com.fpclient.android.util.TextLimits
 fun UploadForm(ui: CreateViewModel.UiState, vm: CreateViewModel, sharedUri: Uri? = null) {
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
-    var visibility by rememberSaveable { mutableStateOf(ActivityVisibilities.PUBLIC) }
+    var visibility by rememberSaveable { mutableStateOf(vm.defaultVisibility) }
     var pickedName by rememberSaveable { mutableStateOf<String?>(null) }
     var pickedUri by rememberSaveable { mutableStateOf<Uri?>(sharedUri) }
     val context = LocalContext.current

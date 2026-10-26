@@ -1,7 +1,7 @@
 # FitPub Android — Project Roadmap
 
-Assessment date: 2026-08-25 · Last updated: 3.3.2 (versionCode 61 / `:wear` 62)
-Current app version: **`3.3.2`** (`versionCode` 61 / `:wear` 62)
+Assessment date: 2026-08-25 · Last updated: 4.1.0 (versionCode 65 / `:wear` 66)
+Current app version: **`4.1.0`** (`versionCode` 65 / `:wear` 66)
 
 ## Current state
 
@@ -136,7 +136,8 @@ Progress ledger (kept up to date per iteration):
 | **3.3.0** | **Watch tile, live heart rate, cadence and named watch workouts; profile header, heatmap and Zwift on the phone** — versionCode 57 / versionName `3.3.0` (`:wear` versionCode 58 / `3.3.0`); `FP-Client/3.3.0` (+ `FP-Client-Wear/3.3.0`) User-Agent. A minor (not 3.2.1) because it adds features; 57/58 because 56 is already the 3.2.0 `:wear` code. **Watch:** "FP Wear" quick-start tile (start the last-used activity or pick one; while recording it shows the activity and moving time and opens the workout); the workout screen's BPM is live and coloured by heart-rate zone (it was frozen at the snapshot it opened with), the PPG is pre-warmed while the app is open so the first BPM comes sooner, and live updates are published once a second (median frame 200 ms → 29 ms); the screen is top-anchored so distance, pace and steps are no longer below the fold (makni.cz e4ac4998); FIT files carry step cadence — per record over a 20 s window that never spans a pause, plus lap/session average (over moving time) and maximum, skipped for cycling (FitPub doubles it to steps per minute for foot sports); `file_id` names the app (`productName` "FP Wear"); uploads go out untitled with no GPX `<name>`, so FitPub names them from the start time ("Morning Walk") exactly like phone recordings instead of "Walk workout" (indoor workouts without GPS get a UTC-based time of day, same as the phone). A workout stopped with neither internet nor phone is no longer relayed at once (the Data Layer queues the put and delivers it on reconnect): if the watch then got internet first, the still-queued workout was uploaded directly *and* again by the phone — two identical activities, FitPub does not deduplicate. The sync worker now relays only to a connected phone (`NodeClient.connectedNodes`), otherwise retries, and never uploads directly once relayed (`shouldUploadDirectly`); a manual "Sync pending now" still clears both flags. Debug builds log to rotating files on the watch. The GPS battery-saving experiment was reverted. **Phone:** the profile card shows the user's header image behind the avatar; the profile heatmap is drawn like the web's (gradient heat layer, reloaded per viewport) and shows the server's generation status (`generationStatus`); indoor activities (Zwift, trainer, treadmill) get an "Indoor" badge and a placeholder instead of a map, and power (average/max watts) is shown when the file has it; feedback messages say they were sent from FP Client and link to the app's issue tracker. **Fix:** the timeline crashed while scrolling (`Key "…" was already used`) once an activity on it was boosted — the server lists timeline *events*, so a boosted activity appears as its `ORIGINAL` post and again as a `BOOST` with the same activity `id` (makni.cz public timeline, 2026-10-16; latent since server boosts `bcb75c89`, so 3.2.0 on Play is affected too). Rows are now keyed and deduplicated by `eventId` (falling back to `id` for older servers), and a `BOOST` card shows "🔁 <name> boosted · <time>" like the web (`TimelineBoostEventTest`). Server contract re-checked against FitPub `main` `0802bfc6` (`docs/API-COMPATIBILITY.md`). No server change. | ✅ done |
 | **3.3.1** | **Federated activities open in the app; Me tab freeze fix** — versionCode 59 / versionName `3.3.1` (`:wear` versionCode 60 / `3.3.1`, version-only bump to keep the pair matched); `FP-Client/3.3.1` (+ `FP-Client-Wear/3.3.1`) User-Agent. A patch: no new screen, the existing activity detail now covers remote activities. A remote timeline card no longer hands over to a Custom Tab (2.0.1) — the home instance still 404s on the mirror id, but the origin serves the same public `GET /api/web/activities/{id}` (+ comments, likes, boosts) anonymously (verified fitpub.social ⇄ makni.cz), so the detail (map, stats, comments) is read from the origin over a separate cookie-less OkHttp client (the session JWT never leaves the home instance; `RemoteActivity.origin` accepts only `https://host/activities/{uuid}`). Reactions and boosts still go to the home instance under the mirror id; the viewer's own reaction comes from the home likes list and both are kept locally after a toggle because the origin only learns of them by federation. Commenting is not supported by the server for remote targets, so the composer is replaced by "Open on <host>"; GPX download is hidden (route files need an account on the origin). Followers-only activities (need a signed fetch) and non-FitPub URIs fall back to the origin page in a Custom Tab. The author handle is qualified as `@user@origin`, so an origin username that also exists at home is no longer taken for the viewer's own activity (`RemoteActivityTest`). **Fix:** the Me tab froze (ANR) while scrolling through the activities under the heatmap — reported on 3.3.0, reproduced over adb on a motorola edge 70 fusion within three scroll cycles, stack `MapView.zoomToBoundingBox` → `Projection.getCloserPixel` from the heatmap's first framing. 3.3.0 started framing with a border (35 dp per side) from a `post`, which can run before the map's first layout when the list composes the card ahead of placing it (scrolling back up); osmdroid then computes `log(0 − 2 × border)` = NaN as the zoom, and `getCloserPixel` loops forever on it (`pPixel -= NaN` → 0, `while (0 >= 0)`). 3.2.0 framed without a border, where width 0 gives −∞, which osmdroid clamps. Framing now waits for the layout (`doOnLayout`), keeps the border below half the map and skips a non-finite box (`HeatmapFramingTest`); 15 cycles without an ANR on the same phone. Hardened alongside: the overview loads at zoom 8 (the server's 0.01° grid, as the web page's first load) instead of no zoom, which the server answers with its finest grid for the whole history; the heatmap is reloaded only when the activity count changed; the overlay renders once the map has settled and shifts the last layer while it pans (Leaflet.heat's `moveend` behaviour, `HeatLayerTest`). Power tiles are hidden when the server reports 0 W (fitpub.social sends 0 for rides without a power meter, which showed "Avg power 0 W / Max power 0 W"); zero now counts as absent, like steps. No server change. | ✅ done |
 | **3.3.2** | **Watch: a workout cut off by a reboot is saved** — versionCode 61 / versionName `3.3.2` (`:wear` versionCode 62 / `3.3.2`); `FP-Client/3.3.2` (+ `FP-Client-Wear/3.3.2`) User-Agent. A Xiaomi Watch 2 rebooted itself 6 minutes into a walk on 3.3.0 (boot reason plain `reboot`, no kernel panic, no FATAL in the watch log — the app did not cause it; the watch's own log and the track both end at the same second, then zeros the reboot never wrote). The app's part: a reboot kills the recording service without a STOP and a START_STICKY service is not restarted across a boot, so the session stayed RECORDING with nothing running — the tile kept saying "recording", the walk was never exported, and the next Start would have resumed it hours later instead of starting a new one. `WorkoutRebootReceiver` (BOOT_COMPLETED, and MY_PACKAGE_REPLACED so an update releases a workout already stuck) starts the service, which ends a workout begun before the last boot (`isInterruptedByReboot`) at its last recorded sample and queues it for upload; a Start does the same first if the receiver did not run. The zero-filled track tail is skipped as an undecodable line (`WorkoutRecordingStateTest`). Phone app: version-only bump. | ✅ done |
-| **4.0** | + Iteration 10 — Garmin watch support (release decision 2026-10-14): a Connect IQ companion app for Garmin watches, living in this repo under `garmin/`, that records workouts and hands them to the phone, which builds the FIT and uploads it like a Wear OS workout. See the Iteration 10 section below. | ⬜ |
+| **4.0.0** | + Iteration 10 — Garmin watch support (release decision 2026-10-14): a Connect IQ companion app for Garmin watches, living in this repo under `garmin/`, that records workouts and hands them to the phone, which builds the FIT and uploads it like a Wear OS workout. See the Iteration 10 section below. Version bump 2026-10-20: versionCode 63 / versionName `4.0.0` (`:wear` versionCode 64 / `4.0.0`, version-only bump to keep the pair matched); `FP-Client/4.0.0` (+ `FP-Client-Wear/4.0.0`) User-Agent; FP Wear `Version.NAME` 4.0.0, tester builds `fitpub-<device>_4_0_0.prg`. Licence Apache-2.0 from this release. Dormant Settings card hidden behind seven taps on the version in About (decision 2026-10-20, option b). Submitted to Google Play (pre-release) on 2026-10-22; its FP Wear support was removed again in 4.1.0. | ✅ done |
+| **4.1.0** | **Garmin Connect import, default visibility, Settings by category** — versionCode 65 / versionName `4.1.0` (`:wear` versionCode 66 / `4.1.0`); `FP-Client/4.1.0` (+ `FP-Client-Wear/4.1.0`) User-Agent. (1) Garmin watches through the **Garmin Connect API** (roadmap entry "Garmin Connect API"): a Garmin Connect™ card in Settings → Watches, tester-only (seven taps on the version in About) until Garmin approves more users; imports carry the "Garmin [device model]" attribution as their description. (2) **Default visibility** in Settings → Privacy, "Only me" by default, for every new activity: phone recordings, uploads, manual entries, Garmin Connect imports and Wear OS workouts (the phone mirrors it to the watch, `/fitpub/upload-defaults`; before, the watch always uploaded Public). (3) **Privacy zones in the activity detail**: the download button follows `routeDownloadAvailable`, no more empty GPX files, the owner gets a notice when the route is hidden from others, and zones are drawn on the owner's map. (4) **Settings** became a list of categories with sub-pages; the Me tab's action icons sit on a legible pill. (5) **FP Wear removed**: Iteration 10's Connect IQ app, its phone link and the Connect IQ companion SDK are gone; test builds drop its leftovers on start. Testers who had FP Wear on a watch lose that path with this update and get the Garmin Connect import only once Garmin grants more users. Also: watch workouts already on the server are taken over instead of re-uploaded (`09e109a`). | 🟡 |
 | **5.0** | + Iteration 7 (moved from 2.0 by release decision 2026-09-20, then from 4.0 to 5.0 by release decision 2026-10-14 to make room for Garmin support — translations still ship as the very last thing) — community-driven translations: full string externalization + per-app language selection (7a), Weblate project & sync (7b), CI guardrails (7c), store-listing translations (7d). See the Iteration 7 section below for the full sub-step plan. | ⬜ |
 
 ## Roadmap — one prompt per iteration
@@ -280,6 +281,158 @@ Prompts, in dependency order. Steps 1-2 are **server-side**
 > `PLAN.md`, then run `VERSION_CHECKLIST.md` — including the unsigned release build, since a
 > new Play Services dependency is exactly the kind of change that can break the F-Droid
 > buildserver."
+
+### Garmin Connect API (cloud import of native Garmin activities) — 🟡 relay and app built, testing on the maintainer's account
+
+**Why it matters.** Garmin reopened the Connect Developer Program on 2026-10-21 (DC Rainmaker,
+<https://www.dcrainmaker.com/2026/10/garmin-connect-api-revamps-connect-developer.html>). Through
+it FitPub could receive the native Garmin activity as a full `.FIT` from any Garmin watch: no FP
+Wear install, and no limit from the watch's app storage (the Forerunner 55 holds only about 1 h
+of FP Wear samples). This replaces the Iteration 10 rejection reasons "legal entities only" and
+"paused for new applicants". The server-to-server objection there still stands.
+
+**What changed (per the article; not yet checked against Garmin's own terms):**
+
+| Tier | Cost | Users | Notes |
+|---|---|---|---|
+| Personal | free | 1 (own data) | keys almost instantly |
+| Startup | free | up to 1,000 | + Courses & Training API (push routes/workouts to Garmin) |
+| Enterprise | $1,000 entry (credited), then a negotiated fee per monthly active user from **2027-04-01** | > 1,000 | + history backfill, Golf API, support |
+
+Personal and Startup both get JSON activity summaries and full `.FIT` files. Garmin reportedly
+strips some fields from API FIT files (VO2Max mentioned in the comments; unconfirmed). Connect IQ
+is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
+
+**Blockers to resolve before any code:**
+1. **Where it runs.** The Connect API is server to server (OAuth consumer secret, Garmin pushes to
+   a webhook). The secret cannot live in the APK and the phone cannot receive webhooks, so this
+   belongs on the FitPub server or in a small separate relay.
+   **Decided 2026-10-22 (maintainer): a separate relay**, working name `connect.paveljanicek.cz`,
+   in the maintainer's `dockerized-server` project next to `fitpub-push-relay` (Plan 8g), which
+   is the model: Go standard library only, payloads never logged, a `PRIVACY.md`, TLS through
+   Nginx Proxy Manager. This keeps the FitPub server unchanged, provided the relay hands
+   activities to FitPub as an ordinary upload with the user's own token. How the relay gets and
+   stores that token is still open.
+2. **Terms vs. federation.** A comment by the article's author says Garmin's terms forbid
+   passing API content to other entities without written permission. FitPub federates
+   activities over ActivityPub to other servers. Read the developer agreement and, if unclear,
+   ask Garmin in writing before building anything.
+
+**Design decisions 2026-10-22 (maintainer):**
+- **Linking.** OAuth with Garmin, started from FP Client: a Custom Tab opens the relay's
+  `/garmin/start`, Garmin redirects back to the relay's `/garmin/callback`, and the relay swaps
+  the code using its client secret and sends the user back to the app via a deep link. The
+  Garmin password never reaches the relay or the app. *To verify:* the docs are believed to
+  say OAuth 2.0 with PKCE.
+- **Token model B: the relay is a mailbox and the phone uploads.** The relay holds only the
+  Garmin tokens (and has to handle Garmin's deregistration webhook). It fetches the FIT on
+  Garmin's notification and queues it for the user's FP Client. The phone collects it and
+  uploads it with its own JWT through the existing Garmin inbox and `GarminUploadWorker` path
+  (calories, retries, the start-time duplicate check from `09e109a`). FitPub credentials never
+  leave the phone, and the relay knows nothing about FitPub instances. This mirrors
+  `fitpub-push-relay`: ntfy can wake the phone instantly, and the queued FIT should be
+  encrypted to a phone public key (as in Plan 8h) so only ciphertext rests on disk.
+  Rejected: the relay holding the FitPub JWT (a full-power credential on a third-party server;
+  the fixed-lifetime JWT would silently expire), and an upload-only FitPub token (it needs a
+  server change).
+- **Retention:** 30 days for an uncollected FIT, as for push mailboxes.
+- **Audience:** first the maintainer and the FP Wear testers, later anyone with a Garmin who
+  uploads to FitPub through FP Client (from a handful to a few dozen users). That needs the
+  **Startup** tier, because Personal covers one person. The 1,000-user cap is far off.
+- **Double sources** (FP Wear and the Connect API on the same workout) are unlikely. The
+  start-time duplicate check covers them, so no extra rule is needed.
+- **Long term, the relay replaces the Connect IQ app.** FP Wear (Iteration 10) is the
+  stop-gap until the relay works. Weigh this before investing in the Connect IQ Store
+  submission and further FP Wear features (10e).
+
+**Sharing and attribution (maintainer, 2026-10-22):**
+- **Default visibility setting.** Settings get a picker for the default visibility of
+  imported Garmin activities (Public / Followers / Local / Private). `GarminUploadWorker`
+  uses it instead of the hard-coded `ActivityVisibilities.PUBLIC`. Federation is then purely
+  the user's choice. *Decided in implementation (maintainer, 2026-10-22):* it is a general
+  setting, not a Garmin one: **Settings → Privacy → Default visibility**, default **Only me**,
+  for every new activity (phone recordings, file uploads, manual entries, FP Wear and Garmin
+  Connect imports) and Wear OS workouts. The watch has no visibility setting: the phone
+  mirrors the default to it (`WearUploadDefaultsSync`, message `/fitpub/upload-defaults`, sent
+  on change, on app start and in reply to every watch auth request, like the body profile).
+  The watch stamps it on each recorded workout (`UploadDefaultsSync`), for its direct upload
+  and for the relay. Until the phone has sent a value the watch uses `PRIVATE`. Before this
+  change the watch sent a fixed `"PUBLIC"`.
+- **Consent when linking.** Before the OAuth Custom Tab opens, the user confirms a sentence
+  along the lines of "I understand that activities imported from Garmin and shared from FitPub
+  will carry Garmin attribution by default." Linking stays blocked until they confirm. The
+  same screen links the relay's privacy policy.
+- **Attribution added automatically.** `GarminUploadWorker` appends an attribution line to
+  the activity description (for example "Recorded on Garmin <device model>", with the model
+  taken from the FIT `device_info` / `file_id` when present). Exact wording and logo use follow
+  <https://developer.garmin.com/brand-guidelines/overview/>. Check them before implementing.
+  Keep the existing title and description logic, and append rather than overwrite.
+
+**Status 2026-10-22:**
+- The app is registered with Garmin. The relay (`fitpub-garmin-relay` in `dockerized-server`)
+  is live at `connect.paveljanicek.cz` and verified against Garmin: OAuth 2.0 PKCE linking,
+  push notifications, the encrypted mailbox and the deregistration and permission notifications.
+  A file uploaded to Garmin Connect arrived byte-identical after decryption.
+- Activities created or uploaded on the Garmin Connect website (`manual`) are skipped by
+  decision. Only watch recordings are imported.
+- FP Client side (step 4) is built:
+  - a **Garmin Connect™** card in Settings → Watches, shown to testers (seven taps on the
+    version in About) or once a phone has a relay mailbox; it has the attribution
+    acknowledgement and the relay's privacy link, then a Custom Tab to Garmin's sign-in,
+    returning through `fpclient://garmin-connect`;
+  - imports use the general **Default visibility** (Settings → Privacy, default Only me);
+  - `GarminConnectWorker` every 15 minutes and on demand: decrypts the relay's files with the
+    existing `WebPushCrypto`, skips activities already on FitPub (start-time check), uploads
+    with the description "Garmin [device model]" (the attribution Garmin's API brand
+    guidelines ask for next to the title), maps the sport, then deletes the file on the relay.
+
+**Next steps, in order:**
+1. Link the maintainer's account from the app and import a real watch activity (needs a
+   Garmin watch; a file uploaded on the website is skipped as `manual`).
+2. Settle blocker 2 above (terms vs. federation) in writing with Garmin.
+3. Update the relay's `PRIVACY.md` (attribution, no AI use) and the app's privacy policy.
+4. Apply for **Startup** before the testers are linked, then open the card to them.
+
+### Garmin Connect: instant import and a useful notification (4.2.0) — ⬜ planned
+
+**Idea (maintainer, 2026-10-23).** The relay could push a notification as soon as Garmin delivers a FIT.
+
+**Today:**
+- The relay has the file seconds after the watch syncs.
+- `GarminConnectWorker` asks the relay only every 15 minutes (WorkManager's minimum), so imports can lag about 15 minutes.
+- The "Garmin activity imported to FitPub" notification does nothing when tapped.
+
+**Decided direction:** keep automatic uploads (the default visibility "Only me" keeps them private) and use the push only to speed things up:
+1. **Tap opens the activity.** `GarminNotifications.postImported` gets the new activity id; tapping opens its detail, where title, description and visibility can be changed. Small, app only.
+2. **ntfy wake-up from the relay.** The phone gives the relay its ntfy topic, the same private topic instant delivery already subscribes to (`InstantDeliveryService`). After a FIT is queued, the relay publishes an empty message tagged `fitpub-garmin`, and the app enqueues `GarminConnectWorker` at once.
+   - No activity data travels through ntfy. The relay's PRIVACY.md already announces an optional wake-up.
+   - It helps only users with instant delivery switched on; everyone else keeps the 15-minute check.
+   - Not Firebase: push stays independent of Google, as for notifications (Iteration 8).
+3. *Optional, later:* an **"Ask before uploading"** switch. Imports wait in a list until the user confirms or edits them. A bigger piece, needed only if users ask for it.
+
+### Privacy zones in the activity detail (4.1.0) — ✅ done (not yet tried on a phone)
+
+**Problem (maintainer, 2026-10-23).** A route that lies inside a privacy zone behaves badly.
+- The FitPub server builds route downloads strictly without points inside the owner's privacy zones, for everyone including the owner (`ActivityRouteService.createRoute`). With fewer than two visible points it refuses the download and sends `routeDownloadAvailable: false`.
+- The owner's map shows the whole route, other people's maps only the part outside the zones.
+- The web hides its download button on `routeDownloadAvailable` and draws the owner's zones as circles. The "hidden for others" hint appears only on hover.
+- FP Client ignored `routeDownloadAvailable` and showed the download button anyway. Worse, it asked for a save location first (Storage Access Framework creates the file at once) and fetched the GPX afterwards, so a refused download left an empty 0-byte file.
+- FP Client never told the owner that the route, or part of it, is hidden from others.
+
+**Plan (no server change):**
+1. **Download.** Show the button only when `routeDownloadAvailable == true`, like the web. Fetch the GPX first and only then offer the save location, so a refused download never leaves an empty file and its error shows before any picker.
+2. **Notice for the owner** below the map, computed in the app from `privacyZones` (sent to the owner only) and the track points:
+   - the whole route inside zones: others see the activity without a map, and the route cannot be downloaded; the original file stays available in Settings → Data → Export my data;
+   - part of the route: that part is hidden from others.
+   The server offsets each zone slightly per activity (10–15 % of the radius) to obscure its centre, so the app's split is an estimate and the wording says so.
+3. **Zones on the owner's map**, drawn as translucent circles like the web.
+
+Points 1 and 2 are done (2026-10-23):
+- `RoutePrivacy.coverage` returns NONE, PARTIAL or FULL; it is unit-tested.
+- `PrivacyZoneNotice` sits below the map, owner only.
+- The download button is gated on `routeDownloadAvailable`, and the GPX is fetched before the save picker opens.
+
+Point 3 is done too (2026-10-23). `MapCanvas` draws the owner's zones as translucent red circles (the web's colours) under the route. Taps fall through to the map, and the zoom still fits the route alone.
 
 ### Iteration 1 — Make it compile ✅
 > "FitPub Android does not compile — `./gradlew assembleDebug` reports 28 Kotlin
@@ -941,22 +1094,60 @@ Notes:
 > See docs/WEAR.md → "Upload format and steps". Verify with a few minutes of real walking: the watch
 > count rises live, and the uploaded activity's `metrics.totalSteps` is roughly that count.
 
-### Iteration 10 — Garmin watch support (Connect IQ companion app) — ships as **v4.0**
+### Iteration 10 — Garmin watch support (Connect IQ companion app) — ❌ removed 2026-10-22
+
+> **Superseded (maintainer, 2026-10-22).** Garmin watches are supported through the Garmin
+> Connect API instead (roadmap entry "Garmin Connect API"). That route covers every Garmin watch
+> and needs no watch app or Connect IQ Store listing. The Connect IQ project (`garmin/`), the
+> phone-side FP Wear link (`GarminLink`, `GarminPullWorker`, `GarminUploadWorker`,
+> `GarminInboxStore`, `GarminFitWriter`, `GarminProtocol`, `GarminWatchCard`), the Connect IQ
+> companion SDK and the tethered-simulator build flag were removed. Test builds clean up FP Wear's
+> leftover data on start. The section below is kept as the record of what was tried.
+
 Goal: let a Garmin watch record a workout and hand it to FP Client on the phone, which builds the
 FIT and uploads it to FitPub exactly like a Wear OS workout (calories, steps and the always-FIT
 rule from 9h–9j included). The hard constraint still applies: **no change to the FitPub server
 API**.
 
+**Goal, made explicit 2026-10-19:** a Garmin owner finishes and saves a workout on the watch, and it
+appears on FitPub **automatically, in the background** — no need to open FP Client. The phone is the
+bridge (it holds the session and uploads with its own JWT), as for Wear OS. No sign-in happens on
+the Garmin side at all.
+
 **Decision 2026-10-14 — approach: a Connect IQ app.** Alternatives were researched and rejected:
 
 | Option | Why not |
 |---|---|
-| Garmin Connect Developer Program (Activity / Health API) | Server-to-server push to a backend — FP Client has none and the FitPub server may not change. Approval is for legal entities only (individual applications are rejected), and the program was reported **paused for new applicants** in 2026-09. |
+| Garmin Connect Developer Program (Activity / Health API) | Server-to-server push to a backend — FP Client has none and the FitPub server may not change. Approval is for legal entities only (individual applications are rejected), and the program was reported **paused for new applicants** in 2026-09. *Update 2026-10-22: reopened with free Personal/Startup tiers; see "Garmin Connect API" in the roadmap.* |
 | Read Garmin workouts from Android **Health Connect** | Garmin Connect writes exercise summaries to Health Connect (one-way, since mid-2025) but **no GPS route**, so FitPub would get map-less activities. Heart rate needs `android.permission.health.READ_HEART_RATE` — the permission Google Play review already refused (see 9i). Every `health.READ_*` type is a separate Play Console declaration. |
 | Manual: export the original FIT from Garmin Connect (web) and upload it in FP Client | Works today with full data (route, HR, calories, steps) through the 1.x file upload, but it is manual. Kept as the documented fallback for users; not the 4.0 feature. |
 
 A Connect IQ app (Monkey C) runs on the Garmin watch itself, is open to individual developers,
 and talks to an Android app through Garmin's Connect IQ Mobile SDK — the same shape as `:wear`.
+
+**Note 2026-10-19 — Connect IQ needs no Garmin approval to build or run.** The SDK (installed via
+the SDK Manager from developer.garmin.com → Connect IQ → SDK, plus the Monkey C VS Code extension),
+the simulator and the Connect IQ Mobile SDK are free downloads behind a plain Garmin account and a
+licence click-through; the developer signing key is generated locally. A built `.prg` side-loads
+onto your own watch over USB (`/GARMIN/APPS`) with no review. Garmin approval enters only at
+**publishing to the Connect IQ Store** (free developer account, per-app store review — the
+Garmin-side counterpart of the Wear OS review on Play), which 10e needs for other users; side-loaded
+apps also lack Garmin Connect app settings. This is unrelated to the Garmin Connect Developer
+Program in the table above (server-to-server cloud API, legal entities only). Still open for 10b:
+whether Mobile SDK messaging through the Garmin Connect phone app works with a side-loaded watch
+app or only with a Store-installed one.
+
+**Decision 2026-10-19 — the watch app records the workout itself *and* saves a native Garmin
+activity.** The user starts "FP" on the watch instead of the built-in Run/Bike activity. Alongside
+streaming samples to the phone, the app records a native session (`ActivityRecording.createSession()`
+→ `save()`), whose FIT Garmin syncs to Garmin Connect as usual — so the user loses nothing on the
+Garmin side and the workout reaches FitPub as well. Other paths considered:
+
+| Option | Verdict |
+|---|---|
+| Built-in Garmin activity, picked up on the watch | Impossible: a Connect IQ app has no access to the native activity FIT files on the watch. |
+| Connect IQ **data field** inside the built-in activity | Rejected: data fields may not use `Communications`; only a background service may, at most every 5 min for 30 s, and data-field memory is tiny — a whole track cannot be moved that way. |
+| Built-in activity → Garmin Connect cloud → relay on the maintainer's VPS (`python-garminconnect`) → phone | Deferred, optional add-on at most: unofficial, reverse-engineered login that Garmin breaks (garth died 2026-06), and the relay must hold the user's Garmin refresh token, so it only suits a single self-hosting user. Not part of v4.0. |
 
 **Decision 2026-10-14 — repo layout: same repository, top-level `garmin/`.**
 - `garmin/` is a plain Connect IQ project (`manifest.xml`, `monkey.jungle`, `source/`,
@@ -975,23 +1166,135 @@ and talks to an Android app through Garmin's Connect IQ Mobile SDK — the same 
   `.github/workflows/android.yml` gets `paths-ignore: garmin/**`, and a separate Garmin workflow
   is added once the SDK can be installed in CI (likely a prebuilt Connect IQ SDK Docker image).
 
+**🚩 Gate — a real Garmin watch (noted 2026-10-19).** The maintainer owns no Garmin device, so
+development runs blind: the Connect IQ simulator plus the Mobile SDK's simulator (adb-tethered)
+mode cover 10a, 10c and 10d — UI, message protocol, chunked transfer, FIT build and upload. What
+the simulator cannot answer, because it bypasses the Garmin Connect phone app: the 10b
+background-delivery question (does a message reach a FP Client whose process is not running),
+messaging with a side-loaded app, real GPS / heart rate, battery drain and on-device memory limits.
+~~Therefore nothing ships (10e, Connect IQ Store, FP Client 4.0) until verified on a physical
+Garmin.~~ **Gate rewritten 2026-10-19 (maintainer decision):** the maintainer keeps **one line of
+development, 4.x**, and expects that a tester may never turn up — so the phone app is no longer
+held back by the watch:
+
+- **FP Client 4.0 ships** with the Garmin link built in but **dormant**: on phones without Garmin
+  Connect it does nothing at all; with Garmin Connect it only registers itself and probes at most
+  once a day whether FP Wear is installed. Pulls, chunk requests, the two 15-minute workers and
+  the Settings card ("experimental") appear only once FP Wear is found or sends something.
+  A failing Connect IQ SDK can never take the app down (start guarded). So the link costs nothing
+  for everyone else, yet is ready the day a FP Wear user shows up.
+- **FP Wear (the watch app) stays unpublished — no Connect IQ Store — until the full loop
+  (record → background delivery → FitPub upload) has passed on at least one physical Garmin**
+  paired with a phone running Garmin Connect: a tester's watch (side-loaded `.prg`) or a cheap
+  second-hand one. If it fails there, 10b–10d are redesigned before the Store, not patched after.
+
 **Sub-steps (one prompt each; verify Garmin's current SDK docs at the start of 10a — nothing below
 has been prototyped yet):**
-- **10a — Scaffolding.** `garmin/` Connect IQ project (target device list incl. the maintainer's
-  watch), `.gitignore` entries, CI path filters, `docs/GARMIN.md` (toolchain setup, simulator,
-  side-loading to a real watch). Verify: an empty app builds and runs in the simulator.
-- **10b — Phone ↔ Garmin link.** Connect IQ Mobile SDK in `:app`: device discovery, "app installed
-  on watch" check, message send/receive, a pinned message contract tested on both sides. To verify
-  first: whether the SDK needs the Garmin Connect app on the phone, its licence/distribution terms,
-  and what it adds to the merged manifest (Play permission declarations).
+- **10a — Scaffolding.** ✅ done 2026-10-19. `garmin/` Connect IQ project (target device list —
+  no maintainer's watch exists, so six installed profiles spanning 240–454 px MIP/AMOLED, see
+  `docs/GARMIN.md`), `.gitignore` entries, CI path filters, `docs/GARMIN.md` (toolchain setup,
+  simulator, side-loading to a real watch). Verified: builds for all six targets with SDK 9.2.0 and
+  runs in the simulator (fēnix 8 47 mm, fēnix 7S). On Ubuntu 24.04+ the SDK Manager and simulator
+  need old WebKit/libsoup libraries, so they run in a small Ubuntu 22.04 container
+  (`garmin/tools/`).
+- **10b — Phone ↔ Garmin link, starting with a background-delivery prototype.** Automatic upload
+  is the goal, so the riskiest question is answered first, before any recording UI: **does a
+  message reach FP Client when its process is not running?** The Mobile SDK talks through the
+  Garmin Connect phone app, and delivery to a dead process is not guaranteed. Design the link so it
+  never depends on luck:
+  - the watch keeps each finished workout until the phone acknowledges it (like
+    `WearWorkoutInboxStore`), retrying on its side;
+  - the phone also pulls: a periodic worker (~15 min) initialises the SDK and asks the watch
+    "anything pending?" — which needs the watch to answer from a **background service** even when
+    the FP app is closed (`registerForPhoneAppMessageEvent`); verify that too.
+  If neither push nor pull works in the background, the "automatic" goal must be revisited before
+  10c. Then the rest: device discovery, "app installed on watch" check, a pinned message contract
+  tested on both sides. Also verify: whether messaging works with a **side-loaded** watch app or
+  only a Store-installed one; that the SDK needs the Garmin Connect app on the phone (expected —
+  every Garmin user has it), its licence/distribution terms, and what it adds to the merged
+  manifest (Play permission declarations).
+
+  **Status 2026-10-19: 🟡 implemented, simulator-tested, NOT verified on a real watch** (gate
+  above). Details and the test procedure: `docs/GARMIN.md` → "Phone link (10b)". Findings from
+  reading SDK 2.4.0 (`ciq-companion-app-sdk`, Maven Central, no transitive dependencies): it adds
+  no permissions, only a `<queries>` entry for Garmin Connect, an exported
+  `IQGarminBindingService` (caller signature-checked against Garmin) and a dialog activity. That
+  service is the background answer: Garmin Connect binds it — starting a dead FP Client — but a
+  message arriving before the SDK's async init is **dropped while reported as delivered**, so
+  push alone is unreliable by design. Implemented accordingly: watch queue + explicit `ack`,
+  phone `pull` whenever its SDK becomes ready and every 15 min, watch background service for
+  `pull`/`ack` plus a 5-min retry timer. Wire contract pinned by `GarminProtocolTest` ⇄
+  `ProtocolTest.mc`. Verified: both sides build (watch at type-check level 3 for all six targets,
+  phone debug + R8 release), unit tests pass on both sides, and in the simulator a test workout
+  that cannot be sent stays queued. Not done in 10b: the "app installed on watch" check
+  (`getApplicationInfo`, belongs to the 10e UX), a read of the SDK licence terms (before 10e), and
+  an end-to-end run with a phone. **Tethered run attempted 2026-10-19 and blocked:** the Linux
+  simulator segfaults on the first watch → phone `transmit` over adb (Garmin bug CIQQA-4579; also
+  with SDK 8.4.1, also against a silent TCP listener, also with a plain string) — so watch → phone
+  can only be verified on a real watch, which raises the stakes of the gate above. The run did
+  find one phone bug, fixed: in TETHERED mode `sendMessage` writes the adb socket synchronously and
+  threw `NetworkOnMainThreadException`; sends now go to one background thread. The watch app is
+  named "FP Wear", as on Wear OS.
 - **10c — Watch recording.** Monkey C: activity-type picker, GPS position, heart rate, steps,
   start / pause / resume / stop, readable on small round and square screens; Connect IQ app
-  permissions (`Positioning`, `Sensor`, `Communications`, …) kept to the minimum. Open question: also
-  record a native `ActivityRecording` session (shows up in Garmin Connect), or only stream samples
-  to the phone.
+  permissions (`Positioning`, `Sensor`, `Communications`, `Fit`, …) kept to the minimum. Records a
+  native `ActivityRecording` session **and** buffers samples for the phone (decision above).
+  Verify: whether a Connect IQ-recorded session gets Training Effect and the other Garmin metrics
+  in Garmin Connect (the docs do not say), and the memory / storage limits on the maintainer's
+  watch — a one-hour GPS workout is 3,600+ one-second samples.
+
+  **Status 2026-10-19: 🟡 implemented, simulator-tested, not verified on a real watch** (a tester
+  with Garmin watches is lined up; procedure in `docs/GARMIN.md` → "Field test"). Activity list
+  (RUN/WALK/HIKE/BIKE/OTHER, same keys as Wear OS) → workout screen (moving time, distance, heart
+  rate, GPS state) → START start/pause/resume, pause menu Resume/Save/Discard, BACK never silently
+  ends a workout. Native `ActivityRecording` session (decision above) plus 1 Hz samples
+  `[s, latE6, lonE6, altDm, hr, steps]` in ~4 KB Storage chunks. Limits read from the device
+  profiles: watch app 768 KB, **background 64 KB** (hence queue entries carry only the summary,
+  samples live in separate keys), app storage 10 MB on all six targets (1 h ≈ 100 KB — the
+  storage worry above is settled). Save queues the summary {sport, duration, distance}; the phone
+  parses it and notifies "Run · 5.23 km · 31:20 from …"; contract tests extended on both sides.
+  Verified in the simulator: all six targets build at type-check level 3, 5 watch + 7 phone
+  Garmin unit tests pass, full flow open → start → pause → save → queued → back to the list. Not
+  verifiable there: real GPS/heart rate, the native activity reaching Garmin Connect, Training
+  Effect — all for the field test. In 10c the ack also deletes the samples; 10d changes that.
 - **10d — Transfer & upload.** Chunked, resumable transfer of the recorded samples to the phone
   (Connect IQ messages are size-limited); the phone builds the FIT with the existing Garmin FIT SDK
   dependency, applies `CalorieFitAmender` and stride totals, and uploads through the existing
   pipeline with a pending/retry inbox like `WearWorkoutInboxStore`.
+
+  **Status 2026-10-19: 🟡 implemented, unit-tested, not verified on a real watch.** Protocol v1
+  gains `chunk` {id, index, data} and `need` {id, index}; the summary carries the chunk count;
+  `ack` now means "summary and every chunk stored on the phone". The watch pushes chunks one at a
+  time after Save (`ChunkPusher`); the phone stores them idempotently and requests gaps one by one
+  (15 s after the last arrival, on SDK start, every 15 min), the watch's 64 KB background service
+  answering each `need` with a single chunk (chunks shrunk to 60 samples ≈ 2 KB for that). The
+  phone builds the FIT (`GarminFitWriter`, same record shape as the Wear OS writer, duplicated per
+  docs/WEAR.md decision 1; distance skips pause gaps; moving time and total distance from the
+  watch's native session) and `GarminUploadWorker` uploads it like a Wear OS workout (calories,
+  PUBLIC, type fix-up, retry/park, tombstones against double uploads). Verified: 6 watch tests,
+  all 464 phone unit tests (Garmin: protocol, chunk parsing, completeness, FIT built and decoded
+  back with the FIT SDK — records, pause gap, strides, cycling without cadence, indoor), lint,
+  R8 release; the watch builds for all six targets at type-check level 3. Not verifiable without
+  a watch: the transfer itself (the simulator cannot transmit, CIQQA-4579) and message-size limits
+  on real hardware. Garmin workouts are not yet shown in the phone's pending-upload banner (10e).
 - **10e — Hardening & release.** Battery and memory limits on the watch, Connect IQ Store listing,
-  FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs.
+  FP Client 4.0 release (`VERSION_CHECKLIST.md`), docs. Per the rewritten gate above, only the
+  FP Wear Store submission waits for a physical Garmin; FP Client 4.0 does not.
+
+  **Split 2026-10-19.** *Part 1 — everything that does not need a watch — 🟡 done:* Settings →
+  "Garmin watch" card (Garmin Connect state, paired watches, FP Wear installed or not via
+  `getApplicationInfo`, pending workouts with the newest error, Sync now), a Garmin banner above
+  every tab, the watch's sync row telling how long ago the phone last answered, the licence read
+  (proprietary companion SDK — `docs/GARMIN.md` → "Licence and distribution"), a privacy-policy section
+  draft (the agreement requires a policy and location opt-in) and a Store listing draft with a
+  working `.iq` export (138 KB). **Decision 2026-10-19 (maintainer):** F-Droid is abandoned and
+  the project moves from AGPL-3.0 to Apache-2.0 from 4.0 on (sole copyright holder; 3.x releases
+  stay AGPL) — this settles both open licence questions. **Dormant link (2026-10-19):** the
+  readiness review before 4.0 found three issues, fixed: every Garmin Connect user would have run
+  the 15-minute pull (~25 s awake each time) and the SDK chatter for an app they cannot get → now
+  dormant until FP Wear is found (persisted `fitpub_garmin_link.active`, daily probe); an SDK
+  throwing in `Application.onCreate` would have crashed the app → guarded; the Settings card was
+  shown to everyone → only when active or something is pending, titled "experimental". Smoke-
+  tested on the maintainer's phone (no Garmin Connect): starts, no Garmin work scheduled.
+  *Part 2:* FP Client 4.0 release (version bump, `VERSION_CHECKLIST.md`) — not gated. *After a
+  field test only:* battery and memory on real hardware, screenshots, Store submission of FP Wear.

@@ -57,6 +57,8 @@ import kotlinx.coroutines.launch
 class CreateViewModel(
     private val activities: ActivityRepository,
     private val activitiesVersion: MutableStateFlow<Int>,
+    /** The default visibility from Settings → Privacy: the upload form's preselection and the manual entry's visibility. */
+    val defaultVisibility: String = com.fpclient.android.data.settings.DefaultVisibilityStore.DEFAULT,
 ) : ViewModel() {
 
     data class UiState(
@@ -101,7 +103,9 @@ class CreateViewModel(
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { CreateViewModel(container.activityRepository, container.activitiesVersion) }
+            initializer {
+                CreateViewModel(container.activityRepository, container.activitiesVersion, container.defaultVisibilityStore.visibility.value)
+            }
         }
     }
 }
