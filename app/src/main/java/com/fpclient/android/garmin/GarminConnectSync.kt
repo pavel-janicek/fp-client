@@ -6,8 +6,10 @@ import com.fpclient.android.data.network.isPermanentUploadRejection
 import com.fpclient.android.data.repository.ActivityRepository
 import com.fpclient.android.data.session.SessionStore
 import com.fpclient.android.data.settings.DefaultVisibilityStore
+import com.fpclient.android.notifications.PushSubscription
 import com.fpclient.android.notifications.WebPushCrypto
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -27,6 +29,8 @@ class GarminConnectSync(
     private val sessionStore: SessionStore,
     private val defaultVisibility: DefaultVisibilityStore,
     private val cacheDir: File,
+    /** Instant delivery's ntfy topic, handed to the relay for the wake-up (PLAN 4.2.0). */
+    private val pushSubscription: StateFlow<PushSubscription?>,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -107,7 +111,10 @@ class GarminConnectSync(
         }
         when (val status = refreshStatus()) {
             is ApiResult.Error -> return if (status.statusCode == 404) Outcome.DONE else Outcome.RETRY
-            is ApiResult.Success -> if (!status.data.linked) return Outcome.DONE
+            is ApiResult.Success -> {
+                if (!status.data.linked) return Outcome.DONE
+                syncWake(mailbox, status.data.wake)
+            }
         }
         val files = when (val listed = client.files(mailbox)) {
             is ApiResult.Error -> return Outcome.RETRY
@@ -193,6 +200,20 @@ class GarminConnectSync(
         return finish(remaining, error, Outcome.DONE)
     }
 
+    /**
+     * Keeps the relay's wake-up topic in step with instant delivery: the topic while it is on,
+     * none while it is off. Best effort: a failure leaves the 15-minute check in place and is
+     * retried on the next sync.
+     */
+    private suspend fun syncWake(mailbox: GarminConnectMailbox, relayWake: Boolean) {
+        val desired = pushSubscription.value?.takeIf { it.instantEnabled }?.ntfyTopic
+        when (wakeAction(desired, store.wakeTopic, relayWake)) {
+            WakeAction.SET -> if (client.setWake(mailbox, desired!!) is ApiResult.Success) store.setWakeTopic(desired)
+            WakeAction.CLEAR -> if (client.clearWake(mailbox) is ApiResult.Success) store.setWakeTopic(null)
+            WakeAction.NONE -> Unit
+        }
+    }
+
     private fun finish(remaining: Int, error: String?, outcome: Outcome): Outcome {
         store.updateStatus {
             it.copy(waitingFiles = remaining, lastSyncEpochMs = System.currentTimeMillis(), lastError = error)
@@ -200,7 +221,24 @@ class GarminConnectSync(
         return outcome
     }
 
+    enum class WakeAction { NONE, SET, CLEAR }
+
     companion object {
+        /** The ntfy tag the relay's wake-up carries; InstantDeliveryService starts a sync on it. */
+        const val WAKE_TAG = "fitpub-garmin"
+
+        /**
+         * What the relay needs to hear about the wake-up: [desired] is instant delivery's topic
+         * (null while it is off), [sent] the topic last handed over, [relayWake] what the relay
+         * reports. A relay that lost the topic (restart from an old state, a new mailbox) is
+         * told again.
+         */
+        internal fun wakeAction(desired: String?, sent: String?, relayWake: Boolean): WakeAction = when {
+            desired != null && (desired != sent || !relayWake) -> WakeAction.SET
+            desired == null && (sent != null || relayWake) -> WakeAction.CLEAR
+            else -> WakeAction.NONE
+        }
+
         private fun extension(fileType: String): String = when (fileType.uppercase()) {
             "GPX" -> "gpx"
             "TCX" -> "tcx"

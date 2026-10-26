@@ -415,6 +415,12 @@ Point 1 is done (2026-10-26, not yet tried on a phone):
 - `GarminNotifications.postImported` opens `/activities/<id>` through `PushNotifications.EXTRA_OPEN_PATH`, the path mailbox pushes already use.
 - Each import gets its own notification, tagged with the activity id and with a request code of its own, so two imports in one sync each open their own detail.
 
+Point 2 is done (2026-10-26, not yet tried on a phone; the relay side is in dockerized-server `fitpub-garmin-relay/wake.go`):
+- Each Garmin sync reconciles the wake-up: with instant delivery on it hands the ntfy topic to the relay (`PUT /garmin/mailbox/{id}/wake`); with it off it takes the topic back (`DELETE …/wake`). The mailbox status reports `wake`, so a relay that lost the topic gets it again (`GarminConnectSync.wakeAction`).
+- Switching instant delivery on or off in Settings starts a sync, so the relay learns about it at once.
+- `InstantDeliveryService` treats a message tagged `fitpub-garmin` as "collect the mailbox now": it enqueues `GarminConnectWorker` and posts nothing.
+- The relay publishes only to its own `RELAY_NTFY_URL`, with the constant body "garmin" at minimum priority, and never logs the topic. Without `RELAY_NTFY_URL` it answers 503 and the phone stays on the 15-minute check.
+
 ### Privacy zones in the activity detail (4.1.0) — ✅ done (not yet tried on a phone)
 
 **Problem (maintainer, 2026-10-23).** A route that lies inside a privacy zone behaves badly.

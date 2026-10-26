@@ -134,6 +134,7 @@ class AppContainer(context: Context) {
     val garminConnectSync: GarminConnectSync by lazy {
         GarminConnectSync(
             garminConnectStore, GarminConnectClient(), activityRepository, sessionStore, defaultVisibilityStore, context.cacheDir,
+            pushSubscriptionStore.subscription,
         )
     }
 

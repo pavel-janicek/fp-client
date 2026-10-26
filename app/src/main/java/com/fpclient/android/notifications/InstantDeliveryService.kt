@@ -1,5 +1,7 @@
 package com.fpclient.android.notifications
 
+import com.fpclient.android.garmin.GarminConnectSync
+import com.fpclient.android.garmin.GarminConnectWorker
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -315,6 +317,13 @@ class InstantDeliveryService : LifecycleService() {
     private suspend fun deliver(message: NtfyEvent.Message, target: InstantTarget) {
         if (!deduper.accept(message.id)) return
         val container = (application as? FitPubApplication)?.container ?: return
+        if (GarminConnectSync.WAKE_TAG in message.tags) {
+            // The Garmin relay queued an activity (PLAN 4.2.0): no payload, nothing to post;
+            // collect the mailbox now instead of on the next 15-minute check.
+            GarminConnectWorker.enqueue(this)
+            container.pushSubscriptionStore.setLastNtfyMessageId(deduper.lastId)
+            return
+        }
         val payload = container.pushRepository.decryptPayload(message.message, target.subscription)
             ?: return
         val tag = message.tags.firstOrNull { NtfyMessages.isPayloadTag(it) } ?: payload.tag

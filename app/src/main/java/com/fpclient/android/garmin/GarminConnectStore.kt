@@ -57,6 +57,7 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
         const val LAST_SYNC = "last_sync"
         const val LAST_ERROR = "last_error"
         const val TESTING = "testing"
+        const val WAKE_TOPIC = "wake_topic"
     }
 
     private val mutableMailbox = MutableStateFlow(readMailbox())
@@ -110,13 +111,20 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
         mutableMailbox.value = mailbox
     }
 
+    /** The ntfy topic last handed to the relay for the instant wake-up, or null (PLAN 4.2.0). */
+    val wakeTopic: String? get() = prefs.getString(Keys.WAKE_TOPIC, null)
+
+    fun setWakeTopic(topic: String?) {
+        prefs.edit().apply { if (topic == null) remove(Keys.WAKE_TOPIC) else putString(Keys.WAKE_TOPIC, topic) }.apply()
+    }
+
     /** Forgets the mailbox, its keys and the cached status. */
     fun clear() {
         prefs.edit()
             .remove(Keys.RELAY).remove(Keys.ID).remove(Keys.TOKEN)
             .remove(Keys.PUBLIC_KEY).remove(Keys.PRIVATE_KEY).remove(Keys.AUTH_SECRET)
             .remove(Keys.LINKED).remove(Keys.ACTIVITY_EXPORT).remove(Keys.LINK_LOST)
-            .remove(Keys.WAITING).remove(Keys.LAST_SYNC).remove(Keys.LAST_ERROR)
+            .remove(Keys.WAITING).remove(Keys.LAST_SYNC).remove(Keys.LAST_ERROR).remove(Keys.WAKE_TOPIC)
             .commit()
         mutableMailbox.value = null
         mutableStatus.value = GarminConnectStatus()
