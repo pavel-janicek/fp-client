@@ -95,10 +95,10 @@ class GarminConnectSync(
     }
 
     /**
-     * Uploads every activity waiting on the relay. [onImported] gets a short text per activity
-     * that reached FitPub.
+     * Uploads every activity waiting on the relay. [onImported] gets a short text and the new
+     * FitPub activity id per activity that reached FitPub.
      */
-    suspend fun sync(onImported: (String) -> Unit = {}): Outcome {
+    suspend fun sync(onImported: (text: String, activityId: String) -> Unit = { _, _ -> }): Outcome {
         val mailbox = store.mailbox.value ?: return Outcome.DONE
         val session = sessionStore.currentSession()
         if (!session.isLoggedIn) {
@@ -176,7 +176,7 @@ class GarminConnectSync(
                     }
                     client.ack(mailbox, relayFile.id)
                     remaining--
-                    onImported(listOfNotNull(title ?: "Workout", attribution(meta.deviceName)).joinToString(" · "))
+                    onImported(listOfNotNull(title ?: "Workout", attribution(meta.deviceName)).joinToString(" · "), activity.id)
                 }
                 is ApiResult.Error -> {
                     val code = result.statusCode

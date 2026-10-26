@@ -410,6 +410,11 @@ is unchanged and stays free, so FP Wear (Iteration 10) is unaffected.
    - Not Firebase: push stays independent of Google, as for notifications (Iteration 8).
 3. *Optional, later:* an **"Ask before uploading"** switch. Imports wait in a list until the user confirms or edits them. A bigger piece, needed only if users ask for it.
 
+Point 1 is done (2026-10-26, not yet tried on a phone):
+- `GarminConnectSync.sync` hands each import's FitPub activity id to `onImported`.
+- `GarminNotifications.postImported` opens `/activities/<id>` through `PushNotifications.EXTRA_OPEN_PATH`, the path mailbox pushes already use.
+- Each import gets its own notification, tagged with the activity id and with a request code of its own, so two imports in one sync each open their own detail.
+
 ### Privacy zones in the activity detail (4.1.0) — ✅ done (not yet tried on a phone)
 
 **Problem (maintainer, 2026-10-23).** A route that lies inside a privacy zone behaves badly.

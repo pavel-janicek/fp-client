@@ -22,8 +22,8 @@ class GarminConnectWorker(appContext: Context, params: WorkerParameters) : Corou
 
     override suspend fun doWork(): Result {
         val container = FitPubApplication.container(applicationContext)
-        val outcome = container.garminConnectSync.sync { text ->
-            GarminNotifications.postImported(applicationContext, text)
+        val outcome = container.garminConnectSync.sync { text, activityId ->
+            GarminNotifications.postImported(applicationContext, text, activityId)
             container.activitiesVersion.value += 1
         }
         return if (outcome == GarminConnectSync.Outcome.RETRY) Result.retry() else Result.success()
