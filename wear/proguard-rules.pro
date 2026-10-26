@@ -20,3 +20,14 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
+
+# Room, required by WorkManager (WorkoutSyncScheduler, WatchWorkoutSyncWorker). Same rule and
+# reason as app/proguard-rules.pro: WorkManager's androidx.startup initializer creates
+# WorkDatabase_Impl reflectively, R8 strips the constructor it never sees called, and the
+# minified watch app dies on every launch with
+#   NoSuchMethodException: androidx.work.impl.WorkDatabase_Impl.<init> []
+# (Play rejected wear versionCode 62 for exactly this: "Your app crashed after installation").
+-keep class * extends androidx.room.RoomDatabase {
+    <init>();
+}
+-dontwarn androidx.room.paging.**

@@ -12,6 +12,14 @@ Features:
 * Privacy zones, batch import, notification feed
 * Guest mode for browsing a federated timeline without an account
 
+Wear OS watch app (FitPub Wear):
+* Record runs, rides, hikes, walks and other workouts on the watch with GPS,
+  heart rate and steps; no phone needed during the workout
+* Quick-start tile: add the "FP Wear" tile to your watch's tiles to start
+  your most-used workout with one tap, or pick another activity
+* Sign in from the paired phone; recorded workouts upload when the watch is
+  back online or through the phone
+
 No third-party tracking, no crash-reporting services, no proprietary
 libraries: the app identifies itself to servers with the User-Agent
 "FP-Client/<version>".
