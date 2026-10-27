@@ -62,7 +62,9 @@ you ask questions and report results. The group address is **fp-client@googlegro
    The test version can take an hour or so to appear.
 3. Open FP Client, sign in to FitPub and allow notifications.
 
-## Step 3: Switch on Garmin testing
+## Step 3: Switch on Garmin testing (4.1.0 only)
+
+From FP Client 4.2.0 the Garmin Connect™ card is always shown: skip to step 4.
 
 1. In FP Client, go to **Settings → About**.
 2. Tap the line **Version 4.1.0 (…)** seven times. A short message says **Garmin testing on**.

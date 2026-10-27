@@ -56,7 +56,7 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
         const val WAITING = "waiting_files"
         const val LAST_SYNC = "last_sync"
         const val LAST_ERROR = "last_error"
-        const val TESTING = "testing"
+        const val OBSOLETE_TESTING = "testing"
         const val WAKE_TOPIC = "wake_topic"
     }
 
@@ -66,17 +66,10 @@ class GarminConnectStore internal constructor(private val prefs: SharedPreferenc
     private val mutableStatus = MutableStateFlow(readStatus())
     val status: StateFlow<GarminConnectStatus> = mutableStatus.asStateFlow()
 
-    private val mutableTesting = MutableStateFlow(prefs.getBoolean(Keys.TESTING, false))
-
-    /**
-     * Tester switch (seven taps on the version in About): shows the Garmin Connect card to
-     * testers until the relay has Garmin's Startup tier and the card opens to everyone.
-     */
-    val testing: StateFlow<Boolean> = mutableTesting.asStateFlow()
-
-    fun setTesting(on: Boolean) {
-        prefs.edit().putBoolean(Keys.TESTING, on).apply()
-        mutableTesting.value = on
+    init {
+        // The tester switch of 4.1.0 (seven taps on the version); the card is open to everyone
+        // since 4.2.0.
+        if (prefs.contains(Keys.OBSOLETE_TESTING)) prefs.edit().remove(Keys.OBSOLETE_TESTING).apply()
     }
 
     private fun readMailbox(): GarminConnectMailbox? {

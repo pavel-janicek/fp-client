@@ -415,6 +415,8 @@ Point 1 is done (2026-10-26, not yet tried on a phone):
 - `GarminNotifications.postImported` opens `/activities/<id>` through `PushNotifications.EXTRA_OPEN_PATH`, the path mailbox pushes already use.
 - Each import gets its own notification, tagged with the activity id and with a request code of its own, so two imports in one sync each open their own detail.
 
+Opening the import to everyone (maintainer, 2026-10-27), as experimental: the Garmin Connect™ card is always shown in Settings → Watches, and the tester switch (seven taps on the version in About) is gone; the store drops its stale preference. The README's Garmin section explains how to connect, with the manual file upload kept below it.
+
 Point 2 is done (2026-10-26, not yet tried on a phone; the relay side is in dockerized-server `fitpub-garmin-relay/wake.go`):
 - Each Garmin sync reconciles the wake-up: with instant delivery on it hands the ntfy topic to the relay (`PUT /garmin/mailbox/{id}/wake`); with it off it takes the topic back (`DELETE …/wake`). The mailbox status reports `wake`, so a relay that lost the topic gets it again (`GarminConnectSync.wakeAction`).
 - Switching instant delivery on or off in Settings starts a sync, so the relay learns about it at once.
