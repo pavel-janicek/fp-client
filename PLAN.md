@@ -417,6 +417,8 @@ Point 1 is done (2026-10-26, not yet tried on a phone):
 
 Also in 4.2.0 (2026-10-27): every FitPub push notification shared one tap intent (request code 0 with FLAG_UPDATE_CURRENT), so with a like and a comment in the shade, tapping the like opened the comment's activity. Each notification now gets a request code of its own (its id), as the Garmin import notification does.
 
+Also in 4.2.0 (2026-10-27): the Me-tab heatmap showed nothing on FitPub 1.4 nightly (makni.cz). Upstream #552/#556 replaced the GeoJSON cells of `GET /api/web/heatmap/me` with metadata (`revision`, `bounds`, status) and server-drawn 256 px PNG tiles under `/me/tiles/{revision}/{z}/{x}/{y}.png`. The card now draws those tiles (`HeatmapTiles`): fetched through the app's HTTP client with `Accept: image/png` (a JSON Accept got 406), memory only, a failed tile retried after 30 s, and routes widened by up to 3 tile pixels up to zoom 13 so they are visible in the country view (the server draws them 1 px wide). Servers still on 1.3.x keep the cell drawing. Tried on the phone.
+
 Opening the import to everyone (maintainer, 2026-10-27), as experimental: the Garmin Connect™ card is always shown in Settings → Watches, and the tester switch (seven taps on the version in About) is gone; the store drops its stale preference. The README's Garmin section explains how to connect, with the manual file upload kept below it.
 
 Point 2 is done (2026-10-26, not yet tried on a phone; the relay side is in dockerized-server `fitpub-garmin-relay/wake.go`):

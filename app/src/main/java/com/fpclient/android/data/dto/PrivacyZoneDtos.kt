@@ -62,6 +62,12 @@ data class HeatmapResponse(
      * (`log(1 + intensity) / log(1 + maxIntensity)`), so the heat layer needs it too.
      */
     val maxIntensity: Int? = null,
+    /**
+     * The owner's current route-image revision (FitPub 1.4, #556): when present the server
+     * draws the heatmap itself as 256 px PNG tiles under `heatmap/me/tiles/{revision}/…`, and
+     * [points] stays empty. Null on servers that still send GeoJSON cells.
+     */
+    val revision: String? = null,
 )
 
 /**
@@ -127,6 +133,21 @@ data class HeatmapFeatureCollectionDto(
     val generationStatus: String? = null,
     /** Whether a heatmap exists at all yet; null on servers that predate #549. */
     val hasHeatmap: Boolean? = null,
+    /**
+     * Since FitPub 1.4 (#556) the endpoint answers metadata only, with no `features`: the
+     * route-image revision the tiles are requested under, and the bounds of every route.
+     */
+    val revision: String? = null,
+    val bounds: HeatmapRouteBoundsDto? = null,
+)
+
+/** FitPub 1.4's bounds: `{"minLon","minLat","maxLon","maxLat"}`. */
+@Serializable
+data class HeatmapRouteBoundsDto(
+    val minLon: Double? = null,
+    val minLat: Double? = null,
+    val maxLon: Double? = null,
+    val maxLat: Double? = null,
 )
 
 @Serializable
@@ -168,12 +189,21 @@ object HeatmapMapper {
                 intensity = feature.properties?.intensity ?: 1,
             )
         }
+        val routeBounds = dto.bounds?.let {
+            HeatmapBoundsDto(
+                minLatitude = it.minLat,
+                minLongitude = it.minLon,
+                maxLatitude = it.maxLat,
+                maxLongitude = it.maxLon,
+            )
+        }
         return HeatmapResponse(
             points = points,
-            bounds = boundsOf(points),
+            bounds = routeBounds ?: boundsOf(points),
             generationStatus = dto.generationStatus,
             hasHeatmap = dto.hasHeatmap,
             maxIntensity = dto.maxIntensity,
+            revision = dto.revision?.takeIf { it.isNotBlank() },
         )
     }
 

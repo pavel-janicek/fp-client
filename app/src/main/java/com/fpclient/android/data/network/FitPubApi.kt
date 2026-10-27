@@ -67,6 +67,7 @@ import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.HTTP
+import retrofit2.http.Headers
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -481,6 +482,20 @@ interface FitPubApi {
         @Query("maxLat") maxLat: Double? = null,
         @Query("zoom") zoom: Double? = null,
     ): Response<HeatmapFeatureCollectionDto>
+    /**
+     * One 256 px PNG of the owner's heatmap (FitPub 1.4, #556) for the revision `myHeatmap()`
+     * reported. 404 once that revision is replaced, 503 + `Retry-After` when the server is
+     * busy drawing.
+     */
+    @GET("api/web/heatmap/me/tiles/{revision}/{z}/{x}/{y}.png")
+    @Headers("Accept: image/png")
+    suspend fun myHeatmapTile(
+        @Path("revision") revision: String,
+        @Path("z") z: Int,
+        @Path("x") x: Int,
+        @Path("y") y: Int,
+    ): Response<okhttp3.ResponseBody>
+
     // No rebuild call: FitPub #549 removed `POST /me/rebuild` — generation is a background job
     // and `myHeatmap()` reports its state (`generationStatus`, `hasHeatmap`).
 

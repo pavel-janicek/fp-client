@@ -124,8 +124,10 @@ class ApiClient(
 
         val builder = original.newBuilder()
             .url(newUrl)
-            .header("Accept", "application/json")
             .header("User-Agent", "FP-Client/${BuildConfig.VERSION_NAME}")
+        // JSON unless the call asks for something else: a heatmap tile is `image/png` only, and
+        // the server answers 406 to a JSON-only Accept.
+        if (original.header("Accept") == null) builder.header("Accept", "application/json")
 
         val cookieParts = mutableListOf<String>()
         if (session.isLoggedIn) cookieParts += "JWT_TOKEN=${session.token}"

@@ -132,6 +132,9 @@ class ProfileViewModel(
     suspend fun heatmapFor(viewport: HeatmapViewport): HeatmapResponse? =
         (users.heatmap(viewport) as? ApiResult.Success)?.data
 
+    /** The tile loader for one heatmap revision (FitPub 1.4 draws the heatmap itself). */
+    fun heatmapTiles(revision: String): HeatmapTileLoader = { z, x, y -> users.heatmapTile(revision, z, x, y) }
+
     /** Loads a remote (federated) actor discovered via WebFinger — no activities/heatmap available. */
     private fun loadRemoteProfile(handle: String) {
         viewModelScope.launch {
@@ -222,7 +225,10 @@ class ProfileViewModel(
                 target.equals(appViewModel.uiState.value.username, ignoreCase = true)
             // The screen reloads on every ON_RESUME (e.g. back from an activity detail); the
             // heatmap only changes with the activities, so it is kept while their count is.
+            // A heatmap the server was still preparing is asked for again: its revision (the
+            // tiles) changes once the background job finishes, not with the activities.
             val heatmapCurrent = previous.heatmap != null &&
+                previous.heatmap.generationStatus !in setOf("PENDING", "PROCESSING") &&
                 previous.user?.username == user.username &&
                 previous.user?.activityCount == user.activityCount
             if (isOwnProfile && !heatmapCurrent) {
@@ -365,6 +371,7 @@ fun ProfileScreen(
                 onOpenPeaks = onOpenPeaks,
                 onOpenPeak = onOpenPeak,
                 loadHeatmapViewport = vm::heatmapFor,
+                loadHeatmapTiles = vm::heatmapTiles,
                 modifier = modifier,
             )
         }
@@ -470,6 +477,7 @@ private fun ProfileBody(
     onOpenPeaks: (String) -> Unit = {},
     onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     loadHeatmapViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)? = null,
+    loadHeatmapTiles: ((String) -> HeatmapTileLoader)? = null,
     modifier: Modifier = Modifier,
 ) {
     val user = ui.user ?: return
@@ -569,6 +577,8 @@ private fun ProfileBody(
                 hasHeatmap = heatmap?.hasHeatmap,
                 maxIntensity = heatmap?.maxIntensity,
                 loadViewport = loadHeatmapViewport,
+                revision = heatmap?.revision,
+                loadTile = loadHeatmapTiles,
             )
         }
         // Summits reached — a profile feature, not an analytics one (the server's web client

@@ -39,6 +39,7 @@ import com.fpclient.android.data.dto.HeatmapPointDto
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.TilesOverlay
 import com.fpclient.android.data.dto.HeatmapResponse
 import com.fpclient.android.data.dto.HeatmapViewport
 import androidx.compose.runtime.rememberUpdatedState
@@ -48,8 +49,10 @@ import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
 
 /**
- * Activity-location heatmap over an OSM base map, drawn like the web heatmap page — gradient
- * blobs from [HeatmapOverlay], cells reloaded for the visible area after every pan/zoom.
+ * Activity-location heatmap over an OSM base map, drawn like the web heatmap page. On FitPub 1.4
+ * and newer the server draws it: [revision] names its PNG tiles, which [loadTile] fetches
+ * ([HeatmapTiles]). Older servers send cells instead, drawn as gradient blobs by
+ * [HeatmapOverlay] and reloaded for the visible area after every pan/zoom.
  *
  * The card can be maximized: the "Enlarge heatmap" button opens the same map full-screen
  * (system Back closes it), just like the activity-detail track map.
@@ -63,6 +66,8 @@ fun HeatmapCard(
     hasHeatmap: Boolean? = null,
     maxIntensity: Int? = null,
     loadViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)? = null,
+    revision: String? = null,
+    loadTile: ((revision: String) -> HeatmapTileLoader)? = null,
 ) {
     // Once per point list: the result keys the map's effects, which compare it by content.
     val valid = remember(points) { points.filter { it.latitude != null && it.longitude != null } }
@@ -70,7 +75,9 @@ fun HeatmapCard(
     // heatmap exists. Without a known status (older server) the card keeps its old rule —
     // shown only when there are points to draw.
     val status = HeatmapMapper.statusMessage(generationStatus)
-    if (valid.isEmpty() && status == null) return
+    val tiles = if (revision != null && loadTile != null) remember(revision) { loadTile(revision) } else null
+    val drawable = tiles != null || valid.isNotEmpty()
+    if (!drawable && status == null) return
     var expanded by rememberSaveable { mutableStateOf(false) }
 
     Card(modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -91,7 +98,7 @@ fun HeatmapCard(
                 modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp),
             )
         }
-        if (valid.isEmpty() || hasHeatmap == false) {
+        if (!drawable || hasHeatmap == false) {
             if (generationStatus == "NO_HEATMAP") {
                 Text(
                     "No GPS tracks yet. Upload activities with GPS tracks to get started.",
@@ -109,6 +116,8 @@ fun HeatmapCard(
                 bounds = bounds,
                 maxIntensity = maxIntensity,
                 loadViewport = loadViewport,
+                tiles = tiles,
+                tilesRevision = revision,
                 modifier = Modifier.fillMaxWidth().height(200.dp),
             )
             FilledTonalIconButton(
@@ -135,6 +144,8 @@ fun HeatmapCard(
                         bounds = bounds,
                         maxIntensity = maxIntensity,
                         loadViewport = loadViewport,
+                        tiles = tiles,
+                        tilesRevision = revision,
                         modifier = Modifier.fillMaxSize(),
                     )
                     // Same translucent tonal button, same top-right corner as the
@@ -170,6 +181,8 @@ private fun HeatmapCanvas(
     bounds: HeatmapBoundsDto?,
     maxIntensity: Int?,
     loadViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)?,
+    tiles: HeatmapTileLoader?,
+    tilesRevision: String?,
     modifier: Modifier = Modifier,
 ) {
     // Frame the data once per point set, not on every recomposition: re-running
@@ -187,9 +200,12 @@ private fun HeatmapCanvas(
     var viewportData by remember(points) { mutableStateOf<HeatmapResponse?>(null) }
     val currentLoad by rememberUpdatedState(loadViewport)
     LaunchedEffect(viewport) {
+        if (tiles != null) return@LaunchedEffect
         val area = viewport ?: return@LaunchedEffect
         currentLoad?.invoke(area)?.let { viewportData = it }
     }
+    // The revision whose tile overlay the map holds (tile mode only).
+    val shownRevision = remember { arrayOfNulls<String>(1) }
     val shownPoints = viewportData?.points ?: points
     val shownMax = viewportData?.maxIntensity ?: maxIntensity
 
@@ -235,21 +251,33 @@ private fun HeatmapCanvas(
             }
         },
         update = { map ->
-            map.overlays.filterIsInstance<HeatmapOverlay>().forEach { it.setPoints(shownPoints, shownMax) }
+            if (tiles != null) {
+                // One overlay per revision: osmdroid caches tiles by index alone, so a new
+                // revision's tiles would otherwise never replace the old ones.
+                if (shownRevision[0] != tilesRevision) {
+                    map.overlays.filterIsInstance<TilesOverlay>().forEach { it.onDetach(map); map.overlays.remove(it) }
+                    map.overlays.add(HeatmapTiles.overlay(map.context, tiles))
+                    shownRevision[0] = tilesRevision
+                }
+            } else {
+                map.overlays.filterIsInstance<HeatmapOverlay>().forEach { it.setPoints(shownPoints, shownMax) }
+            }
             if (!fitted) {
                 val box = if (bounds != null &&
                     bounds.minLatitude != null && bounds.minLongitude != null &&
                     bounds.maxLatitude != null && bounds.maxLongitude != null
                 ) {
                     BoundingBox(bounds.maxLatitude!!, bounds.maxLongitude!!, bounds.minLatitude!!, bounds.minLongitude!!)
-                } else {
+                } else if (points.isNotEmpty()) {
                     BoundingBox.fromGeoPoints(points.map { GeoPoint(it.latitude!!, it.longitude!!) })
+                } else {
+                    null
                 }
                 // Only once the map has its size: a post can run before the first layout (the
                 // list composes the card ahead of placing it, e.g. when scrolling back up), and
                 // osmdroid turns the then-negative room (0 − 2 × border) into a NaN zoom on
                 // which `Projection.getCloserPixel` loops forever — the Me tab ANR of 3.3.0.
-                map.post {
+                if (box != null) map.post {
                     map.doOnLayout {
                         // Leaflet's fitBounds (what the web uses) snaps to a whole zoom level
                         // (zoomSnap 1), which is what leaves room around the data; osmdroid fits
