@@ -415,6 +415,8 @@ Point 1 is done (2026-10-26, not yet tried on a phone):
 - `GarminNotifications.postImported` opens `/activities/<id>` through `PushNotifications.EXTRA_OPEN_PATH`, the path mailbox pushes already use.
 - Each import gets its own notification, tagged with the activity id and with a request code of its own, so two imports in one sync each open their own detail.
 
+Also in 4.2.0 (2026-10-27): every FitPub push notification shared one tap intent (request code 0 with FLAG_UPDATE_CURRENT), so with a like and a comment in the shade, tapping the like opened the comment's activity. Each notification now gets a request code of its own (its id), as the Garmin import notification does.
+
 Opening the import to everyone (maintainer, 2026-10-27), as experimental: the Garmin Connect™ card is always shown in Settings → Watches, and the tester switch (seven taps on the version in About) is gone; the store drops its stale preference. The README's Garmin section explains how to connect, with the manual file upload kept below it.
 
 Point 2 is done (2026-10-26, not yet tried on a phone; the relay side is in dockerized-server `fitpub-garmin-relay/wake.go`):
