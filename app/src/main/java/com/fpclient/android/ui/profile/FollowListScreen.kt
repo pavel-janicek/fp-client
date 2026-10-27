@@ -44,6 +44,7 @@ import com.fpclient.android.ui.components.EmptyState
 import com.fpclient.android.ui.components.ErrorState
 import com.fpclient.android.ui.components.LoadingIndicator
 import com.fpclient.android.ui.components.UserAvatar
+import com.fpclient.android.util.ActorHandle
 import com.fpclient.android.AppContainer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,9 +62,9 @@ class FollowListViewModel(
         val error: String? = null,
         val users: List<UserDto> = emptyList(),
         val serverUrl: String = "",
-        /** Per-user in-flight flags so only that row's button disables during toggle. */
+        /** Per-user in-flight flags (by [UserDto.fullHandle]) so only that row's button disables. */
         val busyUsers: Set<String> = emptySet(),
-        /** Local override of follow state applied optimistically after toggling. */
+        /** Local override of follow state (by [UserDto.fullHandle]) applied after toggling. */
         val followOverrides: Map<String, Boolean> = emptyMap(),
     )
 
@@ -89,20 +90,20 @@ class FollowListViewModel(
         }
     }
 
-    fun toggle(username: String) {
-        val currentlyFollowing =
-            _ui.value.followOverrides[username]
-                ?: (_ui.value.users.firstOrNull { it.username == username }?.isFollowing == true)
+    fun toggle(user: UserDto) {
+        val key = user.fullHandle
+        val target = followTarget(user, _ui.value.serverUrl) ?: return
+        val currentlyFollowing = _ui.value.followOverrides[key] ?: (user.isFollowing == true)
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(busyUsers = _ui.value.busyUsers + username, error = null)
-            val result = if (currentlyFollowing) users.unfollow(username) else users.follow(username)
+            _ui.value = _ui.value.copy(busyUsers = _ui.value.busyUsers + key, error = null)
+            val result = if (currentlyFollowing) users.unfollow(target) else users.follow(target)
             when (result) {
                 is ApiResult.Success -> _ui.value = _ui.value.copy(
-                    busyUsers = _ui.value.busyUsers - username,
-                    followOverrides = _ui.value.followOverrides + (username to !currentlyFollowing),
+                    busyUsers = _ui.value.busyUsers - key,
+                    followOverrides = _ui.value.followOverrides + (key to !currentlyFollowing),
                 )
                 is ApiResult.Error -> _ui.value = _ui.value.copy(
-                    busyUsers = _ui.value.busyUsers - username,
+                    busyUsers = _ui.value.busyUsers - key,
                     error = result.message,
                 )
             }
@@ -110,6 +111,15 @@ class FollowListViewModel(
     }
 
     companion object {
+        /**
+         * Who the follow endpoint should follow for a listed [user]: a plain username for this
+         * instance's users, `user@host` for anyone else. A follower list mixes both, and the
+         * plain username of a remote follower used to be sent as if they were local — "User
+         * not found", or worse, a local namesake. Same form as `ProfileViewModel.toggleFollow`.
+         */
+        internal fun followTarget(user: UserDto, serverUrl: String): String? =
+            ActorHandle.normalizeToUsername(user.fullHandle, serverUrl)?.removePrefix("@")
+
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer { FollowListViewModel(container.userRepository, container.sessionStore) }
         }
@@ -161,9 +171,9 @@ fun FollowListScreen(
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(ui.users.size) { index ->
                         val u = ui.users[index]
-                        val busy = ui.busyUsers.contains(u.username)
                         // Keep the full @username@host handle so remote actors remain reachable.
                         val fullHandle = u.fullHandle
+                        val busy = ui.busyUsers.contains(fullHandle)
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -189,12 +199,12 @@ fun FollowListScreen(
                                 OutlinedButton(
                                     onClick = {
                                         if (!busy && !u.username.isNullOrBlank()) {
-                                            scope.launch { vm.toggle(u.username!!) }
+                                            scope.launch { vm.toggle(u) }
                                         }
                                     },
                                     enabled = !busy,
                                 ) {
-                                    Text(if (ui.followOverrides[u.username] ?: u.isFollowing == true) "Unfollow" else "Follow")
+                                    Text(if (ui.followOverrides[fullHandle] ?: u.isFollowing == true) "Unfollow" else "Follow")
                                 }
                             }
                         }
