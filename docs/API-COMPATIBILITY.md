@@ -4,8 +4,9 @@
 > and the server-side breaking changes the app has adapted to.
 
 
-This client is tested against the **FitPub** `main` branch. **Last checked against `main` at
-`0802bfc6` (2026-10-14), on 2026-10-15** — see the 3.2.0 section. Record the audited server
+This client is tested against the **FitPub** `main` branch (the maintainer's instance, makni.cz,
+runs its nightly builds). **Last checked against `main` at `41d3f733` (2026-10-26), on
+2026-10-27** — see the 4.2.0 section. Record the audited server
 commit here at every check, so the next one can diff from it (`git log <commit>..HEAD` in the
 server repository) instead of re-reading everything.
 
@@ -344,6 +345,35 @@ and the resulting figures before saving.
 * Slider edits debounce (150 ms) into an off-main-thread preview recomputation with an
   identity guard, so dragging over a track with tens of thousands of points never blocks the
   UI or races a reloaded workspace.
+
+### 4.2.0 — Server-contract re-check against `main` `41d3f733` (2026-10-27)
+
+Covers the 28 server commits from `0802bfc6` (2026-10-14) to `41d3f733` (2026-10-26), i.e. the
+1.3.0 release, the 1.3.1 fixes and the start of 1.4.0. Every endpoint in `FitPubApi.kt` — **93**
+(the new heatmap tile call included) — was matched mechanically against the server's Spring
+mappings (282) and exists. No route the app uses was removed or renamed, and no request or
+response field it reads changed. No server change was needed or made.
+
+* **Heatmap: breaking, adapted** (#552 `84beabf4`, #556 `da741ae1`, `21c73e29`).
+  `GET /api/web/heatmap/me` now answers metadata only — `revision`, `generationStatus`,
+  `hasHeatmap`, `activityCount`, `bounds` `{minLon, minLat, maxLon, maxLat}`, `updatedAt`,
+  `saturation`, `legend` — and ignores the old viewport/zoom query. The routes come as
+  server-drawn 256 px PNG tiles, `GET /api/web/heatmap/me/tiles/{revision}/{z}/{x}/{y}.png`
+  (z 1–18, owner only, `Cache-Control: private, no-store`, `produces image/png` so a JSON-only
+  `Accept` gets **406**, 404 once the revision is replaced, 503 + `Retry-After` under load,
+  rate-limited to a burst of 128 then 64 per 2 s). The cell format is gone. The app draws the
+  tiles (`HeatmapTiles`, see PLAN 4.2.0) and keeps the cell drawing for servers still on 1.3.x.
+* **Batch-import job status gained `undo`** (#555): the state of a durable undo. Additive; the
+  app does not offer undo, so nothing reads it. The undo error message no longer echoes the
+  exception.
+* **Timeline search also matches activity locations** when the instance has GADM data (#563).
+  Same `search` parameter, so the app's timeline search gets it for free.
+* **`GET /api/activities/{id}/image`** (#554) is now served from memory instead of a file, same
+  PNG and same 403/404 rules. No change.
+* Not client-facing: resumable application-upgrade tasks and their admin pages (#534, which also
+  removed the remote-activity time backfill and avatar migration admin routes), buffered access
+  log (#553), NodeInfo diagnostics (#562), published-activity read caching (#554), CI and
+  dependency updates.
 
 ### 3.2.0 — Server-contract re-check against `main` `0802bfc6` (2026-10-15)
 
