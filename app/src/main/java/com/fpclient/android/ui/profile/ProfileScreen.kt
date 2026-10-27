@@ -63,6 +63,7 @@ import com.fpclient.android.ui.components.LoadingIndicator
 import com.fpclient.android.ui.components.StatRow
 import com.fpclient.android.ui.components.UserAvatar
 import com.fpclient.android.util.ActorHandle
+import com.fpclient.android.util.RemoteProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,6 +73,9 @@ class ProfileViewModel(
     private val users: UserRepository,
     private val activities: ActivityRepository,
     private val appViewModel: AppViewModel,
+    /** Anonymous reads from a federated user's FitPub instance, by its server URL. */
+    private val originUsers: (String) -> UserRepository,
+    private val originActivities: (String) -> ActivityRepository,
 ) : ViewModel() {
 
     data class UiState(
@@ -98,6 +102,12 @@ class ProfileViewModel(
          * and avatar the locked screen can still show.
          */
         val preview: UserPreviewDto? = null,
+        /**
+         * Set when a remote user's FitPub instance served their full profile: [user],
+         * [activitiesList] and [recentPeaks] then come from there, and avatars, the header and
+         * activities resolve against it. Null keeps the minimal actor card.
+         */
+        val origin: RemoteProfile.Origin? = null,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -135,20 +145,51 @@ class ProfileViewModel(
     /** The tile loader for one heatmap revision (FitPub 1.4 draws the heatmap itself). */
     fun heatmapTiles(revision: String): HeatmapTileLoader = { z, x, y -> users.heatmapTile(revision, z, x, y) }
 
-    /** Loads a remote (federated) actor discovered via WebFinger — no activities/heatmap available. */
+    /**
+     * Loads a remote (federated) actor discovered via WebFinger. The home instance knows only
+     * the actor card and the follow state; when the actor lives on another FitPub instance,
+     * its public profile, activities and peaks are then read from there anonymously, as a
+     * federated activity's detail is. Any failure there (followers-only profile, server down)
+     * keeps the actor card.
+     */
     private fun loadRemoteProfile(handle: String) {
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(
-                loading = true, error = null, isPrivateProfile = false,
-                isRemoteProfile = true, user = null, actor = null,
-                username = handle, activitiesList = emptyList(), heatmap = null,
-            )
-            when (val r = users.discoverRemote(handle)) {
-                is ApiResult.Success ->
-                    _ui.value = _ui.value.copy(loading = false, actor = r.data)
-                is ApiResult.Error ->
-                    _ui.value = _ui.value.copy(loading = false, error = r.message)
+            // Coming back to the same profile (ON_RESUME) keeps what is shown until the new read.
+            _ui.value = if (_ui.value.isRemoteProfile && _ui.value.username == handle) {
+                _ui.value.copy(loading = true, error = null)
+            } else {
+                _ui.value.copy(
+                    loading = true, error = null, isPrivateProfile = false,
+                    isRemoteProfile = true, user = null, actor = null, origin = null,
+                    username = handle, activitiesList = emptyList(), heatmap = null, recentPeaks = emptyList(),
+                )
             }
+            val actor = when (val r = users.discoverRemote(handle)) {
+                is ApiResult.Success -> r.data
+                is ApiResult.Error -> {
+                    _ui.value = _ui.value.copy(loading = false, error = r.message)
+                    return@launch
+                }
+            }
+            // The follow button reads [UiState.followStatus]; for a remote actor the state comes
+            // with the discover answer.
+            val follow = FollowStatusDto(status = actor.followStatus)
+            val origin = RemoteProfile.origin(actor)
+            val remoteUser = origin?.let { (originUsers(it.serverUrl).profile(it.username) as? ApiResult.Success)?.data }
+            if (origin == null || remoteUser == null) {
+                _ui.value = _ui.value.copy(
+                    loading = false, actor = actor, followStatus = follow,
+                    origin = null, user = null, activitiesList = emptyList(), recentPeaks = emptyList(),
+                )
+                return@launch
+            }
+            val remoteActivities = (originActivities(origin.serverUrl).userActivities(origin.username, page = 0, size = 20) as? ApiResult.Success)
+                ?.data?.content.orEmpty()
+            val peaks = (originUsers(origin.serverUrl).recentPeaks(origin.username) as? ApiResult.Success)?.data.orEmpty()
+            _ui.value = _ui.value.copy(
+                loading = false, actor = actor, followStatus = follow, origin = origin,
+                user = remoteUser, activitiesList = remoteActivities, recentPeaks = peaks,
+            )
         }
     }
 
@@ -247,7 +288,11 @@ class ProfileViewModel(
     fun toggleFollow() {
         // On locked (private) profiles there is no user object — fall back to the
         // username the screen was opened for, otherwise request-to-follow breaks.
-        val raw = (_ui.value.user?.username ?: _ui.value.username)?.takeIf { it.isNotBlank() && it != "me" } ?: return
+        // A remote profile read from its own instance carries that instance's plain username in
+        // [UiState.user]; following it by that name would follow a local namesake, so remote
+        // profiles always use the handle the screen was opened for.
+        val raw = (if (_ui.value.isRemoteProfile) _ui.value.username else _ui.value.user?.username ?: _ui.value.username)
+            ?.takeIf { it.isNotBlank() && it != "me" } ?: return
         // The discover-remote response is authoritative about locality: a handle can
         // LOOK remote (host alias, port, ...), yet the actor may live on our own
         // instance — and the server's follow endpoint only accepts plain usernames
@@ -292,7 +337,13 @@ class ProfileViewModel(
         fun factory(container: AppContainer, appViewModel: AppViewModel): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
-                    ProfileViewModel(container.userRepository, container.activityRepository, appViewModel)
+                    ProfileViewModel(
+                        container.userRepository,
+                        container.activityRepository,
+                        appViewModel,
+                        container::originUserRepository,
+                        container::originActivityRepository,
+                    )
                 }
             }
     }
@@ -316,6 +367,8 @@ fun ProfileScreen(
     onOpenRecord: () -> Unit = {},
     onOpenFollowers: (String) -> Unit = {},
     onOpenFollowing: (String) -> Unit = {},
+    /** Opens a federated activity from its origin: the activity id there and its page URI. */
+    onOpenRemoteActivity: (String, String) -> Unit = { id, _ -> onOpenActivity(id) },
 ) {
     val vm: ProfileViewModel = viewModel(
         key = username,
@@ -340,10 +393,18 @@ fun ProfileScreen(
     val serverUrl = sessionState.serverUrl
     val isMe = username == sessionState.username || username == "me"
     val remoteActor = ui.actor
+    val remoteOrigin = ui.origin
 
     val content: @Composable (Modifier) -> Unit = { modifier ->
         when {
             ui.loading && ui.user == null && remoteActor == null -> LoadingIndicator(modifier)
+            ui.isRemoteProfile && remoteOrigin != null && ui.user != null -> ProfileBody(
+                ui = ui, isMe = false, serverUrl = remoteOrigin.serverUrl, unitSystem = unitSystem,
+                onOpenActivity = { id -> onOpenRemoteActivity(id, remoteOrigin.activityUri(id)) },
+                onToggleFollow = vm::toggleFollow,
+                remoteHandle = remoteActor?.fullHandle,
+                modifier = modifier,
+            )
             ui.isRemoteProfile && remoteActor != null -> RemoteProfileBody(
                 actor = remoteActor,
                 error = ui.error,
@@ -478,9 +539,16 @@ private fun ProfileBody(
     onOpenPeak: (String, Long) -> Unit = { _, _ -> },
     loadHeatmapViewport: (suspend (HeatmapViewport) -> HeatmapResponse?)? = null,
     loadHeatmapTiles: ((String) -> HeatmapTileLoader)? = null,
+    /**
+     * The `@user@host` handle of a remote user whose profile came from their own instance
+     * (`UiState.origin`). Follower lists and peak details are pages of the home instance,
+     * which knows nothing about this user's, so they are not linked.
+     */
+    remoteHandle: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val user = ui.user ?: return
+    val remote = remoteHandle != null
     val headerUrl = com.fpclient.android.util.UrlBuilder.avatar(serverUrl, user.profileHeaderUrl)
     LazyColumn(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
@@ -509,7 +577,7 @@ private fun ProfileBody(
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(user.displayName ?: "", style = MaterialTheme.typography.titleLarge)
-                    Text("@${user.username}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(remoteHandle ?: "@${user.username}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!user.bio.isNullOrBlank()) {
                         Spacer(Modifier.height(6.dp))
                         // Bios come back HTML-encoded (e.g. emoticons as &#x1F609;) — decode
@@ -526,13 +594,13 @@ private fun ProfileBody(
                             "Followers",
                             (user.followersCount ?: 0).toString(),
                             Modifier.weight(1f),
-                            onClick = { onOpenFollowers(user.username ?: "me") },
+                            onClick = if (remote) null else ({ onOpenFollowers(user.username ?: "me") }),
                         )
                         StatPill(
                             "Following",
                             (user.followingCount ?: 0).toString(),
                             Modifier.weight(1f),
-                            onClick = { onOpenFollowing(user.username ?: "me") },
+                            onClick = if (remote) null else ({ onOpenFollowing(user.username ?: "me") }),
                         )
                     }
                     if (isMe) {
@@ -592,11 +660,11 @@ private fun ProfileBody(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Peaks", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { onOpenPeaks(user.username ?: "me") }) { Text("View all") }
+                    if (!remote) TextButton(onClick = { onOpenPeaks(user.username ?: "me") }) { Text("View all") }
                 }
             }
             items(ui.recentPeaks, key = { "peak-${it.id}" }) { peak ->
-                PeakRow(peak = peak, onClick = { onOpenPeak(user.username ?: "me", peak.id) })
+                PeakRow(peak = peak, onClick = if (remote) null else ({ onOpenPeak(user.username ?: "me", peak.id) }))
             }
         }
         if (ui.activitiesList.isEmpty()) {

@@ -429,6 +429,7 @@ private fun FitPubNavGraph(
                 embedded = false,
                 onBack = { navController.popBackStack() },
                 onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
+                onOpenRemoteActivity = { id, origin -> navController.navigate(Routes.activityDetail(id, origin)) },
                 onEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                 onOpenSettings = { navController.navigate(Routes.settings()) },
                 onOpenFollowers = { u -> navController.navigate(Routes.followList(u, "followers")) },
