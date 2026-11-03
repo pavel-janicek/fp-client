@@ -16,10 +16,12 @@ import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.ScalingLazyColumn
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.material.rememberScalingLazyListState
 import com.fpclient.android.wear.BuildConfig
 import com.fpclient.android.wear.recording.WatchWorkoutSyncStore
 import com.fpclient.android.wear.recording.WorkoutRecordingController
@@ -43,11 +45,17 @@ fun SettingsScreen(
     var pendingCount by remember { mutableStateOf(syncStore.all().size) }
     var feedback by remember { mutableStateOf<String?>(null) }
 
+    val listState = rememberScalingLazyListState()
     Scaffold(
         modifier = modifier,
         timeText = { TimeText() },
+        positionIndicator = { PositionIndicator(scalingLazyListState = listState) },
     ) {
-        ScalingLazyColumn(modifier = Modifier.fillMaxSize()) {
+        ScalingLazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = listContentPadding(),
+        ) {
             item {
                 Text(
                     text = "Settings",
@@ -83,7 +91,9 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.body2,
                     color = MaterialTheme.colors.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = textExtraInset()),
                 )
             }
             if (pendingCount > 0) {
@@ -138,7 +148,8 @@ fun SettingsScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
+                            .padding(top = 4.dp)
+                            .padding(horizontal = textExtraInset()),
                     )
                 }
             }
@@ -154,7 +165,8 @@ fun SettingsScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp),
+                        .padding(top = 8.dp)
+                        .padding(horizontal = textExtraInset()),
                 )
             }
             item {
