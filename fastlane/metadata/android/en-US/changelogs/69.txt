@@ -1,0 +1,8 @@
+4.2.0 (release 4.2.0):
+- Garmin Connect import is open to everyone (experimental).
+- With instant delivery on, Garmin activities arrive within seconds.
+- Tapping a notification opens the activity it is about.
+- The heatmap works with FitPub 1.4.
+- Profiles from other FitPub servers show their activities.
+- Following from a followers list works for other servers.
+- Wear OS: no black screen after Stop, scrollbars, nothing cut off on round watches.
