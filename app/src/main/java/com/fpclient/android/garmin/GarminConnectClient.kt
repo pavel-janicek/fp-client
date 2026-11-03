@@ -36,9 +36,14 @@ data class MailboxStatusDto(
     val permissions: List<String> = emptyList(),
     val linkLost: String? = null,
     val files: Int = 0,
+    /** The relay holds an ntfy topic and wakes this phone when a file is queued (PLAN 4.2.0). */
+    val wake: Boolean = false,
 )
 
 /** One queued activity. [meta] is the standard-base64 ciphertext of a [GarminFileMeta] JSON. */
+@Serializable
+internal data class WakeRequest(val topic: String)
+
 @Serializable
 data class RelayFileDto(val id: String, val size: Long = 0, val meta: String)
 
@@ -119,6 +124,23 @@ class GarminConnectClient {
     /** Tells the relay the file is safely on FitPub; it deletes its copy. 404 counts as done. */
     suspend fun ack(mailbox: GarminConnectMailbox, fileId: String): ApiResult<Unit> =
         execute(request(mailboxUrl(mailbox, "files", fileId), mailbox).delete().build()) { response, text ->
+            if (response.isSuccessful || response.code == 404) ApiResult.Success(Unit) else failure(response, text)
+        }
+
+    /**
+     * Hands the relay this phone's private ntfy topic: it then wakes the phone as soon as a file
+     * is queued (PLAN 4.2.0). 503 means the relay has no ntfy server configured.
+     */
+    suspend fun setWake(mailbox: GarminConnectMailbox, topic: String): ApiResult<Unit> {
+        val body = json.encodeToString(WakeRequest(topic)).toRequestBody("application/json; charset=utf-8".toMediaType())
+        return execute(request(mailboxUrl(mailbox, "wake"), mailbox).put(body).build()) { response, text ->
+            if (response.isSuccessful) ApiResult.Success(Unit) else failure(response, text)
+        }
+    }
+
+    /** Makes the relay forget the ntfy topic: back to the 15-minute check. */
+    suspend fun clearWake(mailbox: GarminConnectMailbox): ApiResult<Unit> =
+        execute(request(mailboxUrl(mailbox, "wake"), mailbox).delete().build()) { response, text ->
             if (response.isSuccessful || response.code == 404) ApiResult.Success(Unit) else failure(response, text)
         }
 

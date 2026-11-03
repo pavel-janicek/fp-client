@@ -23,6 +23,8 @@ later in **Settings → Account → Instance**), sign in, and:
 - **Analytics** — dashboard, personal records, achievements, and weekly summaries.
 - **Guest mode** — browse the public timeline without an account.
 - **Wear OS companion app** — standalone watch app for recording workouts on-device with GPS, heart rate, and step tracking.
+- **Garmin Connect™ import (experimental)** — activities recorded on a Garmin watch reach
+  FitPub automatically ([below](#recorded-on-a-garmin-import-through-garmin-connect-experimental)).
 
 Built with Kotlin and Jetpack Compose (Material 3 for phone, Wear Compose for watch).
 
@@ -68,12 +70,48 @@ FP Client includes a standalone Wear OS companion module (`:wear`) that allows a
 
 To install on a watch: download the standalone Wear OS app from Google Play on the watch or deploy directly via `./gradlew :wear:installDebug`.
 
-## Recorded on a Garmin? Uploading your activities
+## Recorded on a Garmin? Import through Garmin Connect™ (experimental)
 
-FP Client does **not** connect to Garmin watches or to your Garmin Connect account, and it does
-not sync anything automatically. What it does is make the manual route short: Garmin Connect
-lets you download any activity as a file, and FP Client accepts that download exactly as Garmin
-provides it, so you never have to unpack or convert anything.
+From FP Client 4.2.0, activities you record on a Garmin watch can reach FitPub automatically
+through **Garmin Connect™**. You install nothing on the watch: it syncs to Garmin Connect as usual,
+Garmin passes each new activity to FP Client's relay, and your phone uploads it to your FitPub
+instance with your own login. The feature is **experimental**: please report anything odd.
+
+**Connecting:**
+
+1. In FP Client, open **Settings → Watches**. You'll see the **Garmin Connect™** card.
+2. Read the note about the "Garmin [device model]" description and tick the box.
+3. Tap **Connect Garmin Connect™**. A browser tab opens Garmin's sign-in page. Sign in and allow
+   access, including **Activities**.
+4. You return to FP Client with **Garmin Connect™ linked**. The card says **Connected**.
+
+**What happens then:**
+
+- Each new watch recording arrives on FitPub within about 15 minutes, or at once with
+  **Sync now** in the card. With instant delivery via ntfy switched on (**Settings →
+  Notifications**), the relay wakes the phone and the activity usually arrives within seconds.
+- Imports get your **default visibility** (**Settings → Privacy**, "Only me" unless you change
+  it) and the description **Garmin** followed by your watch model.
+- A notification says **Garmin activity imported to FitPub**. Tap it to open the activity and
+  change its title, description or visibility.
+- Activities created or uploaded on the Garmin Connect website are not imported, only watch
+  recordings.
+
+**Privacy:** your FitPub login never leaves the phone, and your Garmin password goes only to
+Garmin. The relay (`connect.paveljanicek.cz`, run by the FP Client developer) stores your
+activity files only encrypted to keys that exist on your phone, and deletes each one once FitPub
+has it. Details: [connect.paveljanicek.cz/privacy](https://connect.paveljanicek.cz/privacy).
+
+**Disconnecting:** tap **Disconnect** in the card. The relay forgets your Garmin access and
+deletes anything still waiting. Activities already on FitPub stay. You can also remove FP Client
+in Garmin Connect (**Settings → Connected Apps**).
+
+How it works inside the app: [docs/GARMIN.md](docs/GARMIN.md).
+
+### Without Garmin Connect: uploading files by hand
+
+Garmin Connect lets you download any activity as a file, and FP Client accepts that download
+exactly as Garmin provides it, so you never have to unpack or convert anything.
 
 **One activity** (requires FP Client 3.2.0 or newer):
 

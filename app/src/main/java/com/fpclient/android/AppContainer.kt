@@ -59,6 +59,10 @@ class AppContainer(context: Context) {
      */
     fun originActivityRepository(serverUrl: String): ActivityRepository =
         ActivityRepository(apiClient.originApi(serverUrl))
+
+    /** A federated user's profile, read anonymously from their FitPub instance (`RemoteProfile`). */
+    fun originUserRepository(serverUrl: String): UserRepository =
+        UserRepository(apiClient.originApi(serverUrl))
     val analyticsRepository: AnalyticsRepository by lazy { AnalyticsRepository(apiClient.api) }
     val notificationRepository: NotificationRepository by lazy { NotificationRepository(apiClient.api) }
 
@@ -134,6 +138,7 @@ class AppContainer(context: Context) {
     val garminConnectSync: GarminConnectSync by lazy {
         GarminConnectSync(
             garminConnectStore, GarminConnectClient(), activityRepository, sessionStore, defaultVisibilityStore, context.cacheDir,
+            pushSubscriptionStore.subscription,
         )
     }
 

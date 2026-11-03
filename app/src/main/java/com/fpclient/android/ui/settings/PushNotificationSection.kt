@@ -1,5 +1,6 @@
 package com.fpclient.android.ui.settings
 
+import com.fpclient.android.garmin.GarminConnectWorker
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -528,6 +529,9 @@ private fun InstantDeliveryBlock(container: AppContainer) {
                             is ApiResult.Error -> result.message
                         }
                     }
+                    // Hand the new topic to the Garmin relay, or take it back, right away
+                    // rather than at the next 15-minute check (PLAN 4.2.0).
+                    if (container.garminConnectStore.mailbox.value != null) GarminConnectWorker.enqueue(context)
                     topicInput = ""
                     busy = false
                 }

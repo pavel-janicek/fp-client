@@ -59,4 +59,18 @@ class GarminConnectSyncTest {
         assertNull(GarminConnectSync.fitPubActivityType("OTHER"))
         assertNull(GarminConnectSync.fitPubActivityType(null))
     }
+
+    @Test
+    fun wakeAction_keepsTheRelayInStepWithInstantDelivery() {
+        val set = GarminConnectSync.WakeAction.SET
+        val clear = GarminConnectSync.WakeAction.CLEAR
+        val none = GarminConnectSync.WakeAction.NONE
+        assertEquals(set, GarminConnectSync.wakeAction("topic", null, relayWake = false))
+        assertEquals(set, GarminConnectSync.wakeAction("new", "old", relayWake = true))
+        assertEquals(set, GarminConnectSync.wakeAction("topic", "topic", relayWake = false))
+        assertEquals(none, GarminConnectSync.wakeAction("topic", "topic", relayWake = true))
+        assertEquals(clear, GarminConnectSync.wakeAction(null, "topic", relayWake = false))
+        assertEquals(clear, GarminConnectSync.wakeAction(null, null, relayWake = true))
+        assertEquals(none, GarminConnectSync.wakeAction(null, null, relayWake = false))
+    }
 }

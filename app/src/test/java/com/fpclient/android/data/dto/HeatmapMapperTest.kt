@@ -135,4 +135,52 @@ class HeatmapMapperTest {
         geometry = HeatmapGeometryDto(type = "Point", coordinates = listOf(lon, lat)),
         properties = HeatmapPropertiesDto(intensity = 1),
     )
+
+    @Test
+    fun readsFitPub14MetadataWithTilesInsteadOfCells() {
+        // FitPub 1.4 (#556): metadata only, the server draws the tiles itself.
+        val payload = """
+            {"revision":"6f1c2a4e-0b9d-4f7a-9c35-2d8e1f0a7b11","generationStatus":"UP_TO_DATE",
+             "hasHeatmap":true,"activityCount":42,
+             "bounds":{"minLon":14.2,"minLat":49.9,"maxLon":14.7,"maxLat":50.2},
+             "updatedAt":"2026-10-27T08:00:00Z","saturation":100,"legend":"Approximate frequency of use"}
+        """.trimIndent()
+
+        val result = HeatmapMapper.toUi(json.decodeFromString<HeatmapFeatureCollectionDto>(payload))
+
+        assertEquals("6f1c2a4e-0b9d-4f7a-9c35-2d8e1f0a7b11", result.revision)
+        assertTrue(result.points.isEmpty())
+        assertEquals(true, result.hasHeatmap)
+        assertEquals("UP_TO_DATE", result.generationStatus)
+        // Lon/lat named, not positional: min latitude is minLat, not minLon.
+        assertEquals(49.9, result.bounds!!.minLatitude!!, 1e-9)
+        assertEquals(14.2, result.bounds!!.minLongitude!!, 1e-9)
+        assertEquals(50.2, result.bounds!!.maxLatitude!!, 1e-9)
+        assertEquals(14.7, result.bounds!!.maxLongitude!!, 1e-9)
+    }
+
+    @Test
+    fun aHeatmapWithoutRoutesYetHasNoRevisionOrBounds() {
+        val payload = """{"revision":null,"generationStatus":"NO_HEATMAP","hasHeatmap":false,"activityCount":0,"bounds":null}"""
+
+        val result = HeatmapMapper.toUi(json.decodeFromString<HeatmapFeatureCollectionDto>(payload))
+
+        assertNull(result.revision)
+        assertNull(result.bounds)
+        assertEquals(false, result.hasHeatmap)
+    }
+
+    @Test
+    fun olderServersKeepTheirCellsAndNoRevision() {
+        val payload = """
+            {"type":"FeatureCollection","maxIntensity":1,
+             "features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[16.0,48.0]},"properties":{"intensity":1}}]}
+        """.trimIndent()
+
+        val result = HeatmapMapper.toUi(json.decodeFromString<HeatmapFeatureCollectionDto>(payload))
+
+        assertNull(result.revision)
+        assertEquals(1, result.points.size)
+        assertEquals(48.0, result.bounds!!.minLatitude!!, 1e-9)
+    }
 }

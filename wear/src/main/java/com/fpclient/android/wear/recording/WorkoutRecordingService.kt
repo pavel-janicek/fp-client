@@ -38,6 +38,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.flow.first
 
@@ -296,11 +297,16 @@ class WorkoutRecordingService : Service(), SensorEventListener {
         }
         stopSensors()
         ticker?.cancel()
+        // Home shows the stop at once; the export below runs off the main thread.
+        publish()
         serviceScope.launch {
             if (queueStoppedWorkout(stoppedSession, stoppedAt)) playCompletionFeedback()
-            publish()
-            ServiceCompat.stopForeground(this@WorkoutRecordingService, ServiceCompat.STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            // A Start that arrived meanwhile has begun a new workout on this service; keep it.
+            if (session?.status == WorkoutStatus.STOPPED) {
+                publish()
+                ServiceCompat.stopForeground(this@WorkoutRecordingService, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
         }
     }
 
@@ -371,22 +377,24 @@ class WorkoutRecordingService : Service(), SensorEventListener {
 
     private suspend fun queueStoppedWorkout(stoppedSession: WorkoutSessionSnapshot, stoppedAt: Long): Boolean {
         if (syncStore.get(stoppedSession.startedAtEpochMs) != null) return true
-        val events = trackStore.readEvents(stoppedSession.startedAtEpochMs)
-        val exported = runCatching {
-            WorkoutExportWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt)
-        }.getOrElse {
+        // Reading a long track and writing GPX + FIT takes seconds; on the main thread it froze
+        // the watch to a black screen right after Stop.
+        val trackDir = filesDir.resolve(TRACK_DIRECTORY)
+        val (exported, exportedFit) = withContext(Dispatchers.IO) {
+            val events = trackStore.readEvents(stoppedSession.startedAtEpochMs)
+            runCatching { WorkoutExportWriter.write(trackDir, stoppedSession, events, stoppedAt) } to
+                runCatching { WorkoutFitWriter.write(trackDir, stoppedSession, events, stoppedAt) }.getOrNull()
+        }
+        val exportedGpx = exported.getOrElse {
             publishError("Workout export could not be saved. Check watch storage.")
             return false
         }
-        val exportedFit = runCatching {
-            WorkoutFitWriter.write(filesDir.resolve(TRACK_DIRECTORY), stoppedSession, events, stoppedAt)
-        }.getOrNull()
         val auth = WearAuthStore(this).state.first()
         syncStore.upsert(
             PendingWatchWorkout(
                 sessionId = stoppedSession.startedAtEpochMs,
-                gpxFileName = exported.gpxFile.name,
-                sidecarFileName = exported.sidecarFile.name,
+                gpxFileName = exportedGpx.gpxFile.name,
+                sidecarFileName = exportedGpx.sidecarFile.name,
                 fitFileName = exportedFit?.name,
                 activityType = stoppedSession.activityType.name,
                 visibility = UploadDefaultsSync.visibility(this),

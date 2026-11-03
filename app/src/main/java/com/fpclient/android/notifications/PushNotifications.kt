@@ -84,7 +84,7 @@ object PushNotifications {
             .setContentTitle(content.title)
             .setContentText(content.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(content.text))
-            .setContentIntent(openAppIntent(context))
+            .setContentIntent(openAppIntent(context, NOTIFICATION_ID))
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setAutoCancel(true)
         try {
@@ -137,7 +137,7 @@ object PushNotifications {
             .setContentTitle(item.title)
             .setContentText(item.body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(item.body))
-            .setContentIntent(openAppIntent(context, item.url))
+            .setContentIntent(openAppIntent(context, tagId(tag), item.url))
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setAutoCancel(true)
         try {
@@ -154,15 +154,19 @@ object PushNotifications {
      * Tapping the notification deep-links to the notifications tab: the list is where the
      * summary came from, and opening it also clears the summary (see `NotificationsTabContent`).
      * [path], when present, additionally opens the payload's target (e.g. the activity).
+     *
+     * [requestCode] is the notification's own id: with one shared code, FLAG_UPDATE_CURRENT
+     * pointed every earlier notification at the newest payload's target, so tapping a like
+     * opened the activity of a later comment.
      */
-    private fun openAppIntent(context: Context, path: String? = null): PendingIntent {
+    private fun openAppIntent(context: Context, requestCode: Int, path: String? = null): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(EXTRA_OPEN_TAB, Routes.BottomTab.NOTIFICATIONS.name)
         if (!path.isNullOrBlank()) intent.putExtra(EXTRA_OPEN_PATH, path)
         return PendingIntent.getActivity(
             context,
-            0,
+            requestCode,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )

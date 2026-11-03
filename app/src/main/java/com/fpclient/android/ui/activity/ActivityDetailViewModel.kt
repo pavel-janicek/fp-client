@@ -94,6 +94,12 @@ class ActivityDetailViewModel(
          * mirror id the screen was opened with.
          */
         val origin: RemoteActivity.Origin? = null,
+        /**
+         * False for a federated activity opened from its author's remote profile: the screen
+         * then has only the origin's id, and the home instance may hold no mirror of it at all
+         * (nobody here follows the author), so reactions and boosts cannot be sent from here.
+         */
+        val mirrorKnown: Boolean = true,
     ) {
         val isRemote: Boolean get() = origin != null
     }
@@ -195,8 +201,10 @@ class ActivityDetailViewModel(
      * where the screen offers the origin's web page instead.
      */
     private fun loadRemote(mirrorId: String, origin: RemoteActivity.Origin) {
+        // Opened by the origin's own id (from a remote profile, `RemoteProfile`): no mirror id.
+        val mirrorKnown = mirrorId != origin.activityId
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(loading = true, error = null)
+            _ui.value = _ui.value.copy(loading = true, error = null, mirrorKnown = mirrorKnown)
             val remote = originActivities(origin.serverUrl)
             when (val r = remote.detail(origin.activityId)) {
                 is ApiResult.Success -> {
@@ -207,7 +215,7 @@ class ActivityDetailViewModel(
                     _ui.value = _ui.value.copy(
                         loading = false,
                         boostBusy = false,
-                        activity = withViewerState(mirrorId, r.data, boosts),
+                        activity = withViewerState(mirrorId.takeIf { mirrorKnown }, r.data, boosts),
                         comments = comments,
                         likes = likes,
                         boosts = boosts,
@@ -223,12 +231,12 @@ class ActivityDetailViewModel(
     private var remoteBoosted: Boolean? = null
 
     private suspend fun withViewerState(
-        mirrorId: String,
+        mirrorId: String?,
         activity: com.fpclient.android.data.dto.ActivityDto,
         boosts: List<BoostDto>,
     ): com.fpclient.android.data.dto.ActivityDto {
         val app = appViewModel.uiState.value
-        if (!app.loggedIn) {
+        if (!app.loggedIn || mirrorId == null) {
             return activity.copy(currentUserReaction = null, boostedByCurrentUser = false, boostEligible = false)
         }
         fun isMe(actorUri: String?) = RemoteActivity.isActor(actorUri, app.serverUrl, app.username)

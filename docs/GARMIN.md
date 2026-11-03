@@ -4,9 +4,10 @@ FP Client imports activities recorded on any Garmin watch through **Garmin Conne
 never install anything on the watch. The watch syncs to Garmin Connect as usual, Garmin passes
 each new activity to FP Client's relay, and the phone uploads it to the user's FitPub instance.
 
-> Status: experimental. The Settings card is shown only to testers (seven taps on the version
-> in **Settings → About**) until Garmin approves FP Client for more users. The plan entry is
-> "Garmin Connect API" in [PLAN.md](../PLAN.md).
+> Status: experimental. Since 4.2.0 the Settings card is shown to everyone (in 4.1.0 only to
+> testers, after seven taps on the version in **Settings → About**). User guide: the Garmin
+> section of the [README](../README.md). The plan entry is "Garmin Connect API" in
+> [PLAN.md](../PLAN.md).
 
 ## How an activity travels
 
@@ -27,7 +28,7 @@ watch recordings are.
 
 | Piece | Role |
 |---|---|
-| `garmin/GarminConnectStore` | The relay mailbox (id, manage token, recipient keys) in keystore-encrypted preferences, excluded from backup; the cached link status; the tester switch. |
+| `garmin/GarminConnectStore` | The relay mailbox (id, manage token, recipient keys) in keystore-encrypted preferences, excluded from backup; the cached link status; the ntfy topic handed to the relay for wake-ups. |
 | `garmin/GarminConnectClient` | HTTP client for the relay. Separate from `ApiClient`, so no FitPub session material reaches the relay. |
 | `garmin/GarminConnectSync` | Linking, status, disconnecting, and the import loop. |
 | `garmin/GarminConnectWorker` | Runs the import in the background. |

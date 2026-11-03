@@ -50,6 +50,7 @@ import com.fpclient.android.util.openOnOrigin
 @Composable
 fun ReactionRow(activityId: String, viewModel: ActivityDetailViewModel, ui: ActivityDetailViewModel.UiState) {
     val activity = ui.activity ?: return
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
         Text("Reactions", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -58,8 +59,22 @@ fun ReactionRow(activityId: String, viewModel: ActivityDetailViewModel, ui: Acti
                 FilterChip(
                     selected = activity.currentUserReaction == emoji,
                     onClick = { viewModel.react(activityId, emoji) },
+                    enabled = ui.mirrorKnown,
                     label = { Text(if (count > 0) "$emoji $count" else emoji) },
                 )
+            }
+        }
+        val origin = ui.origin
+        if (!ui.mirrorKnown && origin != null) {
+            // Opened from a remote profile: this instance may not know the activity at all.
+            Text(
+                "This activity is from ${origin.host}. Reactions can be added on that server.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            androidx.compose.material3.TextButton(onClick = { context.openOnOrigin(origin.pageUrl) }) {
+                Text("Open on ${origin.host}")
             }
         }
     }

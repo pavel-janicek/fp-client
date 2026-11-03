@@ -445,6 +445,30 @@ class UserRepository(
         }
     }
 
+    /**
+     * One heatmap tile as PNG bytes, or null when it cannot be had: the revision was replaced
+     * (404), the request failed, or the server stayed busy (503) after one retry at its
+     * `Retry-After`, capped at [HEATMAP_TILE_MAX_RETRY_MS]. Null leaves the tile empty for a
+     * while (`HeatmapTiles`).
+     */
+    suspend fun heatmapTile(revision: String, z: Int, x: Int, y: Int): ByteArray? {
+        repeat(2) { attempt ->
+            try {
+                val response = api.myHeatmapTile(revision, z, x, y)
+                if (response.isSuccessful) return response.body()?.use { it.bytes() }
+                response.errorBody()?.close()
+                if (response.code() != 503 || attempt > 0) return null
+                val retryAfterMs = response.headers()["Retry-After"]?.trim()?.toLongOrNull()?.times(1000)
+                kotlinx.coroutines.delay((retryAfterMs ?: HEATMAP_TILE_MAX_RETRY_MS).coerceIn(0, HEATMAP_TILE_MAX_RETRY_MS))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return null
+            }
+        }
+        return null
+    }
+
     suspend fun uploadProfileHeader(context: Context, uri: Uri): ApiResult<UserDto> {
         return try {
             val file = copyUriToCache(context, uri) ?: return ApiResult.Error("Could not read the image")
@@ -507,5 +531,10 @@ class UserRepository(
         } catch (_: Exception) {
             null
         }
+    }
+
+    private companion object {
+        /** The longest wait before retrying a heatmap tile the server was too busy to draw. */
+        const val HEATMAP_TILE_MAX_RETRY_MS = 3_000L
     }
 }

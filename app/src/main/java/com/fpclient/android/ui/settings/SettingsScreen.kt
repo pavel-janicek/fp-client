@@ -426,13 +426,9 @@ private fun WatchesSection(
             Text("Manage watch workouts ($watchPendingCount)")
         }
     }
-    // Garmin Connect import (PLAN "Garmin Connect API"): for testers until the relay has
-    // Garmin's Startup tier; a phone that already has a relay mailbox keeps the card.
-    val garminTesting by container.garminConnectStore.testing.collectAsState()
-    val connectMailbox by container.garminConnectStore.mailbox.collectAsState()
-    if (garminTesting || connectMailbox != null) {
-        GarminConnectCard(container)
-    }
+    // Garmin Connect import (PLAN "Garmin Connect API"), open to everyone as experimental
+    // since 4.2.0.
+    GarminConnectCard(container)
     HandshakeDiagnosticsCard(container, appViewModel)
 }
 
