@@ -4,10 +4,6 @@ Thank you for helping! With this feature, activities you record on your Garmin w
 FitPub automatically. You don't install anything on the watch: FP Client gets them from your
 Garmin Connect account. Setup takes about five minutes. After that you just go for a short walk.
 
-> Linking opens to testers once Garmin approves FP Client for more users. Until then, the
-> **Connect** button may end with "Garmin Connect™ could not be linked". We'll announce in the
-> group when it works.
-
 **What you need**
 
 - A Garmin watch that syncs to **Garmin Connect**
