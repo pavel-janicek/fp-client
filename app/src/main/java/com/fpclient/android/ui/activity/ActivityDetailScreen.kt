@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -86,6 +87,7 @@ fun ActivityDetailScreen(
 
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showReport by remember { mutableStateOf(false) }
     var editTitle by remember { mutableStateOf("") }
     var editDescription by remember { mutableStateOf("") }
 
@@ -160,6 +162,13 @@ fun ActivityDetailScreen(
                             ) {
                                 Icon(Icons.Filled.Download, contentDescription = "Download route as GPX")
                             }
+                        }
+                    }
+                    // Reporting goes to this instance's administrators (FitPub 1.4); shown only
+                    // when the server says this user may report this activity.
+                    if (ui.activity != null && ui.reportable) {
+                        IconButton(onClick = { showReport = true }) {
+                            Icon(Icons.Outlined.Flag, contentDescription = "Report activity")
                         }
                     }
                     if (ui.isOwnActivity && ui.activity?.isTrimmable == true) {
@@ -293,6 +302,20 @@ fun ActivityDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+    if (showReport) {
+        ReportActivityDialog(
+            onDismiss = { showReport = false },
+            onSend = vm::report,
+            onSent = {
+                showReport = false
+                android.widget.Toast.makeText(
+                    context,
+                    "Your report has been sent to the instance administrators.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
             },
         )
     }

@@ -48,6 +48,8 @@ import com.fpclient.android.util.ActorHandle
 import com.fpclient.android.util.Format
 import com.fpclient.android.util.RemoteActivity
 import com.fpclient.android.util.RemoteMirrors
+import com.fpclient.android.data.dto.AbuseReportRequest
+import com.fpclient.android.data.dto.ReportTargetKind
 import com.fpclient.android.util.ShareLinks
 import com.fpclient.android.util.TrackParser
 import com.fpclient.android.util.TrimPreview
@@ -71,6 +73,7 @@ class ActivityDetailViewModel(
     private val activitiesVersion: MutableStateFlow<Int>,
     /** The home instance's timeline copy of a federated activity, by mirror id ([RemoteMirrors]). */
     private val mirrorOf: (String) -> com.fpclient.android.data.dto.TimelineActivityDto? = { null },
+    private val reports: com.fpclient.android.data.repository.AbuseReportRepository? = null,
 ) : ViewModel() {
 
     data class UiState(
@@ -109,6 +112,11 @@ class ActivityDetailViewModel(
          * list or full metrics.
          */
         val mirrorOnly: Boolean = false,
+        /**
+         * The signed-in user may report this activity to their instance's administrators
+         * (FitPub 1.4 abuse reports). False for own activities, for guests and on older servers.
+         */
+        val reportable: Boolean = false,
     ) {
         val isRemote: Boolean get() = origin != null
     }
@@ -197,6 +205,7 @@ class ActivityDetailViewModel(
                     loadLikes(activityId)
                     loadBoosts(activityId)
                     loadFollowStatus()
+                    checkReportable(ReportTargetKind.LOCAL_ACTIVITY, activityId)
                 }
                 is ApiResult.Error -> _ui.value = _ui.value.copy(loading = false, error = r.message, errorStatusCode = r.statusCode)
             }
@@ -230,6 +239,7 @@ class ActivityDetailViewModel(
                         boosts = boosts,
                     )
                     loadFollowStatus()
+                    if (mirrorKnown) checkReportable(ReportTargetKind.REMOTE_ACTIVITY, mirrorId)
                 }
                 is ApiResult.Error -> {
                     val mirror = mirrorOf(mirrorId).takeIf { mirrorKnown }
@@ -246,6 +256,7 @@ class ActivityDetailViewModel(
                             boosts = emptyList(),
                         )
                         loadFollowStatus()
+                        checkReportable(ReportTargetKind.REMOTE_ACTIVITY, mirrorId)
                     }
                 }
             }
@@ -288,6 +299,36 @@ class ActivityDetailViewModel(
         val activity = _ui.value.activity ?: return null
         val owner = if (_ui.value.isRemote) activity.fullHandle ?: activity.resolvedUsername else activity.resolvedUsername
         return ActorHandle.normalizeToUsername(owner, appViewModel.uiState.value.serverUrl)
+    }
+
+    /** What a report from this screen points at; set once the server allows reporting it. */
+    private var reportTarget: Pair<ReportTargetKind, String>? = null
+
+    /**
+     * Asks the home instance whether the activity can be reported. A federated activity is
+     * reported by its mirror id ([ReportTargetKind.REMOTE_ACTIVITY]); one opened from a remote
+     * profile has no mirror id and is never offered.
+     */
+    private suspend fun checkReportable(kind: ReportTargetKind, targetId: String) {
+        reportTarget = null
+        _ui.value = _ui.value.copy(reportable = false)
+        if (!appViewModel.uiState.value.loggedIn) return
+        if (reports?.canReport(kind, targetId) == true) {
+            reportTarget = kind to targetId
+            _ui.value = _ui.value.copy(reportable = true)
+        }
+    }
+
+    /** Sends a report; [onDone] gets null on success, else the message to show. */
+    fun report(reason: String, onDone: (String?) -> Unit) {
+        val (kind, targetId) = reportTarget ?: return onDone("This activity can't be reported.")
+        viewModelScope.launch {
+            val r = reports?.report(AbuseReportRequest(kind, targetId, reason.trim())) ?: return@launch onDone("Reporting is not available.")
+            when (r) {
+                is ApiResult.Success -> onDone(null)
+                is ApiResult.Error -> onDone(r.message ?: "The report could not be sent. Please try again.")
+            }
+        }
     }
 
     private suspend fun loadFollowStatus() {
@@ -622,6 +663,7 @@ class ActivityDetailViewModel(
                     appViewModel,
                     container.activitiesVersion,
                     container.remoteMirrors::get,
+                    container.abuseReportRepository,
                 )
             }
         }

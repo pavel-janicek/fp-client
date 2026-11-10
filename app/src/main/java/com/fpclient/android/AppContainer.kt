@@ -50,6 +50,7 @@ class AppContainer(context: Context) {
     val timelineRepository: TimelineRepository by lazy { TimelineRepository(apiClient.api) }
     val activityRepository: ActivityRepository by lazy { ActivityRepository(apiClient.api) }
     val userRepository: UserRepository by lazy { UserRepository(apiClient.api) }
+    val abuseReportRepository by lazy { com.fpclient.android.data.repository.AbuseReportRepository(apiClient.api) }
 
     /**
      * Read-only access to a federated activity on its origin instance (see

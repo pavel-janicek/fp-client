@@ -208,6 +208,18 @@ interface FitPubApi {
     @DELETE("api/web/activities/{activityId}/likes")
     suspend fun unreact(@Path("activityId") activityId: String): Response<Unit>
 
+    // Abuse reports (FitPub 1.4): sent to this instance's administrators only.
+    @POST("api/web/abuse-reports")
+    suspend fun submitAbuseReport(
+        @Body request: com.fpclient.android.data.dto.AbuseReportRequest,
+    ): Response<com.fpclient.android.data.dto.AbuseReportCreatedDto>
+
+    @GET("api/web/abuse-reports/eligibility")
+    suspend fun abuseReportEligibility(
+        @Query("kind") kind: com.fpclient.android.data.dto.ReportTargetKind,
+        @Query("targetId") targetId: String,
+    ): Response<com.fpclient.android.data.dto.AbuseReportEligibilityDto>
+
     // Boosts (ActivityPub announces)
     @GET("api/web/activities/{activityId}/boosts")
     suspend fun boosts(@Path("activityId") activityId: String): Response<List<BoostDto>>

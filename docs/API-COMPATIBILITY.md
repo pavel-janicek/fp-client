@@ -362,13 +362,18 @@ was needed or made.
   no detail route for it. Example: `https://fitpub.social/activities/aab1b1be-7272-4b75-944a-b0eb9736e602`.
   The detail now falls back to the tapped timeline item, with a "Summary only" notice and a link
   to the origin (`RemoteMirrors`).
-* **Abuse reports (#566), new and not used yet.**
+* **Abuse reports (#566), used by the app since 4.2.1.**
   `POST /api/web/abuse-reports` takes `{kind, targetId, reason}` and answers 201 `{id}`.
   `kind` is one of `LOCAL_PROFILE`, `LOCAL_ACTIVITY` or `REMOTE_ACTIVITY`.
   `GET /api/web/abuse-reports/eligibility?kind=&targetId=` answers `{eligible}`.
   `GET /api/web/abuse-reports/{id}` returns the reporter's own report with its resolutions.
-  All three need sign-in. A "Report" action would also meet Google Play's user-generated content
-  policy (in-app reporting).
+  All three need sign-in. The activity detail shows a Report action (flag icon) only when
+  `eligibility` says yes, so it stays hidden for own activities, for guests and on servers without
+  the endpoint (404). A federated activity is reported by its mirror id (`REMOTE_ACTIVITY`). One
+  opened from a remote profile has no mirror id and isn't offered. Local profiles have the
+  same action (`LOCAL_PROFILE` with the user's id), as on the web's profile page. The server has
+  no kind for remote profiles. This also covers Google Play's in-app reporting requirement for
+  user-generated content.
 * **Admin activity moderation (#565).** `POST /api/web/admin/activities/{id}/moderate` takes
   `DELETE_ACTIVITY` or `DELETE_ACTIVITY_AND_DEACTIVATE_USER`, admin only. For the app a moderated
   activity is simply gone (404). Deactivation uses the existing disabled-account path, which the
