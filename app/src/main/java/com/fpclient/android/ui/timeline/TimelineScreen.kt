@@ -340,8 +340,12 @@ fun TimelineScreen(
                                         )
                                         when {
                                             origin == null -> onOpenActivity(activity.id)
-                                            com.fpclient.android.util.RemoteActivity.origin(origin) != null ->
+                                            com.fpclient.android.util.RemoteActivity.origin(origin) != null -> {
+                                                // Shown instead when the origin refuses the read
+                                                // (followers-only activities answer 403).
+                                                container.remoteMirrors.remember(activity)
                                                 onOpenRemoteActivity(activity.id, origin)
+                                            }
                                             !context.openOnOrigin(origin) -> onOpenActivity(activity.id)
                                         }
                                     },

@@ -47,6 +47,7 @@ import com.fpclient.android.data.network.ApiResult
 import com.fpclient.android.util.ActorHandle
 import com.fpclient.android.util.Format
 import com.fpclient.android.util.RemoteActivity
+import com.fpclient.android.util.RemoteMirrors
 import com.fpclient.android.util.ShareLinks
 import com.fpclient.android.util.TrackParser
 import com.fpclient.android.util.TrimPreview
@@ -68,6 +69,8 @@ class ActivityDetailViewModel(
     /** Bumped after a trim so list screens (timeline, profile, records) re-fetch instead of
      * showing the activity's old distance. */
     private val activitiesVersion: MutableStateFlow<Int>,
+    /** The home instance's timeline copy of a federated activity, by mirror id ([RemoteMirrors]). */
+    private val mirrorOf: (String) -> com.fpclient.android.data.dto.TimelineActivityDto? = { null },
 ) : ViewModel() {
 
     data class UiState(
@@ -100,6 +103,12 @@ class ActivityDetailViewModel(
          * (nobody here follows the author), so reactions and boosts cannot be sent from here.
          */
         val mirrorKnown: Boolean = true,
+        /**
+         * The origin refused the detail (a followers-only activity answers 403 to anonymous
+         * reads), so [activity] is only the home instance's timeline copy: no comments, likes
+         * list or full metrics.
+         */
+        val mirrorOnly: Boolean = false,
     ) {
         val isRemote: Boolean get() = origin != null
     }
@@ -204,7 +213,7 @@ class ActivityDetailViewModel(
         // Opened by the origin's own id (from a remote profile, `RemoteProfile`): no mirror id.
         val mirrorKnown = mirrorId != origin.activityId
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(loading = true, error = null, mirrorKnown = mirrorKnown)
+            _ui.value = _ui.value.copy(loading = true, error = null, mirrorKnown = mirrorKnown, mirrorOnly = false)
             val remote = originActivities(origin.serverUrl)
             when (val r = remote.detail(origin.activityId)) {
                 is ApiResult.Success -> {
@@ -222,7 +231,23 @@ class ActivityDetailViewModel(
                     )
                     loadFollowStatus()
                 }
-                is ApiResult.Error -> _ui.value = _ui.value.copy(loading = false, error = r.message, errorStatusCode = r.statusCode)
+                is ApiResult.Error -> {
+                    val mirror = mirrorOf(mirrorId).takeIf { mirrorKnown }
+                    if (mirror == null) {
+                        _ui.value = _ui.value.copy(loading = false, error = r.message, errorStatusCode = r.statusCode)
+                    } else {
+                        _ui.value = _ui.value.copy(
+                            loading = false,
+                            boostBusy = false,
+                            mirrorOnly = true,
+                            activity = withViewerState(mirrorId, RemoteMirrors.toDetail(mirror), emptyList()),
+                            comments = emptyList(),
+                            likes = emptyList(),
+                            boosts = emptyList(),
+                        )
+                        loadFollowStatus()
+                    }
+                }
             }
         }
     }
@@ -596,6 +621,7 @@ class ActivityDetailViewModel(
                     container::originActivityRepository,
                     appViewModel,
                     container.activitiesVersion,
+                    container.remoteMirrors::get,
                 )
             }
         }

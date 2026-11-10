@@ -60,6 +60,9 @@ class AppContainer(context: Context) {
     fun originActivityRepository(serverUrl: String): ActivityRepository =
         ActivityRepository(apiClient.originApi(serverUrl))
 
+    /** Timeline items of federated activities: the fallback detail when their origin refuses. */
+    val remoteMirrors = com.fpclient.android.util.RemoteMirrors()
+
     /** A federated user's profile, read anonymously from their FitPub instance (`RemoteProfile`). */
     fun originUserRepository(serverUrl: String): UserRepository =
         UserRepository(apiClient.originApi(serverUrl))
