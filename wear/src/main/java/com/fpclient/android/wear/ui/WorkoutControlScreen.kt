@@ -36,10 +36,7 @@ import androidx.wear.compose.foundation.rememberAmbientModeManager
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Scaffold
-import androidx.wear.compose.material.ScalingLazyColumn
-import androidx.wear.compose.material.rememberScalingLazyListState
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.fpclient.android.wear.recording.WorkoutActivityType
@@ -118,21 +115,19 @@ fun WorkoutControlScreen(
         // Top-anchored instead of the default auto-centering, which parks item #1 (the HR
         // readout) in the middle of the round screen and pushes distance, pace and steps
         // below the fold (makni.cz e4ac4998). The top padding clears the TimeText.
-        val listState = rememberScalingLazyListState(initialCenterItemIndex = 0)
+        val listState = rememberRoundSafeListState()
         Scaffold(
             modifier = modifier.background(Color.Black),
             timeText = { TimeText() },
             // Play's Wear quality review (versionCode 68) requires a visible scrollbar.
-            positionIndicator = { PositionIndicator(scalingLazyListState = listState) },
+            positionIndicator = { RoundSafeListPositionIndicator(listState) },
         ) {
-            ScalingLazyColumn(
+            RoundSafeList(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black),
                 state = listState,
-                autoCentering = null,
                 contentPadding = listContentPadding(top = 24.dp, bottom = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 item {
                     Text(
