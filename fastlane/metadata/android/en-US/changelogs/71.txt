@@ -1,0 +1,4 @@
+4.3.0 (release 4.3.0):
+- Report an activity or a profile to the server's admins (FitPub 1.4).
+- Followers-only activities from other FitPub servers show a summary instead of an error.
+- Wear OS: nothing is cut off by a round screen, wherever you scroll.

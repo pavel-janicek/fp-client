@@ -6,7 +6,7 @@
 
 This client is tested against the **FitPub** `main` branch (the maintainer's instance, makni.cz,
 runs its nightly builds). **Last checked against `main` at `45f77427` (2026-11-04), on
-2026-11-10** — see the 4.2.1 section. Record the audited server
+2026-11-10** — see the 4.3.0 section. Record the audited server
 commit here at every check, so the next one can diff from it (`git log <commit>..HEAD` in the
 server repository) instead of re-reading everything.
 
@@ -346,7 +346,7 @@ and the resulting figures before saving.
   identity guard, so dragging over a track with tens of thousands of points never blocks the
   UI or races a reloaded workspace.
 
-### 4.2.1 — Server-contract re-check against `main` `45f77427` (2026-11-10)
+### 4.3.0 — Server-contract re-check against `main` `45f77427` (2026-11-10)
 
 Covers the 8 server commits from `41d3f733` (2026-10-26) to `45f77427` (2026-11-04), i.e. the
 1.3.1 release merge and more of 1.4.0; makni.cz ran `1.4.0-nightly.261110` at the time. Every
@@ -362,7 +362,7 @@ was needed or made.
   no detail route for it. Example: `https://fitpub.social/activities/aab1b1be-7272-4b75-944a-b0eb9736e602`.
   The detail now falls back to the tapped timeline item, with a "Summary only" notice and a link
   to the origin (`RemoteMirrors`).
-* **Abuse reports (#566), used by the app since 4.2.1.**
+* **Abuse reports (#566), used by the app since 4.3.0.**
   `POST /api/web/abuse-reports` takes `{kind, targetId, reason}` and answers 201 `{id}`.
   `kind` is one of `LOCAL_PROFILE`, `LOCAL_ACTIVITY` or `REMOTE_ACTIVITY`.
   `GET /api/web/abuse-reports/eligibility?kind=&targetId=` answers `{eligible}`.
