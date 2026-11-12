@@ -15,12 +15,9 @@ import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Scaffold
-import androidx.wear.compose.material.ScalingLazyColumn
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
-import androidx.wear.compose.material.rememberScalingLazyListState
 import com.fpclient.android.wear.recording.WorkoutActivityType
 import com.fpclient.android.wear.recording.WorkoutActivityUsageStore
 import com.fpclient.android.wear.recording.WorkoutRecordingController
@@ -36,19 +33,18 @@ fun ActivitySelectionScreen(
     val sortedTypes = remember { usageStore.sortedTypes() }
     val missingPermissions = remember { WorkoutRecordingController.missingPermissions(context) }
 
-    val listState = rememberScalingLazyListState()
+    val listState = rememberRoundSafeListState()
     Scaffold(
         modifier = modifier.background(Color.Black),
         timeText = { TimeText() },
-        positionIndicator = { PositionIndicator(scalingLazyListState = listState) },
+        positionIndicator = { RoundSafeListPositionIndicator(listState) },
     ) {
-        ScalingLazyColumn(
+        RoundSafeList(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black),
             state = listState,
             contentPadding = listContentPadding(),
-            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
                 Text(

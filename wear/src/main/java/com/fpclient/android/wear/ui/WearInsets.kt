@@ -31,12 +31,31 @@ private fun roundFraction(fraction: Float, square: Dp): Dp {
 @Composable
 internal fun listHorizontalInset(): Dp = roundFraction(LIST_INSET_FRACTION, SQUARE_INSET)
 
-/** [listHorizontalInset] on both sides plus the given vertical padding. */
+/**
+ * [listHorizontalInset] on both sides plus the given vertical padding. On a round screen the
+ * bottom gets at least [ROUND_END_PADDING_FRACTION] of the screen height: [RoundSafeList] shrinks
+ * items near the edge so they fit the circle, and this room lets the last button (Stop, Grant
+ * sensor access) scroll up to where it is nearly full size instead of staying small at the edge.
+ * A centred screen whose content fits (Home) passes [roomForLastItem] = false: the extra room
+ * would push its centred content up and the title under the clock.
+ */
 @Composable
-internal fun listContentPadding(top: Dp = 10.dp, bottom: Dp = 10.dp): PaddingValues {
+internal fun listContentPadding(
+    top: Dp = 10.dp,
+    bottom: Dp = 10.dp,
+    roomForLastItem: Boolean = true,
+): PaddingValues {
     val horizontal = listHorizontalInset()
-    return PaddingValues(start = horizontal, end = horizontal, top = top, bottom = bottom)
+    val configuration = LocalConfiguration.current
+    val end = if (configuration.isScreenRound && roomForLastItem) {
+        maxOf(bottom, (configuration.screenHeightDp * ROUND_END_PADDING_FRACTION).dp)
+    } else {
+        bottom
+    }
+    return PaddingValues(start = horizontal, end = horizontal, top = top, bottom = end)
 }
+
+private const val ROUND_END_PADDING_FRACTION = 0.2f
 
 /** Extra inset for multi-line text inside the list, on top of [listHorizontalInset]. */
 @Composable

@@ -50,6 +50,7 @@ class AppContainer(context: Context) {
     val timelineRepository: TimelineRepository by lazy { TimelineRepository(apiClient.api) }
     val activityRepository: ActivityRepository by lazy { ActivityRepository(apiClient.api) }
     val userRepository: UserRepository by lazy { UserRepository(apiClient.api) }
+    val abuseReportRepository by lazy { com.fpclient.android.data.repository.AbuseReportRepository(apiClient.api) }
 
     /**
      * Read-only access to a federated activity on its origin instance (see
@@ -59,6 +60,9 @@ class AppContainer(context: Context) {
      */
     fun originActivityRepository(serverUrl: String): ActivityRepository =
         ActivityRepository(apiClient.originApi(serverUrl))
+
+    /** Timeline items of federated activities: the fallback detail when their origin refuses. */
+    val remoteMirrors = com.fpclient.android.util.RemoteMirrors()
 
     /** A federated user's profile, read anonymously from their FitPub instance (`RemoteProfile`). */
     fun originUserRepository(serverUrl: String): UserRepository =

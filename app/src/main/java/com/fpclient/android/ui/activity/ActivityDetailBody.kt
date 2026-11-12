@@ -1,6 +1,7 @@
 package com.fpclient.android.ui.activity
 
 import com.fpclient.android.util.RoutePrivacy
+import com.fpclient.android.util.openOnOrigin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,6 +65,10 @@ internal fun DetailBody(
                     Text(activity.description)
                 }
             }
+        }
+        val origin = ui.origin
+        if (ui.mirrorOnly && origin != null) {
+            item { MirrorOnlyNotice(origin) }
         }
         item {
             StatRow(
@@ -300,6 +305,34 @@ private fun AuthorCard(
                 ) {
                     Text(label)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The origin refused the detail, so the screen shows the home instance's timeline copy.
+ * Typically a followers-only activity: its server shares it only with its followers' servers
+ * (signed requests), never with an app reading anonymously.
+ */
+@Composable
+private fun MirrorOnlyNotice(origin: com.fpclient.android.util.RemoteActivity.Origin) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp)) {
+            Text(
+                "Summary only",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                "${origin.host} shares this activity only with its author's followers, " +
+                    "so the app shows what your server knows about it. " +
+                    "The full detail and comments are on ${origin.host}.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            androidx.compose.material3.TextButton(onClick = { context.openOnOrigin(origin.pageUrl) }) {
+                Text("Open on ${origin.host}")
             }
         }
     }

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +36,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -76,6 +78,7 @@ class ProfileViewModel(
     /** Anonymous reads from a federated user's FitPub instance, by its server URL. */
     private val originUsers: (String) -> UserRepository,
     private val originActivities: (String) -> ActivityRepository,
+    private val reports: com.fpclient.android.data.repository.AbuseReportRepository? = null,
 ) : ViewModel() {
 
     data class UiState(
@@ -108,6 +111,12 @@ class ProfileViewModel(
          * activities resolve against it. Null keeps the minimal actor card.
          */
         val origin: RemoteProfile.Origin? = null,
+        /**
+         * The signed-in user may report this local profile to the instance administrators
+         * (FitPub 1.4 abuse reports, as the web's profile page offers). Never for own or
+         * remote profiles, and not on servers without abuse reports.
+         */
+        val reportable: Boolean = false,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -220,7 +229,14 @@ class ProfileViewModel(
                     )
                 }
             }
-            _ui.value = _ui.value.copy(loading = false, user = user, error = error)
+            _ui.value = _ui.value.copy(loading = false, user = user, error = error, reportable = false)
+            val userId = user?.id
+            if (userId != null && appViewModel.uiState.value.loggedIn && reports != null) {
+                launch {
+                    val ok = reports.canReport(com.fpclient.android.data.dto.ReportTargetKind.LOCAL_PROFILE, userId)
+                    if (_ui.value.user?.id == userId) _ui.value = _ui.value.copy(reportable = ok)
+                }
+            }
             if (user == null && !_ui.value.isPrivateProfile) return@launch
 
             // A restricted profile answers 403, so the full body is unavailable — but the
@@ -285,6 +301,22 @@ class ProfileViewModel(
         }
     }
 
+    /** Reports the shown local profile; [onDone] gets null on success, else the message to show. */
+    fun reportProfile(reason: String, onDone: (String?) -> Unit) {
+        val userId = _ui.value.user?.id
+        val repo = reports
+        if (userId == null || repo == null) return onDone("This profile can't be reported.")
+        viewModelScope.launch {
+            val request = com.fpclient.android.data.dto.AbuseReportRequest(
+                com.fpclient.android.data.dto.ReportTargetKind.LOCAL_PROFILE, userId, reason.trim(),
+            )
+            when (val r = repo.report(request)) {
+                is ApiResult.Success -> onDone(null)
+                is ApiResult.Error -> onDone(r.message ?: "The report could not be sent. Please try again.")
+            }
+        }
+    }
+
     fun toggleFollow() {
         // On locked (private) profiles there is no user object — fall back to the
         // username the screen was opened for, otherwise request-to-follow breaks.
@@ -343,6 +375,7 @@ class ProfileViewModel(
                         appViewModel,
                         container::originUserRepository,
                         container::originActivityRepository,
+                        container.abuseReportRepository,
                     )
                 }
             }
@@ -392,6 +425,23 @@ fun ProfileScreen(
     val unitSystem by appViewModel.unitSystem.collectAsState()
     val serverUrl = sessionState.serverUrl
     val isMe = username == sessionState.username || username == "me"
+    var showReport by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    if (showReport) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        com.fpclient.android.ui.activity.ReportActivityDialog(
+            title = "Report this profile",
+            onDismiss = { showReport = false },
+            onSend = vm::reportProfile,
+            onSent = {
+                showReport = false
+                android.widget.Toast.makeText(
+                    context,
+                    "Your report has been sent to the instance administrators.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            },
+        )
+    }
     val remoteActor = ui.actor
     val remoteOrigin = ui.origin
 
@@ -483,6 +533,10 @@ fun ProfileScreen(
                         if (isMe) {
                             IconButton(onClick = onOpenSettings) {
                                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                            }
+                        } else if (ui.reportable && !ui.isRemoteProfile) {
+                            IconButton(onClick = { showReport = true }) {
+                                Icon(Icons.Outlined.Flag, contentDescription = "Report profile")
                             }
                         }
                     },

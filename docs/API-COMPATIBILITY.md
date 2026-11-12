@@ -5,8 +5,8 @@
 
 
 This client is tested against the **FitPub** `main` branch (the maintainer's instance, makni.cz,
-runs its nightly builds). **Last checked against `main` at `41d3f733` (2026-10-26), on
-2026-10-27** — see the 4.2.0 section. Record the audited server
+runs its nightly builds). **Last checked against `main` at `45f77427` (2026-11-04), on
+2026-11-10** — see the 4.3.0 section. Record the audited server
 commit here at every check, so the next one can diff from it (`git log <commit>..HEAD` in the
 server repository) instead of re-reading everything.
 
@@ -345,6 +345,46 @@ and the resulting figures before saving.
 * Slider edits debounce (150 ms) into an off-main-thread preview recomputation with an
   identity guard, so dragging over a track with tens of thousands of points never blocks the
   UI or races a reloaded workspace.
+
+### 4.3.0 — Server-contract re-check against `main` `45f77427` (2026-11-10)
+
+Covers the 8 server commits from `41d3f733` (2026-10-26) to `45f77427` (2026-11-04), i.e. the
+1.3.1 release merge and more of 1.4.0; makni.cz ran `1.4.0-nightly.261110` at the time. Every
+endpoint in `FitPubApi.kt` (**93**) was matched mechanically against the server's Spring
+mappings (299, up from 282) and exists. No route the app uses was removed or renamed, and no
+request or response field it reads changed. All new records are additive. No server change
+was needed or made.
+
+* **Followers-only federated activities: adapted in the app.** Not a server change, but found
+  while checking. The origin answers **403** to the app's anonymous
+  `GET /api/web/activities/{id}` for an activity shared with followers only. Only signed
+  requests from a follower's instance get it. The home instance keeps a timeline mirror and has
+  no detail route for it. Example: `https://fitpub.social/activities/aab1b1be-7272-4b75-944a-b0eb9736e602`.
+  The detail now falls back to the tapped timeline item, with a "Summary only" notice and a link
+  to the origin (`RemoteMirrors`).
+* **Abuse reports (#566), used by the app since 4.3.0.**
+  `POST /api/web/abuse-reports` takes `{kind, targetId, reason}` and answers 201 `{id}`.
+  `kind` is one of `LOCAL_PROFILE`, `LOCAL_ACTIVITY` or `REMOTE_ACTIVITY`.
+  `GET /api/web/abuse-reports/eligibility?kind=&targetId=` answers `{eligible}`.
+  `GET /api/web/abuse-reports/{id}` returns the reporter's own report with its resolutions.
+  All three need sign-in. The activity detail shows a Report action (flag icon) only when
+  `eligibility` says yes, so it stays hidden for own activities, for guests and on servers without
+  the endpoint (404). A federated activity is reported by its mirror id (`REMOTE_ACTIVITY`). One
+  opened from a remote profile has no mirror id and isn't offered. Local profiles have the
+  same action (`LOCAL_PROFILE` with the user's id), as on the web's profile page. The server has
+  no kind for remote profiles. This also covers Google Play's in-app reporting requirement for
+  user-generated content.
+* **Admin activity moderation (#565).** `POST /api/web/admin/activities/{id}/moderate` takes
+  `DELETE_ACTIVITY` or `DELETE_ACTIVITY_AND_DEACTIVATE_USER`, admin only. For the app a moderated
+  activity is simply gone (404). Deactivation uses the existing disabled-account path, which the
+  app already handles.
+* **Server blocks also hide remote content** (#570, and `RemoteContentPolicy` in federation
+  likes and quote approvals). Blocked items disappear from timelines and likes. Nothing to adapt.
+* **Context-path deployments** (#567): cookies, redirects and the 401 entry point honour
+  `server.servlet.context-path`. Instances served from `/` (makni.cz, fitpub.social) behave the
+  same. Sub-path instances were not tried with the app.
+* Not client-facing: admin batch-import diagnostics (#569), weather/air-quality job recovery
+  (#568), tests migrated to Spock (#560).
 
 ### 4.2.0 — Server-contract re-check against `main` `41d3f733` (2026-10-27)
 

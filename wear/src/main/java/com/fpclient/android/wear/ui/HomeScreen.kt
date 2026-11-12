@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -12,19 +13,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.PositionIndicator
-import androidx.wear.compose.material.ScalingLazyColumn
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
-import androidx.wear.compose.material.rememberScalingLazyListState
 import com.fpclient.android.wear.auth.WearAuthState
 
 /**
  * Landing screen of FitPub Wear.
  *
- * A [ScalingLazyColumn] — the round-safe Wear list used by the other screens — hosts everything,
- * so the screen auto-centres when the content fits and scrolls (crown/touch) when it overflows:
+ * A [RoundSafeList] — the round-safe Wear list used by every screen — hosts everything,
+ * so the screen centres the content when it fits and scrolls (crown/touch) when it overflows:
  * on a small round display the Workout and Settings buttons would otherwise fall below the fold.
  * The title is deliberately compact and the app version lives on [SettingsScreen], not here.
  * The position indicator and the round-screen insets ([WearInsets]) are Play's Wear quality
@@ -42,16 +40,18 @@ fun HomeScreen(
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val listState = rememberScalingLazyListState()
+    val listState = rememberRoundSafeListState()
     Scaffold(
         modifier = modifier,
         timeText = { TimeText() },
-        positionIndicator = { PositionIndicator(scalingLazyListState = listState) },
+        positionIndicator = { RoundSafeListPositionIndicator(listState) },
     ) {
-        ScalingLazyColumn(
+        RoundSafeList(
             modifier = Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = listContentPadding(),
+            contentPadding = listContentPadding(roomForLastItem = false),
+            // Few items: centred on the screen, as the old auto-centring list did.
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             item {
                 Text(
