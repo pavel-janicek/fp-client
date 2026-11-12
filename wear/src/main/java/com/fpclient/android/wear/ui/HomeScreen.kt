@@ -49,7 +49,7 @@ fun HomeScreen(
         RoundSafeList(
             modifier = Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = listContentPadding(),
+            contentPadding = listContentPadding(roomForLastItem = false),
             // Few items: centred on the screen, as the old auto-centring list did.
             verticalAlignment = Alignment.CenterVertically,
         ) {

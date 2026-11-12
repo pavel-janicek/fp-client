@@ -36,12 +36,18 @@ internal fun listHorizontalInset(): Dp = roundFraction(LIST_INSET_FRACTION, SQUA
  * bottom gets at least [ROUND_END_PADDING_FRACTION] of the screen height: [RoundSafeList] shrinks
  * items near the edge so they fit the circle, and this room lets the last button (Stop, Grant
  * sensor access) scroll up to where it is nearly full size instead of staying small at the edge.
+ * A centred screen whose content fits (Home) passes [roomForLastItem] = false: the extra room
+ * would push its centred content up and the title under the clock.
  */
 @Composable
-internal fun listContentPadding(top: Dp = 10.dp, bottom: Dp = 10.dp): PaddingValues {
+internal fun listContentPadding(
+    top: Dp = 10.dp,
+    bottom: Dp = 10.dp,
+    roomForLastItem: Boolean = true,
+): PaddingValues {
     val horizontal = listHorizontalInset()
     val configuration = LocalConfiguration.current
-    val end = if (configuration.isScreenRound) {
+    val end = if (configuration.isScreenRound && roomForLastItem) {
         maxOf(bottom, (configuration.screenHeightDp * ROUND_END_PADDING_FRACTION).dp)
     } else {
         bottom
