@@ -96,11 +96,20 @@ fun ServerSetupContent(
                 Text("Connect")
             }
         }
-        OutlinedButton(
-            onClick = { serverUrl = "https://fitpub.social" },
+        androidx.compose.foundation.layout.Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Use the official instance")
+            OutlinedButton(
+                onClick = { onSave("https://fitpub.social") },
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+            ) { Text("fitpub.social") }
+            OutlinedButton(
+                onClick = { onSave("https://makni.cz") },
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+            ) { Text("makni.cz") }
         }
         if (onSkip != null) {
             TextButton(onClick = onSkip) {

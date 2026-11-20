@@ -9,6 +9,7 @@ import com.fpclient.android.AppContainer
 import com.fpclient.android.data.dto.UnitSystems
 import com.fpclient.android.data.dto.UserDto
 import com.fpclient.android.data.session.SessionStore
+import com.fpclient.android.data.settings.OnboardingStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.launch
 /** Shared app state: session + unit preference used for formatting across screens. */
 class AppViewModel(
     private val sessionStore: SessionStore,
+    private val onboardingStore: OnboardingStore,
 ) : ViewModel() {
 
     /** Unit system explicitly picked in Settings during this session — wins over everything. */
@@ -32,6 +34,7 @@ class AppViewModel(
     val profile: StateFlow<UserDto?> = _profile.asStateFlow()
 
     private val _loaded = MutableStateFlow(false)
+    private val _visibilityOnboardingDone = MutableStateFlow(onboardingStore.visibilityOnboardingDone)
 
     init {
         viewModelScope.launch {
@@ -60,7 +63,8 @@ class AppViewModel(
     val uiState: StateFlow<AppUiState> = combine(
         sessionStore.session,
         _loaded,
-    ) { session, isLoaded ->
+        _visibilityOnboardingDone,
+    ) { session, isLoaded, onboardingDone ->
         AppUiState(
             loaded = isLoaded,
             configured = session.isConfigured,
@@ -69,8 +73,14 @@ class AppViewModel(
             username = session.username,
             displayName = session.displayName,
             serverUrl = session.serverUrl,
+            visibilityOnboardingDone = onboardingDone,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppUiState())
+
+    fun markVisibilityOnboardingDone(visibility: String) {
+        onboardingStore.markVisibilityOnboardingDone()
+        _visibilityOnboardingDone.value = true
+    }
 
     /**
      * Seeds the unit system from the server profile. This must never overwrite the
@@ -105,7 +115,7 @@ class AppViewModel(
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { AppViewModel(container.sessionStore) }
+            initializer { AppViewModel(container.sessionStore, container.onboardingStore) }
         }
     }
 }
@@ -118,4 +128,5 @@ data class AppUiState(
     val username: String = "",
     val displayName: String = "",
     val serverUrl: String = "",
+    val visibilityOnboardingDone: Boolean = false,
 )

@@ -40,6 +40,7 @@ import com.fpclient.android.ui.auth.RegisterViewModel
 import com.fpclient.android.ui.auth.ServerSetupContent
 import com.fpclient.android.ui.auth.ServerSetupViewModel
 import com.fpclient.android.ui.auth.VerifyCodeContent
+import com.fpclient.android.ui.auth.VisibilityOnboardingContent
 import com.fpclient.android.ui.navigation.Routes
 import com.fpclient.android.ui.navigation.SharedUriArg
 import com.fpclient.android.ui.theme.FPClientTheme
@@ -103,6 +104,12 @@ class MainActivity : ComponentActivity() {
                         }
                         !state.configured -> ServerSetupRoute(container)
                         !state.loggedIn && !state.guest -> AuthFlowRoute(container, appViewModel)
+                        state.loggedIn && !state.visibilityOnboardingDone -> VisibilityOnboardingContent(
+                            onDone = { visibility ->
+                                container.defaultVisibilityStore.set(visibility)
+                                appViewModel.markVisibilityOnboardingDone(visibility)
+                            },
+                        )
                         else -> MainAppRoute(
                             container = container,
                             appViewModel = appViewModel,
