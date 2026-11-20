@@ -4,6 +4,7 @@ import com.fpclient.android.data.dto.UnitSystems
 import com.fpclient.android.data.dto.UserDto
 import com.fpclient.android.data.session.Session
 import com.fpclient.android.data.session.SessionStore
+import com.fpclient.android.data.settings.OnboardingStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -45,9 +46,14 @@ class AppViewModelTest {
             `when`(it.unitSystem).thenReturn(flowOf(persisted))
         }
 
+    private fun onboardingStore(): OnboardingStore =
+        mock(OnboardingStore::class.java).also {
+            `when`(it.visibilityOnboardingDone).thenReturn(true)
+        }
+
     @Test
     fun manualChoice_survivesProfileReload() = runTest {
-        val vm = AppViewModel(sessionStoreWith())
+        val vm = AppViewModel(sessionStoreWith(), onboardingStore())
         advanceUntilIdle()
         assertEquals(UnitSystems.METRIC, vm.unitSystem.value)
 
@@ -64,7 +70,7 @@ class AppViewModelTest {
 
     @Test
     fun persistedChoice_beatsServerProfile() = runTest {
-        val vm = AppViewModel(sessionStoreWith(persisted = UnitSystems.IMPERIAL))
+        val vm = AppViewModel(sessionStoreWith(persisted = UnitSystems.IMPERIAL), onboardingStore())
         advanceUntilIdle()
         assertEquals(UnitSystems.IMPERIAL, vm.unitSystem.value)
 
@@ -75,7 +81,7 @@ class AppViewModelTest {
 
     @Test
     fun serverProfile_seedsUnitSystem_whenNoLocalChoiceExists() = runTest {
-        val vm = AppViewModel(sessionStoreWith())
+        val vm = AppViewModel(sessionStoreWith(), onboardingStore())
         advanceUntilIdle()
         assertEquals(UnitSystems.METRIC, vm.unitSystem.value)
 
@@ -87,7 +93,7 @@ class AppViewModelTest {
     @Test
     fun profileSave_persistsAndAppliesTheSavedUnitSystem() = runTest {
         val store = sessionStoreWith()
-        val vm = AppViewModel(store)
+        val vm = AppViewModel(store, onboardingStore())
         advanceUntilIdle()
 
         vm.onProfileSaved(UserDto(username = "sam", unitSystem = UnitSystems.IMPERIAL))

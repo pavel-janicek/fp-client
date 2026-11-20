@@ -38,6 +38,7 @@ fun ActivityCard(
     unitSystem: String,
     onClick: () -> Unit,
     onAuthorClick: ((String) -> Unit)? = null,
+    showVisibility: Boolean = false,
 ) {
     val authorHandle = activity.fullHandle ?: activity.username?.let { "@$it" }
     // Web parity (timeline.js): federated cards carry a visible "Remote" badge so the
@@ -91,6 +92,24 @@ fun ActivityCard(
                                     shape = RoundedCornerShape(8.dp),
                                 )
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                    if (showVisibility && activity.visibility != null) {
+                        val visLabel = when (activity.visibility) {
+                            "PRIVATE" -> "🔒"
+                            "FOLLOWERS" -> "👥"
+                            else -> "🌍"
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = visLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
                         )
                     }
                 }

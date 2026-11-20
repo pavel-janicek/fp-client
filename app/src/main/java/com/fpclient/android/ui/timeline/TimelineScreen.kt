@@ -326,6 +326,7 @@ fun TimelineScreen(
                                     activity = activity,
                                     serverUrl = serverUrl,
                                     unitSystem = unitSystem,
+                                    showVisibility = tab == TimelineTab.USER,
                                     onClick = {
                                         // Federated activities have only a metadata mirror locally
                                         // (GET /api/web/activities/{id} 404s), but their origin

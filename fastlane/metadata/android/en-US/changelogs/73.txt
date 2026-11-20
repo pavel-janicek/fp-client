@@ -1,0 +1,5 @@
+4.4.0 (release 4.4.0):
+- First-run onboarding: choose your default activity visibility (Public, Followers only, or Only me) right after signing in.
+- Server setup now shows quick-connect tiles for fitpub.social and makni.cz alongside a custom URL option.
+- Edit activity: change the visibility of an existing activity directly from the edit dialog.
+- My activities tab: each activity card shows a small icon indicating its visibility at a glance.

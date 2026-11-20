@@ -90,6 +90,7 @@ fun ActivityDetailScreen(
     var showReport by remember { mutableStateOf(false) }
     var editTitle by remember { mutableStateOf("") }
     var editDescription by remember { mutableStateOf("") }
+    var editVisibility by remember { mutableStateOf(com.fpclient.android.data.dto.ActivityVisibilities.PUBLIC) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -180,6 +181,7 @@ fun ActivityDetailScreen(
                         IconButton(onClick = {
                             editTitle = ui.activity?.title.orEmpty()
                             editDescription = ui.activity?.description.orEmpty()
+                            editVisibility = ui.activity?.visibility ?: com.fpclient.android.data.dto.ActivityVisibilities.PUBLIC
                             showEditDialog = true
                         }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Edit activity")
@@ -265,6 +267,25 @@ fun ActivityDetailScreen(
                         label = { Text("Description") },
                         modifier = Modifier.padding(top = 8.dp),
                     )
+                    Text(
+                        "Visibility",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(
+                            com.fpclient.android.data.dto.ActivityVisibilities.PUBLIC to "🌍 Public",
+                            com.fpclient.android.data.dto.ActivityVisibilities.FOLLOWERS to "👥 Followers",
+                            com.fpclient.android.data.dto.ActivityVisibilities.PRIVATE to "🔒 Only me",
+                        ).forEach { (value, label) ->
+                            FilterChip(
+                                selected = editVisibility == value,
+                                onClick = { editVisibility = value },
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -276,7 +297,7 @@ fun ActivityDetailScreen(
                         // so a COMMUTE/RACE context survives an unrelated edit.
                         val base = ui.activity?.toUpdateRequest()
                         if (base != null) {
-                            vm.updateActivity(activityId, base.copy(title = editTitle, description = editDescription))
+                            vm.updateActivity(activityId, base.copy(title = editTitle, description = editDescription, visibility = editVisibility))
                         }
                     },
                 ) { Text("Save") }
